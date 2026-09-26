@@ -1,0 +1,20 @@
+{
+  "name": "gbot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Browser extension (Chrome + Firefox, Manifest V3) that automates Gladiatus gameplay",
+  "license": "GPL-3.0-only",
+  "scripts": {
+    "test": "node --test \"test/unit/*.test.js\"",
+    "test:e2e": "node --test --test-concurrency=1 \"test/e2e/*.test.js\"",
+    "lint": "node scripts/check-syntax.mjs",
+    "icons": "node scripts/make-icons.mjs",
+    "build": "node scripts/build.mjs"
+  },
+  "devDependencies": {
+    "jquery": "3.7.1",
+    "jquery-ui": "1.14.2",
+    "jsdom": "30.1.1",
+    "playwright-core": "1.56.1"
+  }
+}

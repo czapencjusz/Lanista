@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GBot</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="../../icons/icon32.png" alt="" width="24" height="24">
+    <h1>GBot <small>Gladiatus autopilot</small></h1>
+    <button id="toggle" class="toggle">Start</button>
+  </header>
+
+  <div id="permission" class="notice" hidden>
+    GBot needs access to gladiatus.gameforge.com to run.
+    <button id="grant">Grant access</button>
+  </div>
+
+  <section id="status" class="status">
+    <div id="status-host" class="muted">Open a Gladiatus game tab to see its status.</div>
+    <div id="status-stats"></div>
+    <div id="status-blocked" class="warn"></div>
+  </section>
+
+  <form id="settings" autocomplete="off">
+    <fieldset>
+      <legend><label><input type="checkbox" data-path="expedition.enabled"> Expeditions</label></legend>
+      <label>Location <input type="text" data-path="expedition.location" data-type="location" placeholder="auto" size="5"></label>
+      <label>Enemy
+        <select data-path="expedition.enemy" data-type="number">
+          <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4 (boss)</option>
+        </select>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend><label><input type="checkbox" data-path="dungeon.enabled"> Dungeons</label></legend>
+      <label>Location <input type="text" data-path="dungeon.location" data-type="location" placeholder="auto" size="5"></label>
+      <label>Difficulty
+        <select data-path="dungeon.difficulty">
+          <option value="normal">Normal</option><option value="advanced">Advanced</option>
+        </select>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend><label><input type="checkbox" data-path="arena.enabled"> Arena (Provinciarum)</label></legend>
+      <label>Opponent
+        <select data-path="arena.target">
+          <option value="lowest">Lowest level</option><option value="highest">Highest level</option><option value="random">Random</option>
+        </select>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend><label><input type="checkbox" data-path="circus.enabled"> Circus Turma (Provinciarum)</label></legend>
+      <label>Opponent
+        <select data-path="circus.target">
+          <option value="lowest">Lowest level</option><option value="highest">Highest level</option><option value="random">Random</option>
+        </select>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend><label><input type="checkbox" data-path="heal.enabled"> Health</label></legend>
+      <label>Min HP % <input type="number" min="0" max="100" data-path="heal.minHpPercent" data-type="number"></label>
+      <label><input type="checkbox" data-path="heal.useFood"> Eat food when low</label>
+    </fieldset>
+
+    <fieldset>
+      <legend><label><input type="checkbox" data-path="work.enabled"> Work when out of points</label></legend>
+      <label>Job # <input type="number" min="1" max="10" data-path="work.job" data-type="number" data-base="1"></label>
+      <label>Hours <input type="number" min="1" max="24" data-path="work.hours" data-type="number"></label>
+    </fieldset>
+
+    <fieldset>
+      <legend><label><input type="checkbox" data-path="quests.enabled"> Pantheon quests</label></legend>
+      <div class="checks">
+        <label><input type="checkbox" data-path="quests.types.combat"> Combat</label>
+        <label><input type="checkbox" data-path="quests.types.arena"> Arena</label>
+        <label><input type="checkbox" data-path="quests.types.circus"> Circus</label>
+        <label><input type="checkbox" data-path="quests.types.expedition"> Expedition</label>
+        <label><input type="checkbox" data-path="quests.types.dungeon"> Dungeon</label>
+        <label><input type="checkbox" data-path="quests.types.items"> Items</label>
+      </div>
+    </fieldset>
+
+    <details>
+      <summary>Timing &amp; safety</summary>
+      <fieldset>
+        <label>Click delay (s) <input type="number" min="0" step="0.1" data-path="timing.minClickDelay" data-type="number"> –
+          <input type="number" min="0" step="0.1" data-path="timing.maxClickDelay" data-type="number"></label>
+        <label>Max idle between checks (s) <input type="number" min="30" data-path="timing.maxIdle" data-type="number"></label>
+        <label>Attempts before pausing an activity <input type="number" min="1" data-path="safety.maxAttempts" data-type="number"></label>
+        <label>Pause length (min) <input type="number" min="1" data-path="safety.backoffMinutes" data-type="number"></label>
+      </fieldset>
+    </details>
+  </form>
+
+  <section class="log-section">
+    <div class="log-head"><strong>Log</strong> <button id="reset" type="button" class="small">Reset stats &amp; log</button></div>
+    <div id="log" class="log"></div>
+  </section>
+
+  <script src="../shared/settings.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

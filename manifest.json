@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "GBot - Gladiatus Autopilot",
+  "short_name": "GBot",
+  "version": "1.0.0",
+  "description": "Automates Gladiatus: expeditions, dungeons, arena, circus, healing, pantheon quests and stable work.",
+  "minimum_chrome_version": "121",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": ["storage", "alarms", "notifications"],
+  "host_permissions": ["https://*.gladiatus.gameforge.com/*"],
+  "background": {
+    "service_worker": "src/background/background.js",
+    "scripts": ["src/background/background.js"]
+  },
+  "action": {
+    "default_title": "GBot",
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.gladiatus.gameforge.com/game/*"],
+      "js": [
+        "src/shared/settings.js",
+        "src/content/util.js",
+        "src/content/selectors.js",
+        "src/content/state.js",
+        "src/content/brain.js",
+        "src/content/actions.js",
+        "src/content/overlay.js",
+        "src/content/main.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "gbot@gladiatus-autopilot",
+      "strict_min_version": "121.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  }
+}
