@@ -7,15 +7,16 @@
   const GBot = root.GBot;
   const ext = root.browser || root.chrome;
   const { brain, actions, util } = GBot;
-  const { loadSettings, saveSettings } = GBot.settings;
+  const S = GBot.settings;
   const { PAGES, buildUrl } = GBot.selectors;
 
   const MEMORY_KEY = `memory:${location.host}`;
-  const LOG_LIMIT = 120;
+  const LOG_LIMIT = 150;
   const DEBUG_LOGS = false;
 
   let settings = null;
   let memory = null;
+  let lastState = null;
   let unloading = false;
   let running = false;
   let timer = null;
@@ -49,6 +50,15 @@
     if (memory && extensionAlive()) await ext.storage.local.set({ [MEMORY_KEY]: memory });
   }
 
+  // Read-modify-write of the stored memory from UI buttons (reset stats...).
+  async function editMemory(fn) {
+    const current = memory || (await loadMemory());
+    fn(current);
+    memory = current;
+    await persist();
+    panel.update({ memory });
+  }
+
   function log(level, message) {
     if (level === 'debug' && !DEBUG_LOGS) {
       console.debug('[GBot]', message);
@@ -58,12 +68,18 @@
     if (!memory) return;
     memory.log.push({ t: Date.now(), level, message });
     if (memory.log.length > LOG_LIMIT) memory.log.splice(0, memory.log.length - LOG_LIMIT);
-    overlay.renderLog(memory.log);
+    panel.update({ memory });
   }
 
   function send(message) {
     if (!extensionAlive()) return Promise.resolve(null);
     return ext.runtime.sendMessage(message).catch(() => null);
+  }
+
+  // Desktop notification, if the user enabled this kind in the settings.
+  function notify(kind, message) {
+    if (settings && settings.notifications[kind] === false) return;
+    send({ type: 'alert', kind, message });
   }
 
   function schedule(fn, delayMs) {
@@ -94,6 +110,20 @@
     if (!settings.enabled) throw new util.ActionError('stopped by the user');
   }
 
+  // Remember facts about the game for the settings UI and statistics.
+  function recordGameInfo(state, now) {
+    if (!state.inGame) return;
+    if (state.locations.length) memory.gameInfo.locations = state.locations;
+    if (state.level !== null) memory.gameInfo.level = state.level;
+    memory.gameInfo.updatedAt = now;
+    if (state.gold !== null) {
+      if (memory.stats.goldStart === null) memory.stats.goldStart = state.gold;
+      memory.stats.goldNow = state.gold;
+    }
+  }
+
+  const statusFor = (state) => (state && settings && memory ? brain.activityStatus(state, settings, memory, Date.now()) : {});
+
   async function tick() {
     if (running || unloading || !extensionAlive()) return;
     running = true;
@@ -101,11 +131,14 @@
     let state = null;
     try {
       const now = Date.now();
-      settings = await loadSettings();
+      settings = await S.loadSettings();
       memory = await loadMemory();
       state = GBot.state.readState(document, location, now);
+      lastState = state;
 
+      recordGameInfo(state, now);
       for (const event of brain.resolvePending(state, memory, now)) log(event.level, event.message);
+      if (settings.enabled) brain.updateBreaks(settings.schedule, memory, now);
 
       let decision = brain.decide(state, settings, memory, now);
       if (settings.enabled && state.inGame) {
@@ -113,7 +146,7 @@
         if (claim && claim.ok === false) decision = { type: 'idle', reason: 'GBot is running in another tab', retryMs: 60000 };
       }
 
-      overlay.update({ settings, memory, decision, state });
+      panel.update({ settings, memory, decision, state, status: statusFor(state) });
       await persist();
       await execute(decision, state);
     } catch (e) {
@@ -135,7 +168,7 @@
       if (decision.retryMs) schedule(tick, decision.retryMs);
       if (settings.enabled && !state.inGame && now - lastAlertAt > 30 * 60 * 1000) {
         lastAlertAt = now;
-        send({ type: 'alert', message: 'GBot is enabled but this is not an in-game page. Are you logged out?' });
+        notify('loggedOut', 'GBot is enabled but this is not an in-game page. Are you logged out?');
       }
       return;
     }
@@ -151,6 +184,7 @@
       const attempt = brain.beginAttempt(memory, decision.type, now, settings, state);
       if (!attempt.ok) {
         log('warn', attempt.message);
+        notify('activityPaused', `GBot: ${attempt.message}`);
         await persist();
         schedule(tick, 1000);
         return;
@@ -165,6 +199,7 @@
       settings,
       memory,
       log,
+      notify,
       url: (params) => buildUrl(location.href, state.sh, params),
       navigate,
       humanDelay,
@@ -184,37 +219,55 @@
     }
 
     await persist();
+    panel.update({ memory, status: statusFor(state) });
     if (!result || result.navigated || unloading) return;
     if (result.refresh) schedule(() => navigate(overviewUrl(state), 'overview (refresh)'), 1500);
     else if (result.retick) schedule(tick, result.delayMs || 1000);
   }
 
-  const overlay = GBot.overlay.create({
-    onToggle: async () => {
-      const current = await loadSettings();
-      await saveSettings({ ...current, enabled: !current.enabled });
+  const panel = GBot.panel.create({
+    onToggleBot: async () => {
+      const current = await S.loadSettings();
+      await S.saveSettings({ ...current, enabled: !current.enabled });
     },
+    onToggleActivity: async (id) => {
+      const current = await S.loadSettings();
+      const path = GBot.ui.ACTIVITIES[id].path;
+      await S.saveSettings(S.setPath(current, path, !S.getPath(current, path)));
+    },
+    onSaveSettings: (next) => S.saveSettings(next),
     onRunNow: () => {
       cancel();
       tick();
     },
+    onResetStats: () =>
+      editMemory((m) => {
+        m.stats = brain.createMemory(Date.now()).stats;
+        m.blockedUntil = {};
+        m.noFoodUntil = 0;
+      }),
+    onClearLog: () =>
+      editMemory((m) => {
+        m.log = [];
+      }),
   });
 
   ext.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     if (changes[MEMORY_KEY] && !running && changes[MEMORY_KEY].newValue) {
-      overlay.update({ memory: brain.normalizeMemory(changes[MEMORY_KEY].newValue, Date.now()) });
+      memory = brain.normalizeMemory(changes[MEMORY_KEY].newValue, Date.now());
+      panel.update({ memory, status: statusFor(lastState) });
     }
-    if (!changes[GBot.settings.STORAGE_KEY]) return;
-    const next = GBot.settings.mergeSettings(GBot.settings.DEFAULT_SETTINGS, changes[GBot.settings.STORAGE_KEY].newValue);
+    if (!changes[S.STORAGE_KEY]) return;
+    const next = S.normalize(changes[S.STORAGE_KEY].newValue);
     const wasEnabled = settings && settings.enabled;
     settings = next;
-    overlay.update({ settings });
+    panel.update({ settings, status: statusFor(lastState) });
     if (next.enabled && !wasEnabled) {
       schedule(tick, 500);
     } else if (!next.enabled && wasEnabled) {
       cancel();
-      overlay.update({ decision: { type: 'idle', reason: 'Paused' } });
+      panel.update({ decision: { type: 'idle', reason: 'Paused' } });
       send({ type: 'heartbeat', host: location.host, nextAt: null, enabled: false });
     } else if (next.enabled) {
       // Settings changed while running: re-evaluate soon.

@@ -191,3 +191,119 @@ test('normalizeMemory repairs partial stored memory', () => {
   assert.deepEqual(m.log, []);
   assert.deepEqual(m.blockedUntil, {});
 });
+
+// ---------------------------------------------------------------- v2 options
+
+test('priority order decides between several ready activities', () => {
+  const state = makeState({ expedition: cd(true, 0, { points: 3 }), arena: cd(true) });
+  const s = makeSettings({ arena: { enabled: true } });
+  assert.equal(brain.decide(state, s, memory(), NOW).type, 'expedition');
+  s.general = { order: ['arena', 'quests', 'expedition', 'dungeon', 'circus'] };
+  assert.equal(brain.decide(state, s, memory(), NOW).type, 'arena');
+});
+
+test('keepPoints saves points for later', () => {
+  const state = makeState({ expedition: cd(true, 0, { points: 3 }) });
+  assert.equal(brain.decide(state, makeSettings({ expedition: { keepPoints: 3 } }), memory(), NOW).type, 'wait');
+  assert.equal(brain.decide(state, makeSettings({ expedition: { keepPoints: 2 } }), memory(), NOW).type, 'expedition');
+  // Work counts reserved points as "out of points".
+  const s = makeSettings({ work: { enabled: true }, expedition: { keepPoints: 3 }, dungeon: { keepPoints: 5 } });
+  assert.equal(brain.decide(state, s, memory(), NOW).type, 'work');
+});
+
+test('eating and fighting use separate HP thresholds', () => {
+  const at = (percent) => makeState({ hp: { value: percent * 10, max: 1000, percent, regenPerHour: 600 }, expedition: cd(true, 0, { points: 3 }) });
+  const s = makeSettings({ heal: { enabled: true, eatBelowPercent: 50, minHpPercent: 20 } });
+  assert.equal(brain.decide(at(40), s, memory(), NOW).type, 'heal', 'eats below 50%');
+  const noFood = memory();
+  brain.markNoFood(noFood, NOW);
+  assert.equal(brain.decide(at(40), s, noFood, NOW).type, 'expedition', 'still fights above 20% without food');
+  assert.equal(brain.decide(at(10), s, noFood, NOW).type, 'wait', 'stops fighting below 20%');
+  s.heal.enabled = false;
+  assert.equal(brain.decide(at(40), s, memory(), NOW).type, 'expedition', 'eating disabled');
+});
+
+test('scheduleWindow handles same-day and overnight hours', () => {
+  const at = (h, m) => new Date(2026, 0, 15, h, m, 0).getTime();
+  const day = { activeHours: true, start: '08:00', end: '22:30' };
+  assert.equal(brain.scheduleWindow(day, at(12, 0)).active, true);
+  assert.equal(brain.scheduleWindow(day, at(22, 30)).active, false);
+  const early = brain.scheduleWindow(day, at(6, 15));
+  assert.equal(early.active, false);
+  assert.equal(early.until, at(8, 0));
+  assert.equal(brain.scheduleWindow(day, at(23, 0)).until, new Date(2026, 0, 16, 8, 0).getTime());
+
+  const night = { activeHours: true, start: '22:00', end: '06:00' };
+  assert.equal(brain.scheduleWindow(night, at(23, 30)).active, true);
+  assert.equal(brain.scheduleWindow(night, at(3, 0)).active, true);
+  assert.equal(brain.scheduleWindow(night, at(12, 0)).until, at(22, 0));
+  assert.equal(brain.scheduleWindow({ ...night, activeHours: false }, at(12, 0)).active, true);
+});
+
+test('bot waits outside active hours', () => {
+  const s = makeSettings({ schedule: { activeHours: true, start: '00:00', end: '00:01' } });
+  const now = new Date(2026, 0, 15, 12, 0).getTime();
+  const d = brain.decide(makeState({ expedition: cd(true, 0, { points: 3 }) }), s, memory(), now);
+  assert.equal(d.type, 'wait');
+  assert.equal(d.until, new Date(2026, 0, 16, 0, 0).getTime());
+});
+
+test('random breaks', () => {
+  const schedule = { breaks: true, breakEvery: 60, breakLength: 10 };
+  const m = memory();
+  const half = () => 0.5; // jitter factor 1.0
+  brain.updateBreaks(schedule, m, NOW, half);
+  assert.equal(m.nextBreakAt, NOW + 60 * 60000);
+  assert.equal(m.breakUntil, 0);
+  brain.updateBreaks(schedule, m, NOW + 60 * 60000, half);
+  assert.equal(m.breakUntil, NOW + 70 * 60000);
+  assert.equal(m.nextBreakAt, NOW + 130 * 60000);
+  const d = brain.decide(makeState({ expedition: cd(true, 0, { points: 3 }) }), makeSettings(), m, NOW + 61 * 60000);
+  assert.equal(d.type, 'wait');
+  assert.equal(d.until, m.breakUntil);
+  brain.updateBreaks({ ...schedule, breaks: false }, m, NOW, half);
+  assert.equal(m.breakUntil, 0);
+});
+
+test('filterOpponents applies ignore list and level range', () => {
+  const opps = [
+    { name: 'Maximus', level: 30 },
+    { name: 'Spartacus', level: 50 },
+    { name: 'Crixus', level: 12 },
+    { name: 'Gannicus', level: 26 },
+  ];
+  const cfg = { ignorePlayers: 'maximus,\n  CRIXUS ', limitLevels: false, maxAbove: 5, maxBelow: 10 };
+  assert.deepEqual(brain.filterOpponents(opps, cfg, 25).map((o) => o.name), ['Spartacus', 'Gannicus']);
+  cfg.limitLevels = true;
+  assert.deepEqual(brain.filterOpponents(opps, cfg, 25).map((o) => o.name), ['Gannicus']);
+  cfg.ignorePlayers = '';
+  assert.deepEqual(brain.filterOpponents(opps, cfg, 25).map((o) => o.name), ['Maximus', 'Gannicus']);
+  assert.equal(brain.filterOpponents(opps, cfg, null).length, 4, 'unknown own level: no level filter');
+});
+
+test('activityStatus summarises every tile', () => {
+  const m = memory();
+  m.blockedUntil.arena = NOW + 60000;
+  const s = makeSettings({ arena: { enabled: true }, quests: { enabled: true } });
+  m.nextQuestCheck = NOW + 5000;
+  const st = brain.activityStatus(
+    makeState({ expedition: cd(true, 0, { points: 3, maxPoints: 24 }), dungeon: cd(true, 0, { points: 0, maxPoints: 12 }) }),
+    s,
+    m,
+    NOW
+  );
+  assert.deepEqual(st.expedition, { enabled: true, points: '3/24', text: 'ready', ready: true });
+  assert.equal(st.dungeon.text, 'no points');
+  assert.equal(st.arena.text, 'paused');
+  assert.equal(st.arena.until, NOW + 60000);
+  assert.equal(st.circus.text, 'off');
+  assert.equal(st.heal.text, '80%');
+  assert.equal(st.work.text, 'off');
+  assert.equal(st.quests.until, NOW + 5000);
+});
+
+test('wait decisions name what they wait for', () => {
+  const d = brain.decide(makeState(), makeSettings(), memory(), NOW);
+  assert.equal(d.next.label, 'Expedition');
+  assert.ok(d.next.at > NOW);
+});

@@ -98,6 +98,24 @@
     };
   }
 
+  // Expedition locations from the game menu: [{ id, name }].
+  function readLocations(doc, loc) {
+    const seen = new Set();
+    const out = [];
+    for (const a of doc.querySelectorAll(SEL.locationMenuLinks)) {
+      let id = null;
+      try {
+        id = new URL(a.getAttribute('href'), loc.href).searchParams.get('loc');
+      } catch (e) {
+        id = null;
+      }
+      if (!id || !/^\d+$/.test(id) || seen.has(id)) continue;
+      seen.add(id);
+      out.push({ id, name: a.textContent.trim() || `Location ${id}` });
+    }
+    return out;
+  }
+
   function readState(doc, loc, now = Date.now()) {
     const inGame = !!doc.querySelector(SEL.gameHeader) || !!doc.querySelector(SEL.hpBar);
     const expedition = {
@@ -122,10 +140,11 @@
       arena: readCooldown(doc, loc, SEL.cooldowns.arena),
       circus: readCooldown(doc, loc, SEL.cooldowns.circus),
       dialogs: readDialogs(doc),
+      locations: readLocations(doc, loc),
     };
   }
 
-  GBot.state = { readState, readHp, readCooldown, readPoints, readSessionHash };
+  GBot.state = { readState, readHp, readCooldown, readPoints, readSessionHash, readLocations };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = GBot.state;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

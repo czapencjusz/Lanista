@@ -65,6 +65,7 @@
     arena: {
       tables: { arena: '#own2', circus: '#own3' },
       attack: '.attack',
+      nameCellIndex: 0,
       levelCellIndex: 1,
       error: '#errorRow',
       errorText: '#errorText',

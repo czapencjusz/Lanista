@@ -76,3 +76,12 @@ test('dialog visibility', () => {
   assert.equal(s.dialogs.loginBonus, true);
   assert.equal(s.dialogs.notification, false);
 });
+
+test('reads expedition location names from the menu', () => {
+  const s = read(html.page());
+  assert.deepEqual(s.locations, [
+    { id: '1', name: 'Grimwood' },
+    { id: '2', name: 'Pirate Harbour' },
+    { id: '3', name: 'Misty Mountains' },
+  ]);
+});

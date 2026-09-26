@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "GBot - Gladiatus Autopilot",
   "short_name": "GBot",
-  "version": "1.0.0",
-  "description": "Automates Gladiatus: expeditions, dungeons, arena, circus, healing, pantheon quests and stable work.",
+  "version": "1.1.0",
+  "description": "Automates Gladiatus: expeditions, dungeons, arena, circus, healing, quests and stable work, with an in-game control bar and settings.",
   "minimum_chrome_version": "121",
   "icons": {
     "16": "icons/icon16.png",
@@ -11,23 +11,37 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["storage", "alarms", "notifications"],
-  "host_permissions": ["https://*.gladiatus.gameforge.com/*"],
+  "permissions": [
+    "storage",
+    "alarms",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://*.gladiatus.gameforge.com/*"
+  ],
   "background": {
     "service_worker": "src/background/background.js",
-    "scripts": ["src/background/background.js"]
+    "scripts": [
+      "src/background/background.js"
+    ]
   },
   "action": {
     "default_title": "GBot",
-    "default_popup": "src/popup/popup.html",
+    "default_popup": "src/pages/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png"
     }
   },
+  "options_ui": {
+    "page": "src/pages/options.html",
+    "open_in_tab": true
+  },
   "content_scripts": [
     {
-      "matches": ["https://*.gladiatus.gameforge.com/game/*"],
+      "matches": [
+        "https://*.gladiatus.gameforge.com/game/*"
+      ],
       "js": [
         "src/shared/settings.js",
         "src/content/util.js",
@@ -35,7 +49,11 @@
         "src/content/state.js",
         "src/content/brain.js",
         "src/content/actions.js",
-        "src/content/overlay.js",
+        "src/ui/dom.js",
+        "src/ui/styles.js",
+        "src/ui/schema.js",
+        "src/ui/settings-ui.js",
+        "src/content/panel.js",
         "src/content/main.js"
       ],
       "run_at": "document_idle"
@@ -46,7 +64,9 @@
       "id": "gbot@gladiatus-autopilot",
       "strict_min_version": "121.0",
       "data_collection_permissions": {
-        "required": ["none"]
+        "required": [
+          "none"
+        ]
       }
     }
   }

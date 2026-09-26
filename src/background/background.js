@@ -88,6 +88,14 @@ async function notify(message) {
   }
 }
 
+// Notification requested by a content script; respects the user's choice.
+async function alert(kind, message) {
+  const { settings } = await ext.storage.local.get('settings');
+  const prefs = (settings && settings.notifications) || {};
+  if (kind && prefs[kind] === false) return;
+  await notify(message);
+}
+
 async function watchdog() {
   if (!(await isEnabled())) return;
   const owners = await getOwners();
@@ -104,7 +112,7 @@ async function watchdog() {
       // Reloading would not help (logged out, or the user browsed away).
       delete owners[host];
       changed = true;
-      await notify(`The ${host} tab left the game (logged out?). GBot is waiting until you log back in.`);
+      await alert('loggedOut', `The ${host} tab left the game (logged out?). GBot is waiting until you log back in.`);
       continue;
     }
     console.warn(`[GBot] tab ${owner.tabId} (${host}) stopped reporting, reloading it`);
@@ -125,7 +133,7 @@ ext.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'claim' && tabId !== undefined) work = claim(message.host, tabId);
   else if (message.type === 'heartbeat' && tabId !== undefined) {
     work = heartbeat(message.host, tabId, message.nextAt, message.enabled).then(() => ({ ok: true }));
-  } else if (message.type === 'alert') work = notify(message.message).then(() => ({ ok: true }));
+  } else if (message.type === 'alert') work = alert(message.kind, message.message).then(() => ({ ok: true }));
   else return false;
   work.then(sendResponse, (e) => sendResponse({ ok: true, error: String(e) }));
   return true; // async response

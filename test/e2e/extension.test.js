@@ -11,7 +11,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { chromium } = require('playwright-core');
 const { MockGame, ORIGIN, GAME, SH } = require('./mock-game');
-const { DEFAULT_SETTINGS, mergeSettings } = require('../../src/shared/settings.js');
+const { sanitizeSettings } = require('../../src/shared/settings.js');
 
 const EXTENSION = path.resolve(__dirname, '../..');
 const HOST = new URL(ORIGIN).host;
@@ -38,6 +38,7 @@ let context;
 let worker;
 let page;
 const game = new MockGame();
+const pageErrors = [];
 
 async function waitUntil(fn, timeoutMs, what) {
   const end = Date.now() + timeoutMs;
@@ -54,7 +55,7 @@ async function storageGet(key) {
 }
 
 async function configure(overrides) {
-  const settings = mergeSettings(DEFAULT_SETTINGS, {
+  const settings = sanitizeSettings({
     ...FAST,
     ...overrides,
     arena: { enabled: false, ...(overrides.arena || {}) },
@@ -71,7 +72,7 @@ async function scenario(gameState, settings) {
   game.reset(gameState);
   await worker.evaluate(async (host) => chrome.storage.local.remove(`memory:${host}`), HOST);
   await page.goto(`${GAME}index.php?mod=overview&sh=${SH}`);
-  await page.waitForSelector('#gbot-overlay', { state: 'attached' });
+  await page.waitForSelector('#gbot-root', { state: 'attached' });
   await configure({ ...settings, enabled: true });
 }
 
@@ -90,10 +91,15 @@ test.describe('GBot extension against a mock Gladiatus server', { skip: !executa
     page.on('console', (msg) => {
       if (process.env.E2E_DEBUG && msg.text().includes('[GBot]')) console.log('   page:', msg.text());
     });
+    page.on('pageerror', (e) => pageErrors.push(e.message));
   });
 
   test.after(async () => {
     if (context) await context.close();
+  });
+
+  test.afterEach(() => {
+    assert.deepEqual(pageErrors.splice(0), [], 'no uncaught errors on game pages');
   });
 
   test('attacks the chosen expedition enemy, then starts and fights a dungeon', { timeout: 90000 }, async () => {
@@ -115,8 +121,8 @@ test.describe('GBot extension against a mock Gladiatus server', { skip: !executa
     }, 15000, 'stats update');
     assert.equal(memory.stats.expedition, 1);
     await page.waitForFunction(() => {
-      const root = document.querySelector('#gbot-overlay').shadowRoot;
-      return /Waiting/.test(root.querySelector('.status').textContent);
+      const root = document.querySelector('#gbot-root').shadowRoot;
+      return /Waiting/.test(root.querySelector('.gb-status').textContent);
     }, null, { timeout: 15000 });
   });
 
@@ -177,26 +183,143 @@ test.describe('GBot extension against a mock Gladiatus server', { skip: !executa
     assert.ok(memory.log.some((l) => /pausing it/.test(l.message)));
   });
 
-  test('popup shows settings and toggles the bot', { timeout: 30000 }, async () => {
+  test('control bar: start/stop button and activity tiles', { timeout: 30000 }, async () => {
+    await configure({ enabled: false });
+    game.reset({ expPoints: 0, dunPoints: 0 });
+    await page.goto(`${GAME}index.php?mod=overview&sh=${SH}`);
+    const bar = page.locator('#gbot-root .gb-panel');
+    await bar.waitFor();
+
+    await bar.locator('[data-activity="arena"]').click();
+    await waitUntil(async () => (await storageGet('settings')).arena.enabled === true, 5000, 'arena on');
+    await page.waitForFunction(() => document.querySelector('#gbot-root').shadowRoot.querySelector('[data-activity="arena"]').classList.contains('on'));
+    await bar.locator('[data-activity="arena"]').click();
+    await waitUntil(async () => (await storageGet('settings')).arena.enabled === false, 5000, 'arena off');
+
+    await bar.locator('.gb-play').click();
+    await waitUntil(async () => (await storageGet('settings')).enabled === true, 5000, 'bot started');
+    assert.match(await bar.locator('.gb-play').textContent(), /Stop/);
+    await bar.locator('.gb-play').click();
+    await waitUntil(async () => (await storageGet('settings')).enabled === false, 5000, 'bot stopped');
+
+    // Docked layout pushes the page down instead of covering it.
+    await configure({ enabled: false, ui: { panel: true, layout: 'bar' } });
+    await page.waitForFunction(() => document.querySelector('#gbot-root').shadowRoot.querySelector('.gb-panel').classList.contains('bar'));
+    assert.ok(parseInt(await page.evaluate(() => document.documentElement.style.paddingTop), 10) > 20);
+    await configure({ enabled: false, ui: { panel: false } });
+    await page.waitForFunction(() => document.querySelector('#gbot-root').shadowRoot.querySelector('.gb-panel').style.display === 'none');
+    assert.equal(await page.evaluate(() => document.documentElement.style.paddingTop), '');
+  });
+
+  test('in-game settings window: arena filters are saved and respected', { timeout: 90000 }, async () => {
+    await configure({ enabled: false, expedition: { enabled: false }, dungeon: { enabled: false } });
+    game.reset({ expPoints: 0, dunPoints: 0 });
+    await worker.evaluate(async (host) => chrome.storage.local.remove(`memory:${host}`), HOST);
+    await page.goto(`${GAME}index.php?mod=overview&sh=${SH}`);
+    const root = page.locator('#gbot-root');
+    await root.locator('[data-settings="arena"]').click({ force: true });
+    const dialog = root.locator('.gb-modal');
+    await dialog.waitFor();
+    assert.equal(await dialog.locator('.gb-pane h2').textContent(), 'Arena');
+
+    await dialog.locator('[data-path="arena.enabled"]').check();
+    await dialog.locator('[data-path="arena.ignorePlayers"]').fill('Player1');
+    await dialog.locator('[data-path="arena.ignorePlayers"]').press('Tab');
+    await dialog.locator('[data-path="arena.limitLevels"]').check();
+    await dialog.locator('[data-path="arena.maxAbove"]').fill('5');
+    await dialog.locator('[data-path="arena.maxAbove"]').press('Tab');
+    const saved = await waitUntil(async () => {
+      const s = await storageGet('settings');
+      return s.arena.enabled && s.arena.limitLevels && s.arena.ignorePlayers === 'Player1' && s.arena.maxAbove === 5 ? s : null;
+    }, 5000, 'arena settings saved');
+    assert.equal(saved.arena.maxBelow, 20);
+    assert.equal(await dialog.locator('.gb-saved').textContent(), 'Saved');
+
+    // Location dropdown lists the locations read from the game menu.
+    await dialog.locator('[data-tab="expedition"]').click();
+    // (The list fills in live once the bot has read the game menu.)
+    const location = dialog.locator('[data-path="expedition.location"] option');
+    await waitUntil(async () => (await location.count()) === 5, 10000, 'location list');
+    assert.deepEqual(await location.allTextContents(), ['Last visited (auto)', 'Grimwood (#1)', 'Pirate Harbour (#2)', 'Misty Mountains (#3)', 'Other location id…']);
+
+    await page.keyboard.press('Escape');
+    await dialog.waitFor({ state: 'detached' });
+    await root.locator('.gb-play').click();
+    // Levels 40, 22, 31, 35, 28 at player level 25: Player1 (22) is ignored and
+    // everything above 30 is filtered out, which leaves level 28.
+    await waitUntil(() => game.events('arena').length, 60000, 'arena fight');
+    assert.equal(game.events('arena')[0].level, 28);
+  });
+
+  test('popup: compact settings, start/stop and editing', { timeout: 30000 }, async () => {
     await configure({ enabled: false });
     const extensionId = new URL(worker.url()).host;
     const popup = await context.newPage();
-    await popup.goto(`chrome-extension://${extensionId}/src/popup/popup.html`);
+    await popup.goto(`chrome-extension://${extensionId}/src/pages/popup.html`);
     await popup.waitForSelector('#toggle');
-    assert.equal(await popup.textContent('#toggle'), 'Start');
-    assert.equal(await popup.inputValue('[data-path="work.job"]'), '1', 'job index is shown 1-based');
+    assert.match(await popup.textContent('#toggle'), /Start/);
 
     await popup.click('#toggle');
     await waitUntil(async () => (await storageGet('settings')).enabled === true, 5000, 'enabled');
+
+    await popup.click('[data-tab="work"]');
+    assert.equal(await popup.inputValue('[data-path="work.job"]'), '1', 'job index is shown 1-based');
+    await popup.click('[data-tab="expedition"]');
     await popup.selectOption('[data-path="expedition.enemy"]', '3');
-    await popup.fill('[data-path="dungeon.location"]', '7');
-    await popup.press('[data-path="dungeon.location"]', 'Tab');
+    await popup.click('[data-tab="dungeon"]');
+    await popup.selectOption('[data-path="dungeon.location"]', 'custom');
+    await popup.fill('[data-path="dungeon.location#custom"]', '7');
+    await popup.press('[data-path="dungeon.location#custom"]', 'Tab');
     await waitUntil(async () => {
       const s = await storageGet('settings');
       return s.expedition.enemy === 3 && s.dungeon.location === '7';
     }, 5000, 'settings saved');
+
+    // Priority: move Arena to the top.
+    await popup.click('[data-tab="general"]');
+    for (let i = 0; i < 3; i++) await popup.click('[data-item="arena"] button[title="Move Arena up"]');
+    await waitUntil(async () => (await storageGet('settings')).general.order[0] === 'arena', 5000, 'arena first');
+
     await popup.click('#toggle');
     await waitUntil(async () => (await storageGet('settings')).enabled === false, 5000, 'disabled');
     await popup.close();
+  });
+
+  test('options page: statistics, log, import and reset', { timeout: 30000 }, async () => {
+    await configure({ enabled: false });
+    const extensionId = new URL(worker.url()).host;
+    const options = await context.newPage();
+    await options.goto(`chrome-extension://${extensionId}/src/pages/options.html`);
+    await options.waitForSelector('.gb-settings');
+    const keys = await worker.evaluate(async () => Object.keys(await chrome.storage.local.get(null)));
+    assert.match(await options.textContent('#status-host'), /Server 1 \(EN\)/, `stored keys: ${keys}`);
+
+    await options.click('[data-tab="stats"]');
+    const cards = await options.locator('.gb-card-label').allTextContents();
+    assert.ok(cards.includes('Arena fights'));
+    await options.click('[data-tab="log"]');
+    assert.ok((await options.locator('.gb-log-line').count()) > 0, 'log entries from earlier scenarios');
+
+    await options.click('[data-tab="profile"]');
+    const exported = JSON.stringify({ enabled: true, expedition: { enemy: 4, keepPoints: 6 }, heal: { eatBelowPercent: 55 } });
+    await options.fill('.gb-pane textarea', exported);
+    await options.click('text=Import pasted settings');
+    const imported = await waitUntil(async () => {
+      const s = await storageGet('settings');
+      return s.expedition.enemy === 4 ? s : null;
+    }, 5000, 'import');
+    assert.equal(imported.expedition.keepPoints, 6);
+    assert.equal(imported.heal.eatBelowPercent, 55);
+    assert.equal(imported.enabled, false, 'importing never starts the bot');
+
+    await options.fill('.gb-pane textarea', '{not json');
+    await options.click('text=Import pasted settings');
+    assert.match(await options.textContent('.gb-import-status'), /not valid JSON/);
+
+    const reset = options.locator('text=Reset all settings');
+    await reset.click();
+    await options.click('text=Click again to confirm');
+    await waitUntil(async () => (await storageGet('settings')).expedition.enemy === 1, 5000, 'reset');
+    await options.close();
   });
 });

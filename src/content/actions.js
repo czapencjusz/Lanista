@@ -123,7 +123,13 @@
       .filter((o) => o.attack)
       .map((o, index) => {
         const cell = o.row.cells[SEL.arena.levelCellIndex];
-        return { ...o, index, level: cell ? parseNumber(cell.textContent) : null };
+        const nameCell = o.row.cells[SEL.arena.nameCellIndex];
+        return {
+          ...o,
+          index,
+          level: cell ? parseNumber(cell.textContent) : null,
+          name: nameCell ? nameCell.textContent.trim() : '',
+        };
       });
   }
 
@@ -141,9 +147,11 @@
     if (!opponents) throw new ActionError(`The ${type} opponent list was not found`);
     if (!opponents.length) throw new ActionError(`No ${type} opponents can be attacked`);
 
-    const order = brain.pickOpponents(opponents, settings[type].target);
+    const allowed = brain.filterOpponents(opponents, settings[type], state.level);
+    if (!allowed.length) throw new ActionError(`None of the ${opponents.length} ${type} opponents match your filters`);
+    const order = brain.pickOpponents(allowed, settings[type].target);
     for (const opponent of order.slice(0, 3)) {
-      await click(ctx, opponent.attack, `attack ${type} opponent (level ${opponent.level ?? '?'})`);
+      await click(ctx, opponent.attack, `attack ${type} opponent ${opponent.name || ''} (level ${opponent.level ?? '?'})`);
       const outcome = await waitFor(() => {
         if (ctx.isUnloading()) return 'navigated';
         if (visibleConfirmDialog()) return 'confirm';
@@ -300,6 +308,7 @@
 
     brain.markNoFood(ctx.memory, ctx.now());
     ctx.log('warn', 'No food in the inventory; waiting for HP to regenerate (retrying food in 30 min)');
+    if (ctx.notify) ctx.notify('noFood', `GBot: HP is ${state.hp.percent}% and there is no food left in your bags.`);
     return { retick: true };
   }
 

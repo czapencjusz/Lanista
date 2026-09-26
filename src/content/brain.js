@@ -26,7 +26,22 @@
       noFoodUntil: 0,
       nextQuestCheck: 0,
       questSteps: { since: 0, count: 0 },
-      stats: { since: now, expedition: 0, dungeon: 0, arena: 0, circus: 0, heal: 0, work: 0, quests: 0 },
+      breakUntil: 0,
+      nextBreakAt: 0,
+      // Facts about the game read from pages, shown in the settings UI.
+      gameInfo: { locations: [], level: null, updatedAt: 0 },
+      stats: {
+        since: now,
+        expedition: 0,
+        dungeon: 0,
+        arena: 0,
+        circus: 0,
+        heal: 0,
+        work: 0,
+        quests: 0,
+        goldStart: null,
+        goldNow: null,
+      },
       log: [],
     };
   }
@@ -40,6 +55,7 @@
       ...memory,
       blockedUntil: { ...(memory.blockedUntil || {}) },
       questSteps: { ...base.questSteps, ...(memory.questSteps || {}) },
+      gameInfo: { ...base.gameInfo, ...(memory.gameInfo || {}) },
       stats: { ...base.stats, ...(memory.stats || {}) },
       log: Array.isArray(memory.log) ? memory.log : [],
     };
@@ -55,9 +71,72 @@
     return Math.ceil((needed / hp.regenPerHour) * 3600 * 1000);
   }
 
+  const LABELS = {
+    expedition: 'Expedition',
+    dungeon: 'Dungeon',
+    arena: 'Arena',
+    circus: 'Circus Turma',
+    quests: 'Quests',
+    heal: 'Healing',
+    work: 'Work',
+  };
+
+  const hpKnown = (hp) => hp && hp.percent !== null && hp.percent !== undefined;
+
+  // Local-time "HH:MM" -> minutes after midnight.
+  const minutesOf = (hhmm) => {
+    const [h, m] = hhmm.split(':').map(Number);
+    return h * 60 + m;
+  };
+
+  // Is `now` inside the configured active hours? When not, `until` is the
+  // next start time.
+  function scheduleWindow(schedule, now) {
+    if (!schedule.activeHours) return { active: true };
+    const start = minutesOf(schedule.start);
+    const end = minutesOf(schedule.end);
+    if (start === end) return { active: true };
+    const d = new Date(now);
+    const m = d.getHours() * 60 + d.getMinutes();
+    const active = start < end ? m >= start && m < end : m >= start || m < end;
+    if (active) return { active: true };
+    const next = new Date(now);
+    next.setHours(Math.floor(start / 60), start % 60, 0, 0);
+    if (next.getTime() <= now) next.setDate(next.getDate() + 1);
+    return { active: false, until: next.getTime() };
+  }
+
+  // Keeps memory.breakUntil / memory.nextBreakAt up to date. Break length and
+  // spacing vary by +-30% so the pattern is not mechanical.
+  function updateBreaks(schedule, memory, now, random = Math.random) {
+    if (!schedule.breaks) {
+      memory.breakUntil = 0;
+      memory.nextBreakAt = 0;
+      return;
+    }
+    const jitter = (minutes) => Math.round(minutes * 60000 * (0.7 + 0.6 * random()));
+    if (memory.breakUntil > now) return;
+    if (!memory.nextBreakAt) {
+      memory.nextBreakAt = now + jitter(schedule.breakEvery);
+    } else if (now >= memory.nextBreakAt) {
+      memory.breakUntil = now + jitter(schedule.breakLength);
+      memory.nextBreakAt = memory.breakUntil + jitter(schedule.breakEvery);
+    }
+  }
+
+  const outOfPoints = (cd, cfg) => cd.points !== null && cd.points !== undefined && cd.points <= cfg.keepPoints;
+
   function decide(state, settings, memory, now) {
     if (!settings.enabled) return { type: 'idle', reason: 'Paused' };
     if (!state.inGame) return { type: 'idle', reason: 'Not on an in-game page' };
+
+    const hours = scheduleWindow(settings.schedule, now);
+    if (!hours.active) {
+      return { type: 'wait', until: hours.until, reason: 'Outside active hours', next: { label: 'Active hours start', at: hours.until } };
+    }
+    if (memory.breakUntil > now) {
+      return { type: 'wait', until: memory.breakUntil, reason: 'Taking a break', next: { label: 'Break ends', at: memory.breakUntil } };
+    }
 
     if (!isBlocked(memory, 'dialog', now)) {
       if (state.dialogs.loginBonus) return { type: 'dialog', dialog: 'loginBonus', reason: 'Collect daily login bonus' };
@@ -65,42 +144,43 @@
     }
 
     if (memory.workUntil > now) {
-      return { type: 'wait', until: memory.workUntil, reason: 'Working in the stable' };
+      return { type: 'wait', until: memory.workUntil, reason: 'Working in the stable', next: { label: 'Work ends', at: memory.workUntil } };
     }
 
-    const wakeTimes = [];
+    const wake = [];
     const hp = state.hp || {};
     const minHp = settings.heal.minHpPercent;
-    const hpOk = hp.percent === null || hp.percent === undefined || hp.percent >= minHp;
+    const hpOk = !hpKnown(hp) || hp.percent >= minHp;
     const wantsHp = FIGHTS.some((t) => NEEDS_HP[t] && settings[t].enabled);
 
-    if (!hpOk && wantsHp && settings.heal.enabled && settings.heal.useFood) {
+    if (settings.heal.enabled && wantsHp && hpKnown(hp) && hp.percent < settings.heal.eatBelowPercent) {
       if (!isBlocked(memory, 'heal', now) && (memory.noFoodUntil || 0) <= now) {
-        return { type: 'heal', reason: `HP ${hp.percent}% is below ${minHp}%` };
+        return { type: 'heal', reason: `HP ${hp.percent}% is below ${settings.heal.eatBelowPercent}%` };
       }
     }
 
-    if (settings.quests.enabled && !isBlocked(memory, 'quests', now)) {
-      if ((memory.nextQuestCheck || 0) <= now) return { type: 'quests', reason: 'Check pantheon quests' };
-      wakeTimes.push(memory.nextQuestCheck);
-    }
-
-    for (const type of FIGHTS) {
+    for (const type of settings.general.order) {
+      if (type === 'quests') {
+        if (!settings.quests.enabled || isBlocked(memory, 'quests', now)) continue;
+        if ((memory.nextQuestCheck || 0) <= now) return { type: 'quests', reason: 'Check pantheon quests' };
+        wake.push({ label: LABELS.quests, at: memory.nextQuestCheck });
+        continue;
+      }
       const cfg = settings[type];
       const cd = state[type];
       if (!cfg.enabled || !cd || !cd.available) continue;
       if (isBlocked(memory, type, now)) {
-        wakeTimes.push(memory.blockedUntil[type]);
+        wake.push({ label: `${LABELS[type]} (paused)`, at: memory.blockedUntil[type] });
         continue;
       }
       if (NEEDS_HP[type] && !hpOk) {
         const eta = hpRegenEta(hp, minHp);
-        if (eta !== null) wakeTimes.push(now + eta);
+        if (eta !== null) wake.push({ label: `HP ${minHp}%`, at: now + eta });
         continue;
       }
-      if (USES_POINTS[type] && cd.points === 0) continue;
-      if (cd.ready) return { type, reason: `${type} is ready` };
-      if (cd.remainingMs !== null && cd.remainingMs !== undefined) wakeTimes.push(now + cd.remainingMs);
+      if (USES_POINTS[type] && outOfPoints(cd, cfg)) continue;
+      if (cd.ready) return { type, reason: `${LABELS[type]} is ready` };
+      if (cd.remainingMs !== null && cd.remainingMs !== undefined) wake.push({ label: LABELS[type], at: now + cd.remainingMs });
     }
 
     if (settings.work.enabled && !isBlocked(memory, 'work', now) && shouldWork(state, settings)) {
@@ -108,10 +188,11 @@
     }
 
     const maxIdleMs = settings.timing.maxIdle * 1000;
-    const next = Math.min(now + maxIdleMs, ...wakeTimes.filter((t) => t > now));
+    let next = { label: 'Re-check', at: now + maxIdleMs };
+    for (const w of wake) if (w.at > now && w.at < next.at) next = w;
     // A few seconds of slack after a cooldown ends, like a human would take.
-    const until = Math.max(now + MIN_WAIT_MS, next + 2000 + Math.floor(Math.random() * 8000));
-    return { type: 'wait', until, reason: 'Waiting for cooldowns' };
+    const until = Math.max(now + MIN_WAIT_MS, next.at + 2000 + Math.floor(Math.random() * 8000));
+    return { type: 'wait', until, reason: 'Waiting', next };
   }
 
   // Work when every enabled point-based activity has run out of points.
@@ -121,7 +202,43 @@
       // Nothing uses points: only work if nothing else is enabled either.
       return !settings.arena.enabled && !settings.circus.enabled;
     }
-    return pointTypes.every((t) => state[t].points === 0);
+    return pointTypes.every((t) => outOfPoints(state[t], settings[t]));
+  }
+
+  // Per-activity summary for the control bar tiles.
+  //   { enabled, text, until?, ready?, warn?, points? }
+  function activityStatus(state, settings, memory, now) {
+    const out = {};
+    const hp = state.hp || {};
+    const hpLow = hpKnown(hp) && hp.percent < settings.heal.minHpPercent;
+    for (const type of FIGHTS) {
+      const cfg = settings[type];
+      const cd = state[type];
+      const s = { enabled: cfg.enabled };
+      if (cd && USES_POINTS[type] && cd.points !== null && cd.points !== undefined) {
+        s.points = `${cd.points}/${cd.maxPoints ?? '?'}`;
+      }
+      if (!cfg.enabled) s.text = 'off';
+      else if (!cd || !cd.available) s.text = 'n/a';
+      else if (isBlocked(memory, type, now)) Object.assign(s, { text: 'paused', until: memory.blockedUntil[type], warn: true });
+      else if (USES_POINTS[type] && outOfPoints(cd, cfg)) s.text = 'no points';
+      else if (NEEDS_HP[type] && hpLow) Object.assign(s, { text: 'low HP', warn: true });
+      else if (cd.ready) Object.assign(s, { text: 'ready', ready: true });
+      else if (cd.remainingMs) Object.assign(s, { text: 'cooldown', until: now + cd.remainingMs });
+      else s.text = 'waiting';
+      out[type] = s;
+    }
+    const heal = { enabled: settings.heal.enabled, text: hpKnown(hp) ? `${hp.percent}%` : '?' };
+    if (hpKnown(hp) && hp.percent < settings.heal.eatBelowPercent) heal.warn = true;
+    if ((memory.noFoodUntil || 0) > now) Object.assign(heal, { text: 'no food', until: memory.noFoodUntil, warn: true });
+    out.heal = heal;
+    out.work = memory.workUntil > now
+      ? { enabled: settings.work.enabled, text: 'working', until: memory.workUntil, ready: true }
+      : { enabled: settings.work.enabled, text: settings.work.enabled ? `${settings.work.hours}h` : 'off' };
+    const quests = { enabled: settings.quests.enabled, text: settings.quests.enabled ? 'ready' : 'off' };
+    if (settings.quests.enabled && memory.nextQuestCheck > now) Object.assign(quests, { text: 'next', until: memory.nextQuestCheck });
+    out.quests = quests;
+    return out;
   }
 
   // Call before performing (or navigating towards) an action. Returns
@@ -218,6 +335,24 @@
     return list.concat(rest);
   }
 
+  // Splits a user-entered list ("a, b\nc") into lower-case names.
+  const parseNameList = (text) =>
+    String(text || '')
+      .split(/[\n,;]+/)
+      .map((n) => n.trim().toLowerCase())
+      .filter(Boolean);
+
+  // Removes opponents the user does not want to fight: ignored names and,
+  // optionally, levels outside [myLevel - maxBelow, myLevel + maxAbove].
+  function filterOpponents(opponents, cfg, myLevel) {
+    const ignored = parseNameList(cfg.ignorePlayers);
+    return opponents.filter((o) => {
+      if (o.name && ignored.includes(o.name.trim().toLowerCase())) return false;
+      if (!cfg.limitLevels || myLevel === null || myLevel === undefined || o.level === null || o.level === undefined) return true;
+      return o.level <= myLevel + cfg.maxAbove && o.level >= myLevel - cfg.maxBelow;
+    });
+  }
+
   // Choose the food whose heal amount best fills the missing HP: the largest
   // item that does not overheal, otherwise the smallest one.
   function pickFood(foods, missingHp) {
@@ -231,15 +366,21 @@
 
   GBot.brain = {
     FIGHTS,
+    LABELS,
     createMemory,
     normalizeMemory,
     decide,
+    scheduleWindow,
+    updateBreaks,
+    activityStatus,
     shouldWork,
     beginAttempt,
     resolvePending,
     questStep,
     markNoFood,
     pickOpponents,
+    filterOpponents,
+    parseNameList,
     pickFood,
     hpRegenEta,
   };

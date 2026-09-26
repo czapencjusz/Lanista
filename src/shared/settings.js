@@ -1,4 +1,4 @@
-// Settings shared by the content scripts and the popup.
+// Settings shared by the content scripts, the popup and the options page.
 // Loaded as a classic script (content scripts cannot use ES modules), so
 // everything hangs off the global GBot namespace. Also require()-able from
 // Node for unit tests.
@@ -6,8 +6,32 @@
   'use strict';
   const GBot = (root.GBot = root.GBot || {});
 
-  const DEFAULT_SETTINGS = {
+  const SETTINGS_VERSION = 2;
+
+  // Activities whose order the user can change ("priority").
+  const ORDERABLE = ['quests', 'expedition', 'dungeon', 'arena', 'circus'];
+
+  const QUEST_TYPES = ['combat', 'arena', 'circus', 'expedition', 'dungeon', 'items'];
+
+  const opponentDefaults = () => ({
     enabled: false,
+    target: 'lowest', // 'lowest' | 'highest' | 'random'
+    // Only attack opponents within [myLevel - maxBelow, myLevel + maxAbove].
+    limitLevels: false,
+    maxAbove: 5,
+    maxBelow: 20,
+    // Player names never to attack (one per line or comma separated).
+    ignorePlayers: '',
+  });
+
+  const DEFAULT_SETTINGS = {
+    version: SETTINGS_VERSION,
+    enabled: false,
+
+    general: {
+      // Order in which ready activities are done when several are ready.
+      order: ORDERABLE.slice(),
+    },
 
     expedition: {
       enabled: true,
@@ -15,30 +39,26 @@
       // (your last visited expedition), otherwise a numeric location id.
       location: 'auto',
       enemy: 1, // 1..4 (4 is the location boss)
+      // Stop attacking when this many points are left (saved for later).
+      keepPoints: 0,
     },
 
     dungeon: {
       enabled: true,
       location: 'auto',
       difficulty: 'normal', // 'normal' | 'advanced'
+      keepPoints: 0,
     },
 
-    arena: {
-      enabled: false,
-      target: 'lowest', // 'lowest' | 'highest' | 'random'
-    },
-
-    circus: {
-      enabled: false,
-      target: 'lowest',
-    },
+    arena: opponentDefaults(),
+    circus: opponentDefaults(),
 
     heal: {
+      // Eat food from the inventory when HP drops below eatBelowPercent.
       enabled: true,
-      // Expeditions, dungeons and arena are skipped below this HP percentage.
-      minHpPercent: 25,
-      // Eat food from the inventory when HP drops below minHpPercent.
-      useFood: true,
+      eatBelowPercent: 30,
+      // Expeditions, dungeons and the arena are skipped below this HP.
+      minHpPercent: 20,
     },
 
     work: {
@@ -60,6 +80,17 @@
       },
     },
 
+    schedule: {
+      // Only play between start and end (local time; may wrap midnight).
+      activeHours: false,
+      start: '08:00',
+      end: '23:00',
+      // Take a random break of ~breakLength minutes every ~breakEvery minutes.
+      breaks: false,
+      breakEvery: 120,
+      breakLength: 15,
+    },
+
     timing: {
       // Random human-like pause before every click (seconds).
       minClickDelay: 1.2,
@@ -74,9 +105,68 @@
       // Minutes an activity is paused after maxAttempts failures.
       backoffMinutes: 10,
     },
+
+    notifications: {
+      loggedOut: true,
+      activityPaused: true,
+      noFood: true,
+    },
+
+    ui: {
+      // Show the control bar on game pages.
+      panel: true,
+      layout: 'floating', // 'floating' | 'bar'
+    },
   };
 
+  const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+  const LOCATION = /^(auto|\d{1,4})$/;
+
+  // Validation rules per setting path. Used by sanitizeSettings() and by the
+  // settings UI for input limits.
+  const CONSTRAINTS = {
+    'expedition.location': { pattern: LOCATION },
+    'expedition.enemy': { int: true, min: 1, max: 4 },
+    'expedition.keepPoints': { int: true, min: 0, max: 500 },
+    'dungeon.location': { pattern: LOCATION },
+    'dungeon.difficulty': { enum: ['normal', 'advanced'] },
+    'dungeon.keepPoints': { int: true, min: 0, max: 500 },
+    'heal.eatBelowPercent': { int: true, min: 0, max: 100 },
+    'heal.minHpPercent': { int: true, min: 0, max: 100 },
+    'work.job': { int: true, min: 0, max: 19 },
+    'work.hours': { int: true, min: 1, max: 24 },
+    'schedule.start': { pattern: TIME },
+    'schedule.end': { pattern: TIME },
+    'schedule.breakEvery': { int: true, min: 10, max: 1440 },
+    'schedule.breakLength': { int: true, min: 1, max: 600 },
+    'timing.minClickDelay': { min: 0, max: 60 },
+    'timing.maxClickDelay': { min: 0, max: 60 },
+    'timing.maxIdle': { int: true, min: 30, max: 3600 },
+    'safety.maxAttempts': { int: true, min: 1, max: 20 },
+    'safety.backoffMinutes': { int: true, min: 1, max: 1440 },
+    'ui.layout': { enum: ['floating', 'bar'] },
+  };
+  for (const type of ['arena', 'circus']) {
+    CONSTRAINTS[`${type}.target`] = { enum: ['lowest', 'highest', 'random'] };
+    CONSTRAINTS[`${type}.maxAbove`] = { int: true, min: 0, max: 500 };
+    CONSTRAINTS[`${type}.maxBelow`] = { int: true, min: 0, max: 500 };
+    CONSTRAINTS[`${type}.ignorePlayers`] = { maxLength: 4000 };
+  }
+
   const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+  const clone = (v) => JSON.parse(JSON.stringify(v));
+
+  function getPath(obj, path) {
+    return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
+  }
+
+  function setPath(obj, path, value) {
+    const keys = path.split('.');
+    const last = keys.pop();
+    const target = keys.reduce((o, k) => (isPlainObject(o[k]) ? o[k] : (o[k] = {})), obj);
+    target[last] = value;
+    return obj;
+  }
 
   // Deep-merge `override` onto a copy of `base`. Only keys that exist in
   // `base` are kept, and values must match the type of the default, so stale
@@ -89,36 +179,94 @@
       const b = base[key];
       const o = override[key];
       if (isPlainObject(b)) out[key] = mergeSettings(b, o);
+      else if (Array.isArray(b)) out[key] = Array.isArray(o) ? o.slice() : b.slice();
       else if (typeof b === typeof o && !(typeof o === 'number' && Number.isNaN(o))) out[key] = o;
       else if (typeof b === 'string' && typeof o === 'number') out[key] = String(o);
+      else if (typeof b === 'number' && typeof o === 'string' && o.trim() !== '' && !Number.isNaN(Number(o))) out[key] = Number(o);
     }
     return out;
   }
 
+  // Upgrades settings stored by older versions of the extension.
+  function migrateSettings(raw) {
+    if (!isPlainObject(raw)) return raw;
+    const out = clone(raw);
+    if (!out.version || out.version < 2) {
+      // v1 had one HP threshold used both for eating and for fighting, and a
+      // separate "useFood" switch.
+      if (isPlainObject(out.heal)) {
+        if (typeof out.heal.minHpPercent === 'number') out.heal.eatBelowPercent = out.heal.minHpPercent;
+        if (out.heal.useFood === false) out.heal.enabled = false;
+        delete out.heal.useFood;
+      }
+      out.version = 2;
+    }
+    return out;
+  }
+
+  // Clamps numbers, rejects invalid enum/pattern values and repairs the
+  // priority list. Always returns a complete, valid settings object.
+  function sanitizeSettings(settings) {
+    const out = mergeSettings(DEFAULT_SETTINGS, settings);
+    out.version = SETTINGS_VERSION;
+    for (const [path, rule] of Object.entries(CONSTRAINTS)) {
+      let value = getPath(out, path);
+      const fallback = getPath(DEFAULT_SETTINGS, path);
+      if (rule.enum && !rule.enum.includes(value)) value = fallback;
+      if (rule.pattern) {
+        value = String(value).trim().toLowerCase();
+        if (!rule.pattern.test(value)) value = fallback;
+      }
+      if (typeof fallback === 'number') {
+        if (typeof value !== 'number' || !Number.isFinite(value)) value = fallback;
+        if (rule.int) value = Math.round(value);
+        if (rule.min !== undefined) value = Math.max(rule.min, value);
+        if (rule.max !== undefined) value = Math.min(rule.max, value);
+      }
+      if (rule.maxLength && typeof value === 'string') value = value.slice(0, rule.maxLength);
+      setPath(out, path, value);
+    }
+    const order = (out.general.order || []).filter((a, i, list) => ORDERABLE.includes(a) && list.indexOf(a) === i);
+    out.general.order = order.concat(ORDERABLE.filter((a) => !order.includes(a)));
+    if (out.timing.maxClickDelay < out.timing.minClickDelay) out.timing.maxClickDelay = out.timing.minClickDelay;
+    return out;
+  }
+
+  const normalize = (raw) => sanitizeSettings(migrateSettings(raw) || {});
+
   const STORAGE_KEY = 'settings';
 
   function storageArea() {
-    const api = root.chrome || root.browser;
+    const api = root.browser || root.chrome;
     return api && api.storage && api.storage.local;
   }
 
   async function loadSettings() {
     const area = storageArea();
-    if (!area) return mergeSettings(DEFAULT_SETTINGS, {});
+    if (!area) return normalize({});
     const data = await area.get(STORAGE_KEY);
-    return mergeSettings(DEFAULT_SETTINGS, data[STORAGE_KEY]);
+    return normalize(data[STORAGE_KEY]);
   }
 
   async function saveSettings(settings) {
-    const clean = mergeSettings(DEFAULT_SETTINGS, settings);
+    const clean = sanitizeSettings(settings);
     await storageArea().set({ [STORAGE_KEY]: clean });
     return clean;
   }
 
   GBot.settings = {
+    SETTINGS_VERSION,
     DEFAULT_SETTINGS,
+    CONSTRAINTS,
+    ORDERABLE,
+    QUEST_TYPES,
     STORAGE_KEY,
+    getPath,
+    setPath,
     mergeSettings,
+    migrateSettings,
+    sanitizeSettings,
+    normalize,
     loadSettings,
     saveSettings,
   };
