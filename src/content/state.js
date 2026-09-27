@@ -99,6 +99,31 @@
     };
   }
 
+  const tooltipOf = (el) => {
+    try {
+      return JSON.parse(el.getAttribute('data-tooltip'))[0];
+    } catch (e) {
+      return [];
+    }
+  };
+
+  // Enemies on an expedition location page: [{ name, learnable }], where
+  // learnable counts bonuses still to be learned by winning. An unlearned
+  // bonus has a ["Learning chance after a win:", "25%"] pair in its tooltip;
+  // learned ones are .active, and one given up for rubies has no chance left.
+  function readExpeditionEnemies(doc) {
+    return Array.from(doc.querySelectorAll(SEL.expedition.box)).map((box) => {
+      const info = box.querySelector(SEL.expedition.info);
+      const first = info ? tooltipOf(info)[0] : null;
+      const name = Array.isArray(first) ? String(first[0]) : '';
+      const learnable = Array.from(box.querySelectorAll(SEL.expedition.bonus)).filter((b) => {
+        if (b.classList.contains(SEL.expedition.bonusActiveClass)) return false;
+        return tooltipOf(b).some((line) => Array.isArray(line) && Array.isArray(line[0]) && /^[1-9]\d*\s*%$/.test(String(line[0][1]).trim()));
+      }).length;
+      return { name, learnable };
+    });
+  }
+
   // Expedition locations from the game menu: [{ id, name }].
   function readLocations(doc, loc) {
     const seen = new Set();
@@ -188,7 +213,7 @@
     };
   }
 
-  GBot.state = { readState, readHp, readCooldown, readPoints, readSessionHash, readLocations, readCombatReport, readDungeonName };
+  GBot.state = { readState, readHp, readCooldown, readPoints, readSessionHash, readLocations, readCombatReport, readDungeonName, readExpeditionEnemies };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = GBot.state;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

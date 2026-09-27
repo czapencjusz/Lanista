@@ -395,3 +395,15 @@ test('training picks the cheapest selected stat and respects the gold reserve', 
   assert.equal(m.stats.training, 1);
   assert.equal(m.stats.goldSpent, 155283);
 });
+
+test('with the boss selected, earlier enemies with bonuses to learn go first', () => {
+  const enemies = [{ learnable: 0 }, { learnable: 3 }, { learnable: 4 }, { learnable: 0 }];
+  const cfg = { enemy: 4, bonusesFirst: true };
+  assert.equal(brain.expeditionTarget(enemies, cfg), 1, 'Skeleton Berserker first');
+  assert.equal(brain.expeditionTarget([{ learnable: 0 }, { learnable: 0 }, { learnable: 1 }, { learnable: 0 }], cfg), 2);
+  assert.equal(brain.expeditionTarget([{ learnable: 0 }, { learnable: 0 }, { learnable: 0 }, { learnable: 0 }], cfg), 3, 'all learned: the boss');
+  assert.equal(brain.expeditionTarget(enemies, { enemy: 4, bonusesFirst: false }), 3, 'option off');
+  assert.equal(brain.expeditionTarget(enemies, { enemy: 2, bonusesFirst: true }), 1, 'only applies to the boss');
+  assert.equal(brain.expeditionTarget([], cfg), 3, 'page not understood: keep the chosen enemy');
+  assert.equal(makeSettings().expedition.bonusesFirst, false, 'off by default');
+});

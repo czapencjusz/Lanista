@@ -76,7 +76,20 @@
 
     const buttons = $$(SEL.expedition.attackButtons);
     if (!buttons.length) throw new ActionError('No expedition attack buttons on this page');
-    const index = Math.min(Math.max(settings.expedition.enemy - 1, 0), buttons.length - 1);
+    const enemies = GBot.state.readExpeditionEnemies(document);
+    const target = brain.expeditionTarget(enemies, settings.expedition);
+    const index = Math.min(Math.max(target, 0), buttons.length - 1);
+    if (index !== settings.expedition.enemy - 1) {
+      // Log the bonus hunt when it moves on (a new enemy, or a bonus learned).
+      const enemy = enemies[index];
+      const progress = `${state.page.loc}:${index}:${enemy.learnable}`;
+      if (ctx.memory.bonusHunt !== progress) {
+        ctx.memory.bonusHunt = progress;
+        ctx.log('info', `Expedition: ${enemy.name || `enemy #${index + 1}`} has ${enemy.learnable} bonus${enemy.learnable === 1 ? '' : 'es'} left to learn, fighting it before the boss`);
+        // Save now: the attack below leaves the page before the runner saves.
+        await ctx.persist();
+      }
+    }
     const button = buttons[index];
     if (button.disabled || button.classList.contains(SEL.expedition.disabledClass)) {
       throw new ActionError(`Expedition enemy #${index + 1} cannot be attacked right now`);

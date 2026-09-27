@@ -47,6 +47,9 @@
       // (your last visited expedition), otherwise a numeric location id.
       location: 'auto',
       enemy: 1, // 1..4 (4 is the location boss)
+      // With the boss selected: first fight the other enemies until their
+      // bonuses are learned (the boss then gets them automatically).
+      bonusesFirst: false,
       // Stop attacking when this many points are left (saved for later).
       keepPoints: 0,
     },

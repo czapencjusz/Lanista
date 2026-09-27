@@ -118,3 +118,28 @@ test('reads combat reports and the running dungeon name', () => {
   );
   assert.equal(dungeon.dungeonName, 'Viking Camp');
 });
+
+test('reads which expedition bonuses can still be learned', () => {
+  // Tooltip shapes from s60-en (2026-09): learned bonuses are .active, an
+  // unlearned one has a ["Learning chance after a win:", "25%"] pair, the
+  // boss's are granted automatically.
+  const tip = (lines) => JSON.stringify([lines]).replace(/"/g, '&quot;');
+  const learned = `<div class="expedition_bonus active buyable" data-tooltip="${tip([['Disembowler', 'lime'], ['+30% gold', '#DDD'], ['Click to deactivate the bonus', '#DDD']])}"></div>`;
+  const open = `<div class="expedition_bonus buyable" data-tooltip="${tip([['Storyteller', 'lime'], ['+20% honour', '#DDD'], [['Learning chance after a win:', '25%'], ['#DDD', '#DDD']], ['Click to learn', '#DDD']])}"></div>`;
+  const boss = `<div class="expedition_bonus" data-tooltip="${tip([['Storyteller', 'lime'], ['+20% honour', '#DDD'], ['Note: Will automatically be activated', '#DDD']])}"></div>`;
+  const box = (i, name, bonuses) => `<div class="expedition_box"><div id="expedition_info${i}" data-tooltip="${tip([[name, 'white'], [['Level', '65 - 66'], ['white', 'white']]])}"></div>
+    <div class="expedition_name">${name.slice(0, 14)}…</div><button class="expedition_button">Attack</button><div class="expedition_bonus_box">${bonuses}</div></div>`;
+  const page = html.page({
+    content:
+      box(1, 'Skeleton Warrior', learned.repeat(4)) +
+      box(2, 'Skeleton Berserker', learned + open.repeat(3)) +
+      box(3, 'Lich', open.repeat(4)) +
+      box(4, 'Necromancer Prince', boss.repeat(4)),
+  });
+  assert.deepEqual(stateModule.readExpeditionEnemies(new JSDOM(page).window.document), [
+    { name: 'Skeleton Warrior', learnable: 0 },
+    { name: 'Skeleton Berserker', learnable: 3 },
+    { name: 'Lich', learnable: 4 },
+    { name: 'Necromancer Prince', learnable: 0 },
+  ]);
+});

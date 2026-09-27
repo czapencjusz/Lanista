@@ -273,6 +273,16 @@
     return found.length >= 2 ? found[1] : null;
   }
 
+  // Which expedition enemy to attack (0-based). With the boss selected and
+  // bonusesFirst on, the first earlier enemy that still has bonuses to learn
+  // goes first; enemies = [{ learnable }] in page order.
+  function expeditionTarget(enemies, cfg) {
+    const chosen = cfg.enemy - 1;
+    if (!cfg.bonusesFirst || chosen !== 3) return chosen;
+    const pending = enemies.slice(0, 3).findIndex((e) => e && e.learnable > 0);
+    return pending >= 0 ? pending : chosen;
+  }
+
   // Does the "Repair all" button take this item? (at or below the cutoff)
   const inRepairAll = (item, settings) => !!item.condition && item.condition.percent <= settings.repair.allUpToPercent;
 
@@ -578,6 +588,7 @@
     conditionOf,
     pickRepair,
     inRepairAll,
+    expeditionTarget,
     freeSpot,
     materialsAvailable,
     recordFight,

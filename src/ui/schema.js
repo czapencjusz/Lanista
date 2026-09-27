@@ -89,6 +89,12 @@
             { value: 4, label: '4th enemy (boss)' },
           ],
         },
+        {
+          path: 'expedition.bonusesFirst',
+          type: 'toggle',
+          label: 'Before the boss, learn the other enemies\' bonuses',
+          help: 'Only with the boss selected. Fights enemies 1-3 in turn until all their bonuses are learned (each win has a chance to learn one); the boss then gets those bonuses automatically and the bot fights the boss. Bonuses are never bought with rubies.',
+        },
         { path: 'expedition.keepPoints', type: 'number', label: 'Keep points in reserve', help: 'Stop when this many expedition points are left.' },
       ],
     },

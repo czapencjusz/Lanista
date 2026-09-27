@@ -56,6 +56,12 @@
     expedition: {
       attackButtons: '.expedition_button',
       disabledClass: 'disabled',
+      // One box per enemy (same order as the attack buttons), each with an
+      // info tooltip and four bonuses (gold, experience, items, honour).
+      box: '.expedition_box',
+      info: '[id^="expedition_info"]',
+      bonus: '.expedition_bonus',
+      bonusActiveClass: 'active',
     },
 
     dungeon: {
