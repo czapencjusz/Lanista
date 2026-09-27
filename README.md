@@ -2,8 +2,7 @@
 
 A browser extension for **Chrome** (and Edge, Brave, Opera) and **Firefox** that plays
 [Gladiatus](https://gladiatus.gameforge.com) for you. It runs in your normal game tab and clicks
-through the game the way a player would. You control it from a bar inside the game, in the style
-of Gladiatus Time Saver, and a settings window lets you tailor every activity.
+through the game the way a player would. 
 
 > **Read this first.** Gameforge's terms of service forbid bots. Using this extension can get your
 > account suspended or banned. You use it at your own risk.
