@@ -181,6 +181,22 @@
 
   const statusFor = (state) => (state && settings && memory ? brain.activityStatus(state, settings, memory, Date.now()) : {});
 
+  // Fills in the control bar as soon as the page is parsed, from storage and
+  // the page itself. Read-only: decide() has no side effects and nothing is
+  // executed or saved, so the first tick (which may act) keeps its delay.
+  async function paintNow() {
+    const now = Date.now();
+    const [loadedSettings, loadedMemory] = await Promise.all([S.loadSettings(), loadMemory()]);
+    if (running) return; // the first tick got here first
+    settings = loadedSettings;
+    memory = loadedMemory;
+    const state = GBot.state.readState(document, location, now);
+    lastState = state;
+    const decision = brain.decide(state, settings, memory, now);
+    panel.update({ settings, memory, decision, state, status: statusFor(state) });
+    renderRepairButton(state);
+  }
+
   async function tick() {
     if (running || unloading || !extensionAlive()) return;
     running = true;
@@ -341,6 +357,8 @@
     }
   });
 
-  // Give the game's own scripts a moment to initialise before the first look.
+  // Show the bar's state right away, but give the game's own scripts a moment
+  // to initialise before the first tick, which may click or navigate.
+  paintNow().catch((e) => console.debug('[GBot] first paint failed', e));
   schedule(tick, 800 + Math.random() * 1200);
 })(typeof globalThis !== 'undefined' ? globalThis : this);
