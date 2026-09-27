@@ -212,38 +212,6 @@ current page while an item is repaired.
 To add a setting, add a default in `settings.js`, optionally a validation rule, and a field in
 `schema.js`. The settings window, popup and options page pick it up automatically.
 
-### When Gameforge changes the game
-
-All selectors live in [`src/content/selectors.js`](src/content/selectors.js). If a feature stops
-working, the bot pauses that activity and logs what it could not find. Updating the matching
-selector there is usually enough. The selectors were checked against a live English server in
-September 2026, but the game can differ between servers and versions.
-
-## Development
-
-```sh
-npm install
-npm run lint        # syntax check; every file referenced by the manifest and pages exists
-npm test            # unit tests: decision engine, settings, page parsers, settings UI (jsdom)
-npm run test:e2e    # loads the extension in Chromium and plays against a mock game server
-npm run icons       # regenerate icons/*.png
-npm run build       # dist/gbot-chrome.zip, dist/gbot-firefox.zip
-```
-
-The end-to-end tests (`test/e2e/`) serve a mock Gladiatus server through Playwright request
-interception. It uses the same page structure as the real game, with real jQuery UI for the
-inventory drag and drop. The tests cover:
-
-* game play: expeditions, dungeons, arena and circus (including opponent filters), eating food,
-  the login bonus, stable work, quests, and backoff on repeated failures;
-* the interface: the control bar tiles and layouts, the in-game settings window, the popup, and
-  the options page (statistics, log, import, reset).
-
-They need a Chromium-based browser: set `CHROMIUM_PATH` (Microsoft Edge works, e.g.
-`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`), or install Playwright's Chromium.
-
-The newer features (fight results, nest search, training, repair and expedition bonuses) are
-covered by unit tests, with page samples taken from the live game, rather than by the mock server.
 
 ## License
 
