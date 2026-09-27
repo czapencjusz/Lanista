@@ -48,6 +48,20 @@
     return { refresh: true };
   }
 
+  // ------------------------------------------------------------------ nest
+
+  const NEST_BUTTON = { return: 0, quick: 1, thorough: 2 };
+
+  async function nest(ctx, decision) {
+    const buttons = $$(SEL.dialogs.nestButtons).filter(isVisible);
+    const button = buttons[NEST_BUTTON[decision.mode]];
+    if (!button) throw new ActionError(`Nest search: no "${decision.mode}" button (found ${buttons.length})`);
+    await click(ctx, button, `${decision.mode} nest search`);
+    // Searching reloads the page; returning to safety only closes the dialog.
+    if (await expectNavigation(ctx, 8000)) return { navigated: true };
+    return { retick: true, delayMs: 1500 };
+  }
+
   // ------------------------------------------------------------- expedition
 
   async function expedition(ctx) {
@@ -106,8 +120,15 @@
     // No dungeon in progress: start one.
     const advanced = settings.dungeon.difficulty === 'advanced';
     let start = $(advanced ? SEL.dungeon.startAdvanced : SEL.dungeon.startNormal);
-    if (!start) start = $$(SEL.dungeon.startFallback)[advanced ? 1 : 0];
+    if (!start) {
+      // Normal + Advanced. A lone button is "Cancel dungeon": never click it.
+      const buttons = $$(SEL.dungeon.startFallback);
+      if (buttons.length >= 2) start = buttons[advanced ? 1 : 0];
+    }
     if (!start) throw new ActionError('No dungeon enemies and no start button found');
+    if (start.disabled || start.classList.contains(SEL.dungeon.disabledClass)) {
+      throw new ActionError(`The ${advanced ? 'advanced' : 'normal'} dungeon here is not unlocked`);
+    }
     await click(ctx, start, `start ${advanced ? 'advanced' : 'normal'} dungeon`);
     if (await expectNavigation(ctx)) return { navigated: true };
     throw new ActionError('Starting the dungeon did not reload the page');
@@ -147,10 +168,14 @@
     if (!opponents) throw new ActionError(`The ${type} opponent list was not found`);
     if (!opponents.length) throw new ActionError(`No ${type} opponents can be attacked`);
 
-    const allowed = brain.filterOpponents(opponents, settings[type], state.level);
+    const avoided = brain.avoidedNames(ctx.memory, type, ctx.now());
+    const allowed = brain.filterOpponents(opponents, settings[type], state.level, avoided);
     if (!allowed.length) throw new ActionError(`None of the ${opponents.length} ${type} opponents match your filters`);
     const order = brain.pickOpponents(allowed, settings[type].target);
     for (const opponent of order.slice(0, 3)) {
+      // Remembered so the combat report can be tied to this opponent.
+      if (ctx.memory.pending) Object.assign(ctx.memory.pending, { opponent: opponent.name, avoidHours: settings[type].avoidLostHours });
+      await ctx.persist();
       await click(ctx, opponent.attack, `attack ${type} opponent ${opponent.name || ''} (level ${opponent.level ?? '?'})`);
       const outcome = await waitFor(() => {
         if (ctx.isUnloading()) return 'navigated';
@@ -250,10 +275,16 @@
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
     // Firefox: content.fetch sends the request as the page would.
     const pageFetch = typeof content !== 'undefined' && content && content.fetch ? content.fetch.bind(content) : fetch;
+    // The game sends its CSRF token with every AJAX request.
+    const csrf = document.querySelector('meta[name="csrf-token"]');
     const response = await pageFetch(url.href, {
       method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        ...(csrf ? { 'X-CSRF-Token': csrf.getAttribute('content') } : {}),
+      },
       body: `a=${Date.now()}&sh=${encodeURIComponent(ctx.state.sh)}`,
     });
     return response.ok;
@@ -312,6 +343,35 @@
     return { retick: true };
   }
 
+  // --------------------------------------------------------------- training
+
+  async function training(ctx) {
+    const { state, settings, memory } = ctx;
+    if (state.page.mod !== 'training') return ctx.navigate(ctx.url(PAGES.training()), 'training ground');
+
+    const buttons = $$(SEL.training.buttons);
+    const costs = $$(SEL.training.costs);
+    if (!buttons.length || buttons.length !== costs.length) throw new ActionError('The training ground looks different than expected');
+    const options = buttons.map((button, i) => ({ button, stat: GBot.settings.TRAINING_STATS[i], cost: parseNumber(costs[i].textContent) }));
+    const pick = brain.pickTraining(options, settings.training.stats);
+    if (!pick) throw new ActionError('No trainable stat selected');
+
+    const spare = state.gold - settings.training.keepGold;
+    if (spare < pick.cost) {
+      memory.trainCost = pick.cost;
+      memory.nextTrainingCheck = ctx.now() + 30 * 60 * 1000;
+      memory.pending = null;
+      ctx.log('info', `Training: ${pick.stat} costs ${pick.cost.toLocaleString('en-US')} gold, waiting until there is enough`);
+      return { retick: true };
+    }
+    memory.trainCost = null;
+    if (memory.pending) memory.pending.stat = pick.stat;
+    await ctx.persist();
+    await click(ctx, pick.button, `train ${pick.stat} (${pick.cost.toLocaleString('en-US')} gold)`);
+    if (await expectNavigation(ctx)) return { navigated: true };
+    throw new ActionError('Training did not reload the page');
+  }
+
   // ------------------------------------------------------------------- work
 
   function readWorkRemaining() {
@@ -352,8 +412,15 @@
 
     const select = $(SEL.work.hours);
     let hours = settings.work.hours;
+    // The game fills the hours list only after a job is picked.
+    const values = select
+      ? (await waitFor(() => {
+          const list = Array.from(select.options).map((o) => parseInt(o.value, 10)).filter((v) => !Number.isNaN(v));
+          return list.length ? list : null;
+        }, 5000)) || []
+      : [];
+    if (select && !values.length) throw new ActionError('The work duration list stayed empty');
     if (select) {
-      const values = Array.from(select.options).map((o) => parseInt(o.value, 10)).filter((v) => !Number.isNaN(v));
       const fitting = values.filter((v) => v <= settings.work.hours);
       hours = fitting.length ? Math.max(...fitting) : Math.min(...values);
       select.value = String(hours);
@@ -373,7 +440,24 @@
     const icon = slot.querySelector(SEL.quests.icon);
     if (!icon) return null;
     const bg = icon.style.backgroundImage || getComputedStyle(icon).backgroundImage || '';
-    return Object.keys(SEL.questIcons).find((type) => bg.includes(SEL.questIcons[type])) || null;
+    return Object.keys(SEL.questIcons).find((type) => SEL.questIcons[type].some((part) => bg.includes(part))) || null;
+  }
+
+  // Name of the expedition location the bot fights at, or null when unknown.
+  function fightLocationName(state, settings, memory) {
+    let id = numericLocation(settings.expedition.location);
+    if (id === null && state.expedition.link) id = numericLocation(new URL(state.expedition.link).searchParams.get('loc'));
+    if (id === null) return null;
+    const list = state.locations.length ? state.locations : memory.gameInfo.locations || [];
+    const found = list.find((l) => numericLocation(l.id) === id);
+    return found ? found.name : null;
+  }
+
+  // "Accepted quests: 2 / 5" -> { count: 2, max: 5 }, or null.
+  function acceptedQuests() {
+    const el = $(SEL.quests.accepted);
+    const m = el && el.textContent.match(/(\d+)\s*\/\s*(\d+)/);
+    return m ? { count: Number(m[1]), max: Number(m[2]) } : null;
   }
 
   async function quests(ctx) {
@@ -397,11 +481,26 @@
       throw new ActionError('Collecting the quest reward did not reload the page');
     }
 
-    for (const slot of $$(SEL.quests.openSlots)) {
-      const type = questType(slot);
-      const accept = slot.querySelector(SEL.quests.acceptInSlot);
-      if (type && settings.quests.types[type] && accept && isVisible(accept)) {
-        await click(ctx, accept, `accept ${type} quest`);
+    const accepted = acceptedQuests();
+    if (!accepted || accepted.count < accepted.max) {
+      const offers = $$(SEL.quests.openSlots)
+        .map((slot) => {
+          const title = slot.querySelector(SEL.quests.title);
+          const reward = slot.querySelector(SEL.quests.reward);
+          return {
+            type: questType(slot),
+            title: title ? title.textContent.trim() : '',
+            reward: reward ? parseNumber(reward.textContent) : null,
+            accept: slot.querySelector(SEL.quests.acceptInSlot),
+          };
+        })
+        .filter((q) => q.accept && isVisible(q.accept));
+      const quest = brain.chooseQuest(offers, settings, {
+        location: fightLocationName(state, settings, memory),
+        dungeon: memory.gameInfo.dungeonName,
+      });
+      if (quest) {
+        await click(ctx, quest.accept, `accept ${quest.type} quest "${quest.title}"`);
         if (await expectNavigation(ctx)) return { navigated: true };
         throw new ActionError('Accepting the quest did not reload the page');
       }
@@ -417,11 +516,13 @@
 
   GBot.actions = {
     dialog,
+    nest,
     expedition,
     dungeon,
     arena,
     circus,
     heal,
+    training,
     work,
     quests,
     // Exposed for tests.

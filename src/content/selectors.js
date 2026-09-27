@@ -44,6 +44,10 @@
       loginBonusButton: '#blackoutDialogLoginBonus input, #blackoutDialogLoginBonus button',
       notification: '#blackoutDialognotification',
       notificationButton: '#blackoutDialognotification input, #blackoutDialognotification button',
+      // "Search <enemy>'s nest" after a win: Return to Safety, Quick Search,
+      // Thorough Search (in that order).
+      nest: '#blackoutDialog.loot-modal',
+      nestButtons: '#blackoutDialog.loot-modal .loot-button',
       // Confirmation popups that can appear after clicking an arena attack.
       confirm: '#blackoutDialogbod, #blackoutDialog',
       confirmButton: 'input[type="button"], input[type="submit"], button',
@@ -59,7 +63,20 @@
       enemies: ['#content [onclick*="startFight"]', '#content area[onclick]', '#content img[onclick]'],
       startNormal: '#content input[name="dif1"]',
       startAdvanced: '#content input[name="dif2"]',
-      startFallback: '#content .button1',
+      // Only used when the named buttons are missing. A running dungeon also
+      // has a ".button1" (Cancel dungeon), so the fallback needs two buttons.
+      startFallback: '#content form input.button1',
+      disabledClass: 'disabled',
+      // First heading of a running dungeon: "Viking Camp open until ...".
+      title: '#content h3',
+    },
+
+    // Combat report shown after every fight.
+    report: {
+      header: '#reportHeader',
+      winClass: 'reportWin',
+      rewardLines: '.report_reward p',
+      goldIcon: 'img[src*="res2."]',
     },
 
     arena: {
@@ -80,6 +97,12 @@
       avatar: '#avatar',
     },
 
+    // Training ground: one button and one cost per stat, in stat order.
+    training: {
+      buttons: '#training_box .training_button',
+      costs: '#training_box .training_costs',
+    },
+
     work: {
       job: (index) => `#job_row_${index}`,
       hours: '#workTime',
@@ -92,17 +115,23 @@
       openSlots: '#content .contentboard_slot_inactive',
       acceptInSlot: '.quest_slot_button_accept',
       icon: '.quest_slot_icon',
+      title: '.quest_slot_title',
+      reward: '.quest_slot_reward',
       cooldown: '#quest_header_cooldown [data-ticker-time-left]',
+      // "Accepted quests: 2 / 5"
+      accepted: '#quest_header_accepted',
     },
 
-    // Fragments of the quest icon image URLs, per quest type.
+    // Fragments of the quest icon image URLs, per quest type. Current servers
+    // name the files (icon_combat_inactive.jpg, ...); older ones used hashes.
     questIcons: {
-      combat: '8aada67d4c5601e009b9d2a88f478c',
-      arena: '00f1a594723515a77dcd6d66c918fb',
-      circus: '586768e942030301c484347698bc5e',
-      expedition: '4e41ab43222200aa024ee177efef8f',
-      dungeon: 'dc366909fdfe69897d583583f6e446',
-      items: '5a358e0a030d8551a5a65d284c8730',
+      combat: ['icon_combat', '8aada67d4c5601e009b9d2a88f478c'],
+      arena: ['icon_arena', '00f1a594723515a77dcd6d66c918fb'],
+      circus: ['icon_grouparena', '586768e942030301c484347698bc5e'],
+      expedition: ['icon_expedition', '4e41ab43222200aa024ee177efef8f'],
+      dungeon: ['icon_dungeon', 'dc366909fdfe69897d583583f6e446'],
+      items: ['icon_items', '5a358e0a030d8551a5a65d284c8730'],
+      work: ['icon_work'],
     },
   };
 
@@ -115,6 +144,7 @@
     arena: () => ({ mod: 'arena', submod: 'serverArena', aType: 2 }),
     circus: () => ({ mod: 'arena', submod: 'serverArena', aType: 3 }),
     work: () => ({ mod: 'work' }),
+    training: () => ({ mod: 'training' }),
     quests: () => ({ mod: 'quests' }),
   };
 

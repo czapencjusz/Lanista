@@ -33,6 +33,13 @@
       placeholder: 'One player name per line',
       help: 'Guild mates, friends, or players who always beat you.',
     },
+    {
+      path: `${type}.avoidLostHours`,
+      type: 'number',
+      label: 'Skip opponents who beat me for',
+      unit: 'h',
+      help: 'After a lost fight that player is skipped for this long. 0 turns it off.',
+    },
   ];
 
   const TABS = [
@@ -48,6 +55,18 @@
           type: 'order',
           label: 'Priority',
           help: 'Top of the list goes first. Healing always comes before fights, and stable work only starts when you are out of points.',
+        },
+        {
+          path: 'general.nestSearch',
+          type: 'select',
+          label: 'Enemy nest search',
+          options: [
+            { value: 'quick', label: 'Quick search' },
+            { value: 'thorough', label: 'Thorough search' },
+            { value: 'return', label: 'Return to safety' },
+            { value: 'off', label: 'Leave it to me' },
+          ],
+          help: 'After some wins the game offers to search the enemy nest for extra loot.',
         },
       ],
     },
@@ -138,6 +157,54 @@
       ],
     },
     {
+      id: 'training',
+      title: 'Training',
+      icon: 'training',
+      enable: 'training.enabled',
+      description: 'Spend spare gold on stat points. Gold you spend cannot be stolen by arena attackers.',
+      fields: [
+        { path: 'training.keepGold', type: 'number', label: 'Always keep', unit: 'gold', step: 10000, help: 'Training stops before gold drops below this.' },
+        {
+          path: 'training.stats',
+          type: 'checks',
+          label: 'Stats to train',
+          help: 'The cheapest selected stat is trained first, which keeps them balanced.',
+          items: [
+            { path: 'training.stats.strength', label: 'Strength' },
+            { path: 'training.stats.dexterity', label: 'Dexterity' },
+            { path: 'training.stats.agility', label: 'Agility' },
+            { path: 'training.stats.constitution', label: 'Constitution' },
+            { path: 'training.stats.charisma', label: 'Charisma' },
+            { path: 'training.stats.intelligence', label: 'Intelligence' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'repair',
+      title: 'Repair',
+      icon: 'repair',
+      enable: 'repair.enabled',
+      description: 'Repair worn gear at the workbench with materials from the Horreum. Rent is always paid in gold, never rubies.',
+      fields: [
+        { path: 'repair.belowPercent', type: 'number', label: 'Repair below', unit: '% conditioning', help: 'Items on your character are repaired once their conditioning drops below this.' },
+        {
+          path: 'repair.maxQuality',
+          type: 'select',
+          label: 'Best materials to use',
+          options: [
+            { value: -1, label: 'Standard (white) only' },
+            { value: 0, label: 'Up to Ceres (green)' },
+            { value: 1, label: 'Up to Neptun (blue)' },
+            { value: 2, label: 'Up to Mars (purple)' },
+            { value: 3, label: 'Up to Jupiter (orange)' },
+            { value: 4, label: 'Up to Olymp (red)' },
+          ],
+          help: 'The lowest quality in stock is used first. Fights wait while an item is off your character.',
+        },
+      ],
+    },
+    {
       id: 'quests',
       title: 'Quests',
       icon: 'quests',
@@ -155,7 +222,20 @@
             { path: 'quests.types.expedition', label: 'Expedition' },
             { path: 'quests.types.dungeon', label: 'Dungeon' },
             { path: 'quests.types.items', label: 'Items' },
+            { path: 'quests.types.work', label: 'Work' },
           ],
+        },
+        {
+          path: 'quests.matchLocation',
+          type: 'toggle',
+          label: 'Only quests for my location and dungeon',
+          help: 'Skip expedition and dungeon quests for places the bot does not fight at.',
+        },
+        {
+          path: 'quests.onlyActive',
+          type: 'toggle',
+          label: 'Only quests for activities that are on',
+          help: 'For example, skip arena quests while the arena is off.',
         },
       ],
     },

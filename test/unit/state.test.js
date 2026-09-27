@@ -85,3 +85,36 @@ test('reads expedition location names from the menu', () => {
     { id: '3', name: 'Misty Mountains' },
   ]);
 });
+
+test('reads combat reports and the running dungeon name', () => {
+  // Markup as on s60-en (2026-09); player names may contain digits.
+  const report = (cls) => html.page({
+    content: `<div id="reportHeader" class="${cls}">Winner: durky45</div>
+      <div class="report_reward"><table><tr><td>
+        <p><a>durky45</a> has raided: 1.513<img src="//x/img/res2.gif" title="Gold"></p>
+        <p>durky45 received 7 experience point(s)</p>
+        <p>durky45 has received 152 fame.</p>
+      </td></tr></table></div>`,
+  });
+  const win = read(report('reportWin'), `${BASE}?mod=reports&submod=showCombatReport&sh=abc`);
+  assert.deepEqual(win.report, { win: true, gold: 1513, xp: 7, renown: 152 });
+  assert.equal(read(report('reportLose'), `${BASE}?mod=reports&sh=abc`).report.win, false);
+
+  // Arena win: the raided amount, not the winner's reward after it.
+  const arena = read(
+    html.page({
+      content: `<div id="reportHeader" class="reportWin">Winner: Virgl</div><div class="report_reward">
+        <p><a>Virgl</a> has raided: 780<img src="//x/res2.gif"><br>From winner\`s reward: 252<img src="//x/res2.gif"></p>
+        <p><a>Virgl</a> received 3 experience point(s)</p><p><a>Virgl</a> has received 53 honor</p></div>`,
+    }),
+    `${BASE}?mod=reports&sh=abc`
+  );
+  assert.deepEqual(arena.report, { win: true, gold: 780, xp: 3, renown: 53 });
+  assert.equal(read(report('reportWin')).report, null, 'only on report pages');
+
+  const dungeon = read(
+    html.page({ content: '<h3>Viking Camp<span>open until 30.09.2026</span></h3><img onclick="startFight(1)">' }),
+    `${BASE}?mod=dungeon&loc=2&sh=abc`
+  );
+  assert.equal(dungeon.dungeonName, 'Viking Camp');
+});

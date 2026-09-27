@@ -25,6 +25,15 @@
       workSubmittedHours: 0,
       noFoodUntil: 0,
       nextQuestCheck: 0,
+      // Cost of the next stat point to train (null = look it up) and when to
+      // look again when nothing was affordable.
+      trainCost: null,
+      nextTrainingCheck: 0,
+      // Workbench repair in progress (see workbench.js), when to look at the
+      // gear again, and items to leave alone for a while: id -> until.
+      repair: null,
+      nextRepairCheck: 0,
+      repairSkip: {},
       questSteps: { since: 0, count: 0 },
       breakUntil: 0,
       nextBreakAt: 0,
@@ -39,9 +48,18 @@
         heal: 0,
         work: 0,
         quests: 0,
+        nest: 0,
+        training: 0,
+        repairs: 0,
+        goldSpent: 0,
         goldStart: null,
         goldNow: null,
+        // From combat reports: per fight type { won, lost }, and totals.
+        results: {},
+        loot: { gold: 0, xp: 0, honour: 0, fame: 0 },
       },
+      // Arena / circus opponents that beat us: type -> { name: until }.
+      avoid: { arena: {}, circus: {} },
       log: [],
     };
   }
@@ -56,7 +74,14 @@
       blockedUntil: { ...(memory.blockedUntil || {}) },
       questSteps: { ...base.questSteps, ...(memory.questSteps || {}) },
       gameInfo: { ...base.gameInfo, ...(memory.gameInfo || {}) },
-      stats: { ...base.stats, ...(memory.stats || {}) },
+      stats: {
+        ...base.stats,
+        ...(memory.stats || {}),
+        results: { ...((memory.stats && memory.stats.results) || {}) },
+        loot: { ...base.stats.loot, ...((memory.stats && memory.stats.loot) || {}) },
+      },
+      avoid: { arena: { ...((memory.avoid && memory.avoid.arena) || {}) }, circus: { ...((memory.avoid && memory.avoid.circus) || {}) } },
+      repairSkip: { ...(memory.repairSkip || {}) },
       log: Array.isArray(memory.log) ? memory.log : [],
     };
   }
@@ -142,6 +167,10 @@
       if (state.dialogs.loginBonus) return { type: 'dialog', dialog: 'loginBonus', reason: 'Collect daily login bonus' };
       if (state.dialogs.notification) return { type: 'dialog', dialog: 'notification', reason: 'Close notification' };
     }
+    const nest = settings.general.nestSearch;
+    if (state.dialogs.nest && nest !== 'off' && !isBlocked(memory, 'nest', now)) {
+      return { type: 'nest', mode: nest, reason: nest === 'return' ? 'Leave the enemy nest' : `Search the enemy nest (${nest})` };
+    }
 
     if (memory.workUntil > now) {
       return { type: 'wait', until: memory.workUntil, reason: 'Working in the stable', next: { label: 'Work ends', at: memory.workUntil } };
@@ -157,6 +186,21 @@
       if (!isBlocked(memory, 'heal', now) && (memory.noFoodUntil || 0) <= now) {
         return { type: 'heal', reason: `HP ${hp.percent}% is below ${settings.heal.eatBelowPercent}%` };
       }
+    }
+
+    if (settings.repair.enabled || memory.repair) {
+      const r = memory.repair;
+      // Gear is off the character: hold every fight until it is back on.
+      if (r && r.until > now) {
+        return { type: 'wait', until: r.until, reason: `Repairing ${r.name}`, next: { label: 'Repair done', at: r.until } };
+      }
+      if (r || (memory.nextRepairCheck || 0) <= now) {
+        return { type: 'repair', reason: r ? `Repair ${r.name}: ${r.stage}` : 'Check gear condition' };
+      }
+    }
+
+    if (wantsTraining(state, settings, memory, now)) {
+      return { type: 'training', reason: 'Train a stat with spare gold' };
     }
 
     for (const type of settings.general.order) {
@@ -193,6 +237,73 @@
     // A few seconds of slack after a cooldown ends, like a human would take.
     const until = Math.max(now + MIN_WAIT_MS, next.at + 2000 + Math.floor(Math.random() * 8000));
     return { type: 'wait', until, reason: 'Waiting', next };
+  }
+
+  function wantsTraining(state, settings, memory, now) {
+    const cfg = settings.training;
+    if (!cfg.enabled || isBlocked(memory, 'training', now) || state.gold === null || state.gold === undefined) return false;
+    if (!Object.values(cfg.stats).some(Boolean)) return false;
+    if (memory.trainCost !== null && memory.trainCost !== undefined) return state.gold - cfg.keepGold >= memory.trainCost;
+    return (memory.nextTrainingCheck || 0) <= now;
+  }
+
+  // ------------------------------------------------------------ repair
+
+  // Conditioning from an item tooltip's lines. Item tooltips list
+  // "Durability a/b (p%)" and then "Conditioning a/b (p%)"; the words are
+  // localised, so the second "a/b (p%)" line is taken.
+  function conditionOf(lines) {
+    const found = [];
+    for (const line of lines) {
+      const m = String(line).match(/(\d[\d.,]*)\s*\/\s*(\d[\d.,]*)\s*\((\d+)\s*%\)/);
+      if (m) found.push({ value: parseInt(m[1].replace(/[.,]/g, ''), 10), max: parseInt(m[2].replace(/[.,]/g, ''), 10), percent: Number(m[3]) });
+    }
+    return found.length >= 2 ? found[1] : null;
+  }
+
+  // The worn item most in need of repair: [{ id, condition, ... }] -> item.
+  function pickRepair(items, belowPercent, skip, now) {
+    const due = items.filter((i) => i.condition && i.condition.percent < belowPercent && !((skip || {})[i.id] > now));
+    return due.length ? due.reduce((a, b) => (b.condition.percent < a.condition.percent ? b : a)) : null;
+  }
+
+  // First free w x h spot in the bags: [{ bag, cells: [{ x, y, w, h }] }]
+  // (8 x 5 grid, 1-based) -> { bag, x, y } or null.
+  function freeSpot(bags, w, h, cols = 8, rows = 5) {
+    for (const { bag, cells } of bags) {
+      const used = (x, y) => cells.some((c) => x >= c.x && x < c.x + c.w && y >= c.y && y < c.y + c.h);
+      for (let y = 1; y + h - 1 <= rows; y++) {
+        for (let x = 1; x + w - 1 <= cols; x++) {
+          let ok = true;
+          for (let dy = 0; dy < h && ok; dy++) for (let dx = 0; dx < w && ok; dx++) if (used(x + dx, y + dy)) ok = false;
+          if (ok) return { bag, x, y };
+        }
+      }
+    }
+    return null;
+  }
+
+  // Can the Horreum cover a repair? needed: { key: { amount } } with keys like
+  // 18024 (class 18, type 24); stock: { type: { quality: amount } }.
+  // -> 'full' | 'partial' | 'none', counting qualities up to maxQuality.
+  function materialsAvailable(needed, stock, maxQuality) {
+    let full = true;
+    let any = false;
+    for (const [key, need] of Object.entries(needed || {})) {
+      if (!need || !need.amount) continue;
+      const byQuality = (stock || {})[String(Number(key) % 1000)] || {};
+      let have = 0;
+      for (const [q, n] of Object.entries(byQuality)) if (Number(q) <= maxQuality) have += Number(n) || 0;
+      if (have > 0) any = true;
+      if (have < need.amount) full = false;
+    }
+    return full && any ? 'full' : any ? 'partial' : 'none';
+  }
+
+  // The cheapest selected stat from [{ stat, cost }], or null.
+  function pickTraining(options, stats) {
+    const allowed = options.filter((o) => stats[o.stat] && o.cost !== null);
+    return allowed.length ? allowed.reduce((a, b) => (b.cost < a.cost ? b : a)) : null;
   }
 
   // Work when every enabled point-based activity has run out of points.
@@ -261,6 +372,7 @@
       at: now,
       attempts,
       hpBefore: state && state.hp ? state.hp.value : null,
+      goldBefore: state ? state.gold : null,
       firstAt: sameRun ? prev.firstAt : now,
     };
     return { ok: true, attempts };
@@ -279,9 +391,17 @@
     let message = '';
     const type = pending.type;
 
+    const events = [];
     if (FIGHTS.includes(type)) {
       const cd = state[type];
-      if (cd && cd.available && !cd.ready) {
+      if (state.report) {
+        success = true;
+        message = recordFight(memory, type, state.report, pending.opponent, now);
+        if (!state.report.win && pending.opponent && memory.avoid[type] && pending.avoidHours > 0) {
+          memory.avoid[type][pending.opponent.toLowerCase()] = now + pending.avoidHours * 3600 * 1000;
+          events.push({ level: 'info', message: `${LABELS[type]}: avoiding ${pending.opponent} for ${pending.avoidHours}h after a loss` });
+        }
+      } else if (cd && cd.available && !cd.ready) {
         success = true;
         message = `${type} attack done`;
       }
@@ -297,6 +417,14 @@
         success = true;
         message = 'Started working';
       }
+    } else if (type === 'training') {
+      if (state.gold !== null && pending.goldBefore !== null && pending.goldBefore !== undefined && state.gold < pending.goldBefore) {
+        success = true;
+        memory.stats.goldSpent += pending.goldBefore - state.gold;
+        message = `Trained ${pending.stat || 'a stat'} for ${fmt(pending.goldBefore - state.gold)} gold`;
+      }
+    } else if (type === 'nest') {
+      if (!state.dialogs.nest) success = true;
     } else if (type === 'dialog') {
       if (!state.dialogs.loginBonus && !state.dialogs.notification) success = true;
     }
@@ -305,7 +433,38 @@
     memory.pending = null;
     delete memory.blockedUntil[type];
     if (type in memory.stats) memory.stats[type] += 1;
-    return message ? [{ level: 'info', message }] : [];
+    return message ? [{ level: 'info', message }, ...events] : events;
+  }
+
+  const fmt = (n) => Number(n).toLocaleString('en-US');
+
+  // Adds a combat report to the statistics; returns the log message.
+  function recordFight(memory, type, report, opponent, now) {
+    const results = memory.stats.results;
+    const r = (results[type] = { won: 0, lost: 0, ...(results[type] || {}) });
+    if (report.win) r.won += 1;
+    else r.lost += 1;
+    const loot = memory.stats.loot;
+    loot.gold += report.gold || 0;
+    loot.xp += report.xp || 0;
+    // Expeditions and the arena give honour; dungeons and the circus give
+    // fame (as the reports on s60-en say).
+    const renownKind = type === 'dungeon' || type === 'circus' ? 'fame' : 'honour';
+    loot[renownKind] = (loot[renownKind] || 0) + (report.renown || 0);
+    memory.lastFight = { type, at: now, ...report };
+    const gains = [];
+    if (report.gold) gains.push(`+${fmt(report.gold)} gold`);
+    if (report.xp) gains.push(`+${fmt(report.xp)} XP`);
+    if (report.renown) gains.push(`+${fmt(report.renown)} ${renownKind}`);
+    const vs = opponent ? ` vs ${opponent}` : '';
+    return `${LABELS[type]}${vs}: ${report.win ? 'won' : 'lost'}${gains.length ? `, ${gains.join(', ')}` : ''}`;
+  }
+
+  // Drops expired entries from the avoid lists; returns the active names of `type`.
+  function avoidedNames(memory, type, now) {
+    const list = (memory.avoid && memory.avoid[type]) || {};
+    for (const [name, until] of Object.entries(list)) if (until <= now) delete list[name];
+    return Object.keys(list);
   }
 
   // Quests are a sequence of clicks (finish, accept, ...). Cap the number of
@@ -344,8 +503,8 @@
 
   // Removes opponents the user does not want to fight: ignored names and,
   // optionally, levels outside [myLevel - maxBelow, myLevel + maxAbove].
-  function filterOpponents(opponents, cfg, myLevel) {
-    const ignored = parseNameList(cfg.ignorePlayers);
+  function filterOpponents(opponents, cfg, myLevel, avoided = []) {
+    const ignored = parseNameList(cfg.ignorePlayers).concat(avoided);
     return opponents.filter((o) => {
       if (o.name && ignored.includes(o.name.trim().toLowerCase())) return false;
       if (!cfg.limitLevels || myLevel === null || myLevel === undefined || o.level === null || o.level === undefined) return true;
@@ -364,8 +523,49 @@
     return known.slice().sort((a, b) => a.heal - b.heal)[0];
   }
 
+  // Picks the quest to accept from the open offers ({ type, title, reward }),
+  // or null. Expedition quests are titled "<Location>: ..."; with
+  // matchLocation they are only taken for `myLocation` (when it is known).
+  // The best-paying acceptable quest wins.
+  //
+  // With onlyActive, quests for activities the bot does not do are skipped.
+  // Dungeon quests are titled "<Dungeon>: ..." and matched like locations.
+  function chooseQuest(offers, settings, places = {}) {
+    const q = settings.quests;
+    const norm = (s) => (s ? String(s).trim().toLowerCase() : null);
+    const where = { expedition: norm(places.location), dungeon: norm(places.dungeon) };
+    const doing = {
+      expedition: settings.expedition.enabled,
+      dungeon: settings.dungeon.enabled,
+      arena: settings.arena.enabled,
+      circus: settings.circus.enabled,
+      work: settings.work.enabled,
+      items: settings.expedition.enabled || settings.dungeon.enabled,
+      combat: FIGHTS.some((t) => settings[t].enabled),
+    };
+    const ok = offers.filter((quest) => {
+      if (!quest.type || !q.types[quest.type]) return false;
+      if (q.onlyActive && doing[quest.type] === false) return false;
+      const here = where[quest.type];
+      if (!q.matchLocation || !here) return true;
+      const m = String(quest.title || '').match(/^([^:]+):/);
+      return !m || m[1].trim().toLowerCase() === here;
+    });
+    if (!ok.length) return null;
+    return ok.slice().sort((a, b) => (b.reward || 0) - (a.reward || 0))[0];
+  }
+
   GBot.brain = {
     FIGHTS,
+    chooseQuest,
+    pickTraining,
+    wantsTraining,
+    conditionOf,
+    pickRepair,
+    freeSpot,
+    materialsAvailable,
+    recordFight,
+    avoidedNames,
     LABELS,
     createMemory,
     normalizeMemory,

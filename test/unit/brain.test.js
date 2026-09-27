@@ -307,3 +307,91 @@ test('wait decisions name what they wait for', () => {
   assert.equal(d.next.label, 'Expedition');
   assert.ok(d.next.at > NOW);
 });
+
+test('chooseQuest picks the best-paying quest for my places and activities', () => {
+  const s = makeSettings();
+  // Offers as seen on s60-en.
+  const offers = [
+    { type: 'work', title: 'Work 2 hours', reward: 541 },
+    { type: 'combat', title: 'Defeat 5 opponents at expeditions, in dungeons or in the arenas', reward: 1801 },
+    { type: 'expedition', title: 'Cursed Village: Defeat 5 x Ancient', reward: 4176 },
+    { type: 'expedition', title: 'The green forest: Defeat 4 opponents of your choice', reward: 4669 },
+    { type: 'arena', title: 'Arena: Win 3 upgrade battles', reward: 2683 },
+    { type: 'dungeon', title: 'Viking Camp: Defeat the boss in this dungeon', reward: 1081 },
+  ];
+  const pick = (settings, places) => brain.chooseQuest(offers, settings, places);
+  assert.equal(pick(s, { location: 'Cursed Village' }).reward, 4176);
+  assert.equal(pick(s, { location: 'Death Hill' }).type, 'combat', 'arena is off, other locations skipped');
+  assert.equal(pick(s, {}).reward, 4669, 'unknown location: no filtering');
+  assert.equal(pick({ ...s, quests: { ...s.quests, matchLocation: false } }, { location: 'Death Hill' }).reward, 4669);
+  assert.equal(pick({ ...s, arena: { ...s.arena, enabled: true } }, { location: 'Death Hill' }).type, 'arena');
+  assert.equal(pick({ ...s, quests: { ...s.quests, onlyActive: false } }, { location: 'Death Hill' }).type, 'arena');
+  const dungeonOnly = offers.filter((o) => o.type === 'dungeon');
+  assert.equal(brain.chooseQuest(dungeonOnly, s, { dungeon: 'Viking Camp' }).reward, 1081);
+  assert.equal(brain.chooseQuest(dungeonOnly, s, { dungeon: 'Bandit Camp' }), null);
+  const work = offers.slice(0, 1);
+  assert.equal(brain.chooseQuest(work, s, {}), null, 'work quests are off by default');
+  const withWork = { ...s, work: { ...s.work, enabled: true }, quests: { ...s.quests, types: { ...s.quests.types, work: true } } };
+  assert.equal(brain.chooseQuest(work, withWork, {}).type, 'work');
+});
+
+test('combat reports are counted and losing opponents avoided', () => {
+  const m = memory();
+  m.pending = { type: 'arena', at: NOW, attempts: 1, opponent: 'Kaczuszek', avoidHours: 24 };
+  const events = brain.resolvePending(makeState({ report: { win: false, gold: 0, xp: 2, renown: 51 } }), m, NOW + 1000);
+  assert.match(events[0].message, /Arena vs Kaczuszek: lost/);
+  assert.deepEqual(m.stats.results.arena, { won: 0, lost: 1 });
+  assert.equal(m.stats.arena, 1);
+  assert.deepEqual(brain.avoidedNames(m, 'arena', NOW + 2000), ['kaczuszek']);
+  assert.deepEqual(brain.avoidedNames(m, 'arena', NOW + 25 * 3600 * 1000), [], 'expires');
+
+  m.pending = { type: 'dungeon', at: NOW, attempts: 1 };
+  const won = brain.resolvePending(makeState({ report: { win: true, gold: 1513, xp: 7, renown: 152 } }), m, NOW + 1000);
+  assert.equal(won[0].message, 'Dungeon: won, +1,513 gold, +7 XP, +152 fame');
+  assert.deepEqual(m.stats.loot, { gold: 1513, xp: 9, honour: 51, fame: 152 }, 'arena renown is honour, dungeon renown is fame');
+
+  const opponents = [{ name: 'Kaczuszek', level: 82 }, { name: 'Orbyte', level: 87 }];
+  assert.deepEqual(brain.filterOpponents(opponents, makeSettings().arena, 64, ['kaczuszek']).map((o) => o.name), ['Orbyte']);
+});
+
+test('enemy nest dialog is handled per the setting', () => {
+  const st = makeState({ dialogs: { loginBonus: false, notification: false, nest: true } });
+  const s = makeSettings();
+  assert.deepEqual([brain.decide(st, s, memory(), NOW).type, brain.decide(st, s, memory(), NOW).mode], ['nest', 'quick']);
+  s.general = { ...s.general, nestSearch: 'off' };
+  assert.notEqual(brain.decide(st, s, memory(), NOW).type, 'nest');
+  const m = memory();
+  m.pending = { type: 'nest', at: NOW, attempts: 1 };
+  brain.resolvePending(makeState(), m, NOW + 1000);
+  assert.equal(m.stats.nest, 1);
+});
+
+test('training picks the cheapest selected stat and respects the gold reserve', () => {
+  // Costs as seen on s60-en.
+  const options = [
+    { stat: 'strength', cost: 720346 },
+    { stat: 'dexterity', cost: 853956 },
+    { stat: 'agility', cost: 279549 },
+    { stat: 'constitution', cost: 155283 },
+    { stat: 'charisma', cost: 423859 },
+    { stat: 'intelligence', cost: 445664 },
+  ];
+  const s = makeSettings({ training: { enabled: true } });
+  assert.equal(brain.pickTraining(options, s.training.stats).stat, 'constitution');
+  assert.equal(brain.pickTraining(options, { ...s.training.stats, constitution: false }).stat, 'agility');
+  assert.equal(brain.pickTraining(options, {}), null);
+
+  const m = memory();
+  assert.equal(brain.decide(makeState({ gold: 1620290 }), s, m, NOW).type, 'training', 'unknown cost: go and look');
+  m.trainCost = 155283;
+  assert.equal(brain.decide(makeState({ gold: 200000 }), s, m, NOW).type, 'wait', 'would dip below the 100k reserve');
+  assert.equal(brain.decide(makeState({ gold: 255283 }), s, m, NOW).type, 'training');
+  assert.notEqual(brain.decide(makeState({ gold: 9e6 }), makeSettings(), m, NOW).type, 'training', 'off by default');
+
+  m.trainCost = null;
+  m.pending = { type: 'training', at: NOW, attempts: 1, goldBefore: 1620290, stat: 'constitution' };
+  const ev = brain.resolvePending(makeState({ gold: 1465007 }), m, NOW + 1000);
+  assert.equal(ev[0].message, 'Trained constitution for 155,283 gold');
+  assert.equal(m.stats.training, 1);
+  assert.equal(m.stats.goldSpent, 155283);
+});

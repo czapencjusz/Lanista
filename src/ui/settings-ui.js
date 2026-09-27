@@ -363,10 +363,22 @@
           ['arena', 'Arena fights'],
           ['circus', 'Circus fights'],
           ['heal', 'Meals eaten'],
+          ['nest', 'Nests searched'],
+          ['training', 'Stats trained'],
+          ['repairs', 'Items repaired'],
           ['quests', 'Quests finished'],
           ['work', 'Work shifts'],
         ]) {
-          cards.appendChild(card(label, formatNumber(stats[key] || 0), rate(stats[key] || 0)));
+          const r = stats.results && stats.results[key];
+          const record = r && r.won + r.lost ? ` · ${r.won}W ${r.lost}L (${Math.round((100 * r.won) / (r.won + r.lost))}%)` : '';
+          cards.appendChild(card(label, formatNumber(stats[key] || 0), rate(stats[key] || 0) + record));
+        }
+        const loot = stats.loot;
+        if (loot && (loot.gold || loot.xp || loot.honour || loot.fame)) {
+          cards.appendChild(card('Gold looted', formatNumber(loot.gold), rate(loot.gold)));
+          cards.appendChild(card('Experience', formatNumber(loot.xp), rate(loot.xp)));
+          cards.appendChild(card('Honour', formatNumber(loot.honour || 0), rate(loot.honour || 0)));
+          cards.appendChild(card('Fame', formatNumber(loot.fame || 0), rate(loot.fame || 0)));
         }
         if (stats.goldStart !== null && stats.goldNow !== null) {
           const diff = stats.goldNow - stats.goldStart;

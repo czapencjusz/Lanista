@@ -95,6 +95,7 @@
     return {
       loginBonus: visible(SEL.dialogs.loginBonus),
       notification: visible(SEL.dialogs.notification),
+      nest: visible(SEL.dialogs.nest),
     };
   }
 
@@ -116,6 +117,46 @@
     return out;
   }
 
+  // Result of the combat report on this page, or null when there is none:
+  // { win, gold, xp, renown }. The gold line is found by its icon; experience
+  // and renown are the next two numeric lines (the text is localised). Renown
+  // is honour after expedition and arena fights, fame after dungeon and circus.
+  function readCombatReport(doc) {
+    const header = doc.querySelector(SEL.report.header);
+    if (!header) return null;
+    const out = { win: header.classList.contains(SEL.report.winClass), gold: 0, xp: 0, renown: 0 };
+    const rest = [];
+    // Last number in a piece of text: player names may contain digits too.
+    const lastNumber = (text) => {
+      const numbers = String(text || '').match(/\d[\d.,]*/g);
+      return numbers ? parseNumber(numbers[numbers.length - 1]) : null;
+    };
+    for (const line of doc.querySelectorAll(SEL.report.rewardLines)) {
+      const icon = line.querySelector(SEL.report.goldIcon);
+      if (icon) {
+        // "has raided: 780 <gold>" can be followed by "From winner's reward:
+        // 252 <gold>"; the raided amount is the text right before the first icon.
+        const before = icon.previousSibling;
+        const value = lastNumber(before && before.nodeType === 3 ? before.textContent : line.textContent);
+        if (value !== null) out.gold = value;
+        continue;
+      }
+      const value = lastNumber(line.textContent);
+      if (value !== null) rest.push(value);
+    }
+    if (rest.length > 0) out.xp = rest[0];
+    if (rest.length > 1) out.renown = rest[1];
+    return out;
+  }
+
+  // Name of the dungeon running on this dungeon page, or null.
+  function readDungeonName(doc) {
+    const title = doc.querySelector(SEL.dungeon.title);
+    if (!title || !doc.querySelector(SEL.dungeon.enemies.join(','))) return null;
+    const first = Array.from(title.childNodes).find((n) => n.nodeType === 3 && n.textContent.trim());
+    return first ? first.textContent.trim() : null;
+  }
+
   function readState(doc, loc, now = Date.now()) {
     const inGame = !!doc.querySelector(SEL.gameHeader) || !!doc.querySelector(SEL.hpBar);
     const expedition = {
@@ -126,12 +167,15 @@
       ...readCooldown(doc, loc, SEL.cooldowns.dungeon),
       ...readPoints(doc, SEL.points.dungeon),
     };
+    const page = readPage(doc, loc);
     return {
       now,
       inGame,
       host: loc.host,
       sh: readSessionHash(doc, loc),
-      page: readPage(doc, loc),
+      page,
+      report: page.mod === 'reports' ? readCombatReport(doc) : null,
+      dungeonName: page.mod === 'dungeon' ? readDungeonName(doc) : null,
       hp: readHp(doc),
       level: parseNumber(text(doc, SEL.level)),
       gold: parseNumber(text(doc, SEL.gold)),
@@ -144,7 +188,7 @@
     };
   }
 
-  GBot.state = { readState, readHp, readCooldown, readPoints, readSessionHash, readLocations };
+  GBot.state = { readState, readHp, readCooldown, readPoints, readSessionHash, readLocations, readCombatReport, readDungeonName };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = GBot.state;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

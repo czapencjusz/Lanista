@@ -229,12 +229,14 @@ class MockGame {
     const finished = this.state.questFinished
       ? `<div class="contentboard_slot contentboard_slot_active"><a class="quest_slot_button_finish" href="index.php?mod=quests&submod=finishQuest&sh=${SH}">Finish</a></div>`
       : '';
-    const offers = { expedition: '4e41ab43222200aa024ee177efef8f', items: '5a358e0a030d8551a5a65d284c8730' };
+    // Same icon file names as the live game (s60-en, 2026-09).
+    const offers = { expedition: 'expedition_inactive', items: 'items_inactive' };
     const open = Object.entries(offers)
       .filter(([type]) => !this.state.acceptedQuests.includes(type))
       .map(
         ([type, icon]) => `<div class="contentboard_slot contentboard_slot_inactive">
           <div class="quest_slot_icon" style="background-image:url('img/ui/quest/icon_${icon}.jpg')"></div>
+          <div class="quest_slot_title">Defeat 3 opponents</div>
           <a class="quest_slot_button_accept" href="index.php?mod=quests&submod=startQuest&type=${type}&sh=${SH}">Accept</a>
         </div>`
       )

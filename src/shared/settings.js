@@ -11,7 +11,10 @@
   // Activities whose order the user can change ("priority").
   const ORDERABLE = ['quests', 'expedition', 'dungeon', 'arena', 'circus'];
 
-  const QUEST_TYPES = ['combat', 'arena', 'circus', 'expedition', 'dungeon', 'items'];
+  // Training ground order (skillToTrain = index + 1).
+  const TRAINING_STATS = ['strength', 'dexterity', 'agility', 'constitution', 'charisma', 'intelligence'];
+
+  const QUEST_TYPES = ['combat', 'arena', 'circus', 'expedition', 'dungeon', 'items', 'work'];
 
   const opponentDefaults = () => ({
     enabled: false,
@@ -22,6 +25,8 @@
     maxBelow: 20,
     // Player names never to attack (one per line or comma separated).
     ignorePlayers: '',
+    // Skip an opponent for this many hours after losing to them (0 = off).
+    avoidLostHours: 24,
   });
 
   const DEFAULT_SETTINGS = {
@@ -31,6 +36,9 @@
     general: {
       // Order in which ready activities are done when several are ready.
       order: ORDERABLE.slice(),
+      // After some wins the game offers to search the enemy's nest:
+      // 'off' (leave the dialog alone) | 'return' | 'quick' | 'thorough'.
+      nestSearch: 'quick',
     },
 
     expedition: {
@@ -68,6 +76,33 @@
       hours: 1,
     },
 
+    training: {
+      // Spend gold on character stats at the training ground.
+      enabled: false,
+      // Never let gold drop below this.
+      keepGold: 100000,
+      // Stats that may be trained; the cheapest of them goes first, which
+      // keeps them balanced because every point makes a stat dearer.
+      stats: {
+        strength: true,
+        dexterity: true,
+        agility: true,
+        constitution: true,
+        charisma: false,
+        intelligence: false,
+      },
+    },
+
+    repair: {
+      // Repair worn gear at the workbench.
+      enabled: false,
+      // Repair an item once its conditioning drops below this.
+      belowPercent: 50,
+      // Best material quality to use: -1 Standard, 0 Ceres (green),
+      // 1 Neptun (blue), 2 Mars, 3 Jupiter, 4 Olymp. Lower ones go first.
+      maxQuality: 1,
+    },
+
     quests: {
       enabled: false,
       types: {
@@ -77,7 +112,14 @@
         expedition: true,
         dungeon: true,
         items: false,
+        work: false,
       },
+      // Skip expedition quests for a location other than the one the bot
+      // fights at ("The green forest: ..." while farming Death Hill).
+      matchLocation: true,
+      // Skip quests for activities the bot is not doing (arena quests while
+      // the arena is off, ...).
+      onlyActive: true,
     },
 
     schedule: {
@@ -125,6 +167,7 @@
   // Validation rules per setting path. Used by sanitizeSettings() and by the
   // settings UI for input limits.
   const CONSTRAINTS = {
+    'general.nestSearch': { enum: ['off', 'return', 'quick', 'thorough'] },
     'expedition.location': { pattern: LOCATION },
     'expedition.enemy': { int: true, min: 1, max: 4 },
     'expedition.keepPoints': { int: true, min: 0, max: 500 },
@@ -135,6 +178,9 @@
     'heal.minHpPercent': { int: true, min: 0, max: 100 },
     'work.job': { int: true, min: 0, max: 19 },
     'work.hours': { int: true, min: 1, max: 24 },
+    'training.keepGold': { int: true, min: 0, max: 2000000000 },
+    'repair.belowPercent': { int: true, min: 1, max: 99 },
+    'repair.maxQuality': { int: true, min: -1, max: 4 },
     'schedule.start': { pattern: TIME },
     'schedule.end': { pattern: TIME },
     'schedule.breakEvery': { int: true, min: 10, max: 1440 },
@@ -151,6 +197,7 @@
     CONSTRAINTS[`${type}.maxAbove`] = { int: true, min: 0, max: 500 };
     CONSTRAINTS[`${type}.maxBelow`] = { int: true, min: 0, max: 500 };
     CONSTRAINTS[`${type}.ignorePlayers`] = { maxLength: 4000 };
+    CONSTRAINTS[`${type}.avoidLostHours`] = { int: true, min: 0, max: 720 };
   }
 
   const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -260,6 +307,7 @@
     CONSTRAINTS,
     ORDERABLE,
     QUEST_TYPES,
+    TRAINING_STATS,
     STORAGE_KEY,
     getPath,
     setPath,

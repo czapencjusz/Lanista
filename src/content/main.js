@@ -96,8 +96,8 @@
     return buildUrl(location.href, state && state.sh, PAGES.overview());
   }
 
-  async function navigate(url, what) {
-    log('info', `Going to ${what}`);
+  async function navigate(url, what, level = 'info') {
+    log(level, `Going to ${what}`);
     await persist();
     location.href = url;
     return { navigated: true };
@@ -115,6 +115,7 @@
     if (!state.inGame) return;
     if (state.locations.length) memory.gameInfo.locations = state.locations;
     if (state.level !== null) memory.gameInfo.level = state.level;
+    if (state.dungeonName) memory.gameInfo.dungeonName = state.dungeonName;
     memory.gameInfo.updatedAt = now;
     if (state.gold !== null) {
       if (memory.stats.goldStart === null) memory.stats.goldStart = state.gold;
@@ -176,11 +177,12 @@
     if (decision.type === 'wait') {
       await send({ type: 'heartbeat', host: location.host, nextAt: decision.until, enabled: true });
       // Reload the overview on wake-up so the header values are fresh.
-      schedule(() => navigate(overviewUrl(state), 'overview (refresh)'), decision.until - now);
+      schedule(() => navigate(overviewUrl(state), 'overview (refresh)', 'debug'), decision.until - now);
       return;
     }
 
-    if (decision.type !== 'quests') {
+    // Quests and repairs are multi-step and keep their own failure counts.
+    if (decision.type !== 'quests' && decision.type !== 'repair') {
       const attempt = brain.beginAttempt(memory, decision.type, now, settings, state);
       if (!attempt.ok) {
         log('warn', attempt.message);
@@ -190,7 +192,9 @@
         return;
       }
     }
-    log('info', decision.reason);
+    // Multi-step actions (navigate, then act) re-decide on every page; log
+    // the reason once per run.
+    if (!memory.pending || memory.pending.attempts === 1) log('info', decision.reason);
     await persist();
     await send({ type: 'heartbeat', host: location.host, nextAt: now + 60000, enabled: true });
 
@@ -202,6 +206,7 @@
       notify,
       url: (params) => buildUrl(location.href, state.sh, params),
       navigate,
+      persist,
       humanDelay,
       isUnloading: () => unloading,
       now: () => Date.now(),
@@ -221,7 +226,7 @@
     await persist();
     panel.update({ memory, status: statusFor(state) });
     if (!result || result.navigated || unloading) return;
-    if (result.refresh) schedule(() => navigate(overviewUrl(state), 'overview (refresh)'), 1500);
+    if (result.refresh) schedule(() => navigate(overviewUrl(state), 'overview (refresh)', 'debug'), 1500);
     else if (result.retick) schedule(tick, result.delayMs || 1000);
   }
 
