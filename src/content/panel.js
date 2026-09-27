@@ -154,11 +154,20 @@
     window.addEventListener('resize', () => !panel.classList.contains('bar') && savedPos && applyPosition(savedPos));
 
     // The docked bar pushes the game down instead of covering its header.
+    // Gameforge's strip (#mmonetbar: country, "More Games") is absolutely
+    // positioned at the very top, so it is moved down by the same amount.
     const originalPadding = document.documentElement.style.paddingTop;
     function updatePageOffset() {
       const docked = panel.classList.contains('bar') && panel.style.display !== 'none';
-      document.documentElement.style.paddingTop = docked ? `${panel.offsetHeight}px` : originalPadding;
+      const padding = docked ? `${panel.offsetHeight}px` : originalPadding;
+      if (document.documentElement.style.paddingTop !== padding) document.documentElement.style.paddingTop = padding;
+      const netbar = document.getElementById('mmonetbar');
+      const top = docked ? `${panel.offsetHeight}px` : '';
+      if (netbar && netbar.style.top !== top) netbar.style.top = top;
     }
+    // The bar's height changes when its tiles wrap (narrow windows). Resize
+    // observers do not run in background tabs, hence also the 1 s timer below.
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(updatePageOffset).observe(panel);
 
     function setMinimized(min) {
       panel.classList.toggle('min', min);
@@ -175,12 +184,14 @@
       for (const [id, tile] of tiles) {
         const s = status[id] || {};
         const on = settings ? !!GBot.settings.getPath(settings, ui.ACTIVITIES[id].path) : false;
+        // A cooldown can run out while the bot is stopped (no new status).
+        const due = !!s.until && s.until <= now && (s.text === 'cooldown' || s.text === 'next');
         tile.button.classList.toggle('on', on);
-        tile.button.classList.toggle('ready', !!s.ready);
+        tile.button.classList.toggle('ready', !!s.ready || due);
         tile.button.classList.toggle('warn', !!s.warn);
         tile.button.classList.toggle('nopoints', s.text === 'no points');
         tile.button.setAttribute('aria-pressed', on ? 'true' : 'false');
-        let text = s.text || (on ? '…' : 'off');
+        let text = due ? 'ready' : s.text || (on ? '…' : 'off');
         if (s.until && s.until > now) text = s.text === 'cooldown' || s.text === 'next' ? countdown(s.until, now) : `${s.text} ${countdown(s.until, now)}`;
         tile.sub.textContent = text;
         tile.points.textContent = s.points && on ? s.points : '';
@@ -226,6 +237,7 @@
     setInterval(() => {
       renderTiles();
       if (decision && decision.type === 'wait') renderStatus();
+      updatePageOffset();
     }, 1000);
 
     function update(next) {
@@ -238,7 +250,10 @@
         // Hide only the bar: an open settings window stays usable.
         panel.style.display = settings.ui.panel ? '' : 'none';
         panel.classList.toggle('bar', settings.ui.layout === 'bar');
-        if (settings.ui.layout !== 'bar') applyPosition(savedPos);
+        // Docked: drop the floating position (its "right: auto" would
+        // shrink the bar to its content).
+        if (settings.ui.layout === 'bar') Object.assign(panel.style, { left: '', top: '', right: '' });
+        else applyPosition(savedPos);
         updatePageOffset();
       }
       if (next.memory) memory = next.memory;

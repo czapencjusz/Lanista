@@ -230,7 +230,8 @@
 .gb-panel.bar .gb-summary { flex: 0 1 190px; min-width: 110px; }
 .gb-panel.bar .gb-status { padding: 3px 10px 0; }
 .gb-panel.bar .gb-next { padding: 0 10px 3px; }
-.gb-panel.bar .gb-tiles { display: flex; gap: 4px; padding: 4px 6px; flex: 1; min-width: 0; overflow-x: auto; }
+/* Tiles wrap onto a second row in narrow windows instead of scrolling. */
+.gb-panel.bar .gb-tiles { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 6px; flex: 1; min-width: 0; }
 .gb-panel.bar .gb-tile-wrap { flex: none; }
 .gb-panel.bar .gb-tile { flex-direction: row; gap: 5px; padding: 4px 18px 4px 8px; }
 .gb-panel.bar .gb-tile-label { display: none; }
