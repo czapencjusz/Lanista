@@ -107,20 +107,33 @@
     }
   };
 
-  // Enemies on an expedition location page: [{ name, learnable }], where
-  // learnable counts bonuses still to be learned by winning. An unlearned
-  // bonus has a ["Learning chance after a win:", "25%"] pair in its tooltip;
-  // learned ones are .active, and one given up for rubies has no chance left.
+  // The learning chance of an unlearned bonus: its tooltip has a
+  // ["Learning chance after a win:", "34%"] pair. The value depends on the
+  // character and the enemy (s60-en: 34% in Cave Temple down to 25% on
+  // Death Hill) and may have decimals. Returns a number, or null.
+  function learningChance(bonus) {
+    for (const line of tooltipOf(bonus)) {
+      if (!Array.isArray(line) || !Array.isArray(line[0])) continue;
+      const m = String(line[0][1]).trim().match(/^(\d+(?:[.,]\d+)?)\s*%$/);
+      if (m) return parseFloat(m[1].replace(',', '.'));
+    }
+    return null;
+  }
+
+  // Enemies on an expedition location page: [{ name, learnable, chance }]:
+  // how many bonuses can still be learned by winning, and the best chance
+  // per win among them. Learned bonuses are .active; one given up for rubies,
+  // or with a 0% chance, cannot be learned in combat and is not counted.
   function readExpeditionEnemies(doc) {
     return Array.from(doc.querySelectorAll(SEL.expedition.box)).map((box) => {
       const info = box.querySelector(SEL.expedition.info);
       const first = info ? tooltipOf(info)[0] : null;
       const name = Array.isArray(first) ? String(first[0]) : '';
-      const learnable = Array.from(box.querySelectorAll(SEL.expedition.bonus)).filter((b) => {
-        if (b.classList.contains(SEL.expedition.bonusActiveClass)) return false;
-        return tooltipOf(b).some((line) => Array.isArray(line) && Array.isArray(line[0]) && /^[1-9]\d*\s*%$/.test(String(line[0][1]).trim()));
-      }).length;
-      return { name, learnable };
+      const chances = Array.from(box.querySelectorAll(SEL.expedition.bonus))
+        .filter((b) => !b.classList.contains(SEL.expedition.bonusActiveClass))
+        .map(learningChance)
+        .filter((c) => c !== null && c > 0);
+      return { name, learnable: chances.length, chance: chances.length ? Math.max(...chances) : null };
     });
   }
 

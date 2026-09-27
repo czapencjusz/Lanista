@@ -85,7 +85,8 @@
       const progress = `${state.page.loc}:${index}:${enemy.learnable}`;
       if (ctx.memory.bonusHunt !== progress) {
         ctx.memory.bonusHunt = progress;
-        ctx.log('info', `Expedition: ${enemy.name || `enemy #${index + 1}`} has ${enemy.learnable} bonus${enemy.learnable === 1 ? '' : 'es'} left to learn, fighting it before the boss`);
+        const chance = enemy.chance !== null ? ` (${enemy.chance}% per win)` : '';
+        ctx.log('info', `Expedition: ${enemy.name || `enemy #${index + 1}`} has ${enemy.learnable} bonus${enemy.learnable === 1 ? '' : 'es'} left to learn${chance}, fighting it before the boss`);
         // Save now: the attack below leaves the page before the runner saves.
         await ctx.persist();
       }
