@@ -189,6 +189,13 @@
       fields: [
         { path: 'repair.belowPercent', type: 'number', label: 'Repair below', unit: '% conditioning', help: 'Items on your character are repaired once their conditioning drops below this.' },
         {
+          path: 'repair.allUpToPercent',
+          type: 'number',
+          label: '"Repair all" button: skip items above',
+          unit: '% conditioning',
+          help: 'The button on the overview page repairs items at or below this. Rent costs the same for a nearly new item as for a worn one.',
+        },
+        {
           path: 'repair.maxQuality',
           type: 'select',
           label: 'Best materials to use',

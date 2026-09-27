@@ -105,3 +105,15 @@ test('"Repair all" runs even while the bot is paused, and only then', () => {
   m.repairAll = null;
   assert.equal(brain.decide(st, running, m, NOW).type, 'expedition');
 });
+
+test('"Repair all" skips items above its cutoff (60% by default, changeable)', () => {
+  const s = settingsModule.sanitizeSettings({});
+  assert.equal(s.repair.allUpToPercent, 60);
+  const item = (percent) => ({ condition: { percent } });
+  assert.equal(brain.inRepairAll(item(60), s), true, 'at the cutoff is repaired');
+  assert.equal(brain.inRepairAll(item(61), s), false);
+  assert.equal(brain.inRepairAll({ condition: null }, s), false);
+  const custom = settingsModule.sanitizeSettings({ repair: { allUpToPercent: 90 } });
+  assert.equal(brain.inRepairAll(item(84), custom), true);
+  assert.equal(settingsModule.sanitizeSettings({ repair: { allUpToPercent: 100 } }).repair.allUpToPercent, 99, 'full items are never repaired');
+});

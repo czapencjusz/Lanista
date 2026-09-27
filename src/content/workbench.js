@@ -161,10 +161,10 @@
     const now = ctx.now();
     const all = memory.repairAll;
     const { doc } = await getDoc(sh, { mod: 'overview', doll: 1 });
-    // "Repair all" takes every worn item below 100%, once each; the automatic
-    // repair only items below the threshold.
-    const worn = readDoll(doc).filter((i) => !all || !all.done.includes(i.slot));
-    const item = all ? brain.pickRepair(worn, 100, {}, now) : brain.pickRepair(worn, settings.repair.belowPercent, memory.repairSkip, now);
+    // "Repair all" takes every item at or below its cutoff, once each; the
+    // automatic repair only items below the threshold.
+    const worn = readDoll(doc).filter((i) => !all || (!all.done.includes(i.slot) && brain.inRepairAll(i, settings)));
+    const item = all ? brain.pickRepair(worn, 101, {}, now) : brain.pickRepair(worn, settings.repair.belowPercent, memory.repairSkip, now);
     if (!item) {
       memory.nextRepairCheck = now + RECHECK_MS;
       if (all) {

@@ -98,6 +98,9 @@
       enabled: false,
       // Repair an item once its conditioning drops below this.
       belowPercent: 50,
+      // The "Repair all" button skips items above this conditioning (a
+      // nearly new item costs the same rent as a worn one).
+      allUpToPercent: 60,
       // Best material quality to use: -1 Standard, 0 Ceres (green),
       // 1 Neptun (blue), 2 Mars, 3 Jupiter, 4 Olymp. Lower ones go first.
       maxQuality: 1,
@@ -180,6 +183,7 @@
     'work.hours': { int: true, min: 1, max: 24 },
     'training.keepGold': { int: true, min: 0, max: 2000000000 },
     'repair.belowPercent': { int: true, min: 1, max: 99 },
+    'repair.allUpToPercent': { int: true, min: 1, max: 99 },
     'repair.maxQuality': { int: true, min: -1, max: 4 },
     'schedule.start': { pattern: TIME },
     'schedule.end': { pattern: TIME },

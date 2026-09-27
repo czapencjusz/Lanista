@@ -148,7 +148,8 @@
     }
     const button = box.querySelector('button');
     const status = box.querySelector('.gbot-repair-status');
-    const worn = GBot.workbench.readDoll(document).filter((i) => i.condition && i.condition.percent < 100);
+    const cutoff = settings.repair.allUpToPercent;
+    const worn = GBot.workbench.readDoll(document).filter((i) => brain.inRepairAll(i, settings));
     const quality = ['Standard', 'Ceres', 'Neptun', 'Mars', 'Jupiter', 'Olymp'][settings.repair.maxQuality + 1];
     if (repairRunning()) {
       button.disabled = true;
@@ -158,11 +159,11 @@
       status.textContent = [r ? `${r.name}: ${r.stage}` : '', done].filter(Boolean).join(' · ');
     } else {
       button.disabled = worn.length === 0;
-      button.textContent = worn.length ? `Repair all (${worn.length})` : 'All gear at 100%';
+      button.textContent = worn.length ? `Repair all (${worn.length})` : `All gear above ${cutoff}%`;
       const lowest = worn.reduce((a, b) => (!a || b.condition.percent < a.condition.percent ? b : a), null);
       status.textContent = lowest ? `Lowest: ${lowest.name} ${lowest.condition.percent}%` : '';
     }
-    button.title = `Repair every item on your character below 100% conditioning at the workbench, with Horreum materials up to ${quality} (lowest quality first). Rent is paid in gold. Works even while the bot is stopped.`;
+    button.title = `Repair every item on your character at or below ${cutoff}% conditioning at the workbench, with Horreum materials up to ${quality} (lowest quality first). Rent is paid in gold. Works even while the bot is stopped. Change the cutoff under Settings > Repair.`;
   }
 
   // Remember facts about the game for the settings UI and statistics.
@@ -327,6 +328,7 @@
     const wasEnabled = settings && settings.enabled;
     settings = next;
     panel.update({ settings, status: statusFor(lastState) });
+    renderRepairButton(lastState);
     if (next.enabled && !wasEnabled) {
       schedule(tick, 500);
     } else if (!next.enabled && wasEnabled) {

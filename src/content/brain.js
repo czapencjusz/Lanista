@@ -273,6 +273,9 @@
     return found.length >= 2 ? found[1] : null;
   }
 
+  // Does the "Repair all" button take this item? (at or below the cutoff)
+  const inRepairAll = (item, settings) => !!item.condition && item.condition.percent <= settings.repair.allUpToPercent;
+
   // The worn item most in need of repair: [{ id, condition, ... }] -> item.
   function pickRepair(items, belowPercent, skip, now) {
     const due = items.filter((i) => i.condition && i.condition.percent < belowPercent && !((skip || {})[i.id] > now));
@@ -574,6 +577,7 @@
     wantsTraining,
     conditionOf,
     pickRepair,
+    inRepairAll,
     freeSpot,
     materialsAvailable,
     recordFight,
