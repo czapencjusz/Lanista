@@ -23,6 +23,14 @@
   const RECHECK_MS = 20 * 60 * 1000;
   const SKIP_MS = 6 * 60 * 60 * 1000;
 
+  // Leave an item out of the current "Repair all" run.
+  function skipInRun(memory, r) {
+    const all = memory.repairAll;
+    if (!all) return;
+    if (!all.done.includes(r.slot)) all.done.push(r.slot);
+    all.skipped.push(r.name);
+  }
+
   // ------------------------------------------------------------ requests
 
   function pageFetch() {
@@ -151,13 +159,32 @@
     const { settings, memory } = ctx;
     const sh = ctx.state.sh;
     const now = ctx.now();
+    const all = memory.repairAll;
     const { doc } = await getDoc(sh, { mod: 'overview', doll: 1 });
-    const item = brain.pickRepair(readDoll(doc), settings.repair.belowPercent, memory.repairSkip, now);
+    // "Repair all" takes every worn item below 100%, once each; the automatic
+    // repair only items below the threshold.
+    const worn = readDoll(doc).filter((i) => !all || !all.done.includes(i.slot));
+    const item = all ? brain.pickRepair(worn, 100, {}, now) : brain.pickRepair(worn, settings.repair.belowPercent, memory.repairSkip, now);
     if (!item) {
       memory.nextRepairCheck = now + RECHECK_MS;
+      if (all) {
+        memory.repairAll = null;
+        const skipped = all.skipped.length ? `, skipped ${all.skipped.join(', ')}` : '';
+        ctx.log('info', `Repair all: ${all.repaired} item${all.repaired === 1 ? '' : 's'} repaired${skipped}`);
+        return { refresh: true };
+      }
       return { retick: true };
     }
-    const spot = await freeBagSpot(sh, item.w, item.h);
+    let spot;
+    try {
+      spot = await freeBagSpot(sh, item.w, item.h);
+    } catch (e) {
+      // Nothing was moved yet: stop instead of retrying straight away.
+      memory.nextRepairCheck = now + RECHECK_MS;
+      memory.repairAll = null;
+      ctx.log('warn', `Repair: ${e.message}`);
+      return { retick: true };
+    }
     await ctx.humanDelay();
     await moveItem(sh, { from: item.slot, fromX: 1, fromY: 1, to: spot.bag, toX: spot.x, toY: spot.y, amount: 1, doll: 1 });
     memory.repair = {
@@ -199,6 +226,7 @@
     const available = brain.materialsAvailable(formula.needed, readStock(storage), settings.repair.maxQuality);
     if (available === 'none') {
       memory.repairSkip[r.id] = ctx.now() + SKIP_MS;
+      skipInRun(memory, r);
       await putBack(ctx, r);
       memory.repair = null;
       ctx.log('warn', `Repair: no materials for ${r.name} in the Horreum, trying again in 6 hours`);
@@ -265,6 +293,11 @@
     await moveItem(sh, { from: r.bag, fromX: r.x, fromY: r.y, to: r.slot, toX: 1, toY: 1, amount: 1, doll: 1 });
 
     memory.stats.repairs = (memory.stats.repairs || 0) + 1;
+    if (memory.repairAll) {
+      memory.repairAll.repaired += 1;
+      // Once per run, even when the materials only allowed a partial repair.
+      if (!memory.repairAll.done.includes(r.slot)) memory.repairAll.done.push(r.slot);
+    }
     memory.stats.goldSpent = (memory.stats.goldSpent || 0) + (r.rent || 0);
     memory.repair = null;
     memory.nextRepairCheck = ctx.now() + 60 * 1000;
@@ -285,7 +318,20 @@
       }
       return await collect(ctx);
     } catch (e) {
-      if (!memory.repair) throw e;
+      if (!memory.repair) {
+        // Failed before anything was taken off: do not retry in a loop.
+        const all = memory.repairAll;
+        if (all) {
+          all.failures = (all.failures || 0) + 1;
+          if (all.failures >= MAX_FAILURES) {
+            memory.repairAll = null;
+            ctx.log('warn', `Repair all stopped: ${e.message}`);
+          }
+        } else {
+          memory.nextRepairCheck = ctx.now() + RECHECK_MS;
+        }
+        throw e;
+      }
       const cur = memory.repair;
       cur.failures = (cur.failures || 0) + 1;
       if (cur.failures < MAX_FAILURES) throw e;
@@ -300,6 +346,7 @@
         ctx.log('error', `Repair: gave up on ${cur.name} (${cur.stage}); it is on the workbench or in the packages`);
       }
       memory.repairSkip[cur.id] = ctx.now() + SKIP_MS;
+      skipInRun(memory, cur);
       memory.repair = null;
       memory.nextRepairCheck = ctx.now() + RECHECK_MS;
       throw e;

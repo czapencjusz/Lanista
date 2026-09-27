@@ -86,3 +86,22 @@ test('reads bags, doll, workbench slots and Horreum stock from game pages', () =
   const stockDoc = new JSDOM(`<input id="remove-resource-amount" data-max='{"24":{"-1":11,"0":207,"1":54}}'>`).window.document;
   assert.deepEqual(workbench.readStock(stockDoc), { 24: { '-1': 11, 0: 207, 1: 54 } });
 });
+
+test('"Repair all" runs even while the bot is paused, and only then', () => {
+  const st = { inGame: true, hp: { percent: 100 }, dialogs: {}, expedition: { available: true, ready: true, points: 5 }, dungeon: {}, arena: {}, circus: {}, gold: 0 };
+  const paused = settingsModule.sanitizeSettings({ enabled: false });
+  const m = brain.createMemory(NOW);
+  assert.equal(brain.decide(st, paused, m, NOW).type, 'idle');
+  m.repairAll = { done: [], skipped: [], repaired: 0, failures: 0 };
+  assert.deepEqual([brain.decide(st, paused, m, NOW).type, brain.decide(st, paused, m, NOW).reason], ['repair', 'Repair all gear']);
+  m.repair = { stage: 'repairing', name: 'Sandals', until: NOW + 15000 };
+  assert.equal(brain.decide(st, paused, m, NOW).type, 'wait', 'paused, but the item is on the workbench');
+  assert.equal(brain.decide({ ...st, inGame: false }, paused, m, NOW).type, 'idle');
+
+  const running = settingsModule.sanitizeSettings({ enabled: true });
+  m.repair = null;
+  m.nextRepairCheck = NOW + 60000;
+  assert.equal(brain.decide(st, running, m, NOW).type, 'repair', 'before fights, even with automatic repair off');
+  m.repairAll = null;
+  assert.equal(brain.decide(st, running, m, NOW).type, 'expedition');
+});

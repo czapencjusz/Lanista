@@ -106,8 +106,63 @@
   async function humanDelay() {
     const { minClickDelay, maxClickDelay } = settings.timing;
     await util.sleep(util.randomBetween(minClickDelay, Math.max(minClickDelay, maxClickDelay)) * 1000);
-    // `settings` is replaced by the storage listener when the user presses Stop.
-    if (!settings.enabled) throw new util.ActionError('stopped by the user');
+    // `settings` is replaced by the storage listener when the user presses
+    // Stop. Repairs keep going so no item is left off the character.
+    if (!settings.enabled && !repairRunning()) throw new util.ActionError('stopped by the user');
+  }
+
+  const repairRunning = () => !!(memory && (memory.repair || memory.repairAll));
+
+  // "Repair all" button under the character on the overview page.
+  function renderRepairButton(state) {
+    let box = document.getElementById('gbot-repair-all');
+    const onOverview = state && state.inGame && state.page.mod === 'overview' && (!state.page.doll || state.page.doll === '1');
+    const doll = document.querySelector('#char');
+    if (!onOverview || !doll) {
+      if (box) box.remove();
+      return;
+    }
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'gbot-repair-all';
+      box.style.cssText = 'margin:4px 0 0;text-align:center;font:11px Arial,sans-serif;color:#4a2d0d';
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'awesome-button';
+      button.addEventListener('click', () => {
+        if (button.disabled) return;
+        editMemory((m) => {
+          m.repairAll = { done: [], skipped: [], repaired: 0, failures: 0, startedAt: Date.now() };
+          m.nextRepairCheck = 0;
+        }).then(() => {
+          log('info', 'Repair all: started');
+          cancel();
+          tick();
+        });
+      });
+      const status = document.createElement('div');
+      status.className = 'gbot-repair-status';
+      status.style.marginTop = '2px';
+      box.append(button, status);
+      doll.insertAdjacentElement('afterend', box);
+    }
+    const button = box.querySelector('button');
+    const status = box.querySelector('.gbot-repair-status');
+    const worn = GBot.workbench.readDoll(document).filter((i) => i.condition && i.condition.percent < 100);
+    const quality = ['Standard', 'Ceres', 'Neptun', 'Mars', 'Jupiter', 'Olymp'][settings.repair.maxQuality + 1];
+    if (repairRunning()) {
+      button.disabled = true;
+      button.textContent = 'Repairing…';
+      const r = memory.repair;
+      const done = memory.repairAll ? `${memory.repairAll.repaired} done` : '';
+      status.textContent = [r ? `${r.name}: ${r.stage}` : '', done].filter(Boolean).join(' · ');
+    } else {
+      button.disabled = worn.length === 0;
+      button.textContent = worn.length ? `Repair all (${worn.length})` : 'All gear at 100%';
+      const lowest = worn.reduce((a, b) => (!a || b.condition.percent < a.condition.percent ? b : a), null);
+      status.textContent = lowest ? `Lowest: ${lowest.name} ${lowest.condition.percent}%` : '';
+    }
+    button.title = `Repair every item on your character below 100% conditioning at the workbench, with Horreum materials up to ${quality} (lowest quality first). Rent is paid in gold. Works even while the bot is stopped.`;
   }
 
   // Remember facts about the game for the settings UI and statistics.
@@ -142,12 +197,14 @@
       if (settings.enabled) brain.updateBreaks(settings.schedule, memory, now);
 
       let decision = brain.decide(state, settings, memory, now);
-      if (settings.enabled && state.inGame) {
+      // A repair also runs while paused; it must not run in two tabs at once.
+      if ((settings.enabled || repairRunning()) && state.inGame) {
         const claim = await send({ type: 'claim', host: location.host });
         if (claim && claim.ok === false) decision = { type: 'idle', reason: 'GBot is running in another tab', retryMs: 60000 };
       }
 
       panel.update({ settings, memory, decision, state, status: statusFor(state) });
+      renderRepairButton(state);
       await persist();
       await execute(decision, state);
     } catch (e) {
@@ -193,8 +250,9 @@
       }
     }
     // Multi-step actions (navigate, then act) re-decide on every page; log
-    // the reason once per run.
-    if (!memory.pending || memory.pending.attempts === 1) log('info', decision.reason);
+    // the reason once per run. Repairs log their own steps (workbench.js).
+    if (decision.type === 'repair') log('debug', decision.reason);
+    else if (!memory.pending || memory.pending.attempts === 1) log('info', decision.reason);
     await persist();
     await send({ type: 'heartbeat', host: location.host, nextAt: now + 60000, enabled: true });
 
@@ -218,13 +276,14 @@
     } catch (e) {
       log(e instanceof util.ActionError ? 'warn' : 'error', `${decision.type}: ${e.message}`);
       await persist();
-      if (!settings.enabled) return;
+      if (!settings.enabled && !repairRunning()) return;
       schedule(() => navigate(overviewUrl(state), 'overview (retry)'), util.randomBetween(5000, 12000));
       return;
     }
 
     await persist();
     panel.update({ memory, status: statusFor(state) });
+    renderRepairButton(state);
     if (!result || result.navigated || unloading) return;
     if (result.refresh) schedule(() => navigate(overviewUrl(state), 'overview (refresh)', 'debug'), 1500);
     else if (result.retick) schedule(tick, result.delayMs || 1000);

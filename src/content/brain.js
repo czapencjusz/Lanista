@@ -34,6 +34,9 @@
       repair: null,
       nextRepairCheck: 0,
       repairSkip: {},
+      // "Repair all" run started from the overview button:
+      // { done: [doll slots], skipped: [names], repaired, failures }.
+      repairAll: null,
       questSteps: { since: 0, count: 0 },
       breakUntil: 0,
       nextBreakAt: 0,
@@ -152,7 +155,12 @@
   const outOfPoints = (cd, cfg) => cd.points !== null && cd.points !== undefined && cd.points <= cfg.keepPoints;
 
   function decide(state, settings, memory, now) {
-    if (!settings.enabled) return { type: 'idle', reason: 'Paused' };
+    if (!settings.enabled) {
+      // A repair the user started by hand (or one already under way) still
+      // runs while the bot is paused, so no item is left off the character.
+      const repairing = state.inGame && (memory.repair || memory.repairAll) ? repairDecision(settings, memory, now) : null;
+      return repairing || { type: 'idle', reason: 'Paused' };
+    }
     if (!state.inGame) return { type: 'idle', reason: 'Not on an in-game page' };
 
     const hours = scheduleWindow(settings.schedule, now);
@@ -188,16 +196,8 @@
       }
     }
 
-    if (settings.repair.enabled || memory.repair) {
-      const r = memory.repair;
-      // Gear is off the character: hold every fight until it is back on.
-      if (r && r.until > now) {
-        return { type: 'wait', until: r.until, reason: `Repairing ${r.name}`, next: { label: 'Repair done', at: r.until } };
-      }
-      if (r || (memory.nextRepairCheck || 0) <= now) {
-        return { type: 'repair', reason: r ? `Repair ${r.name}: ${r.stage}` : 'Check gear condition' };
-      }
-    }
+    const repairing = repairDecision(settings, memory, now);
+    if (repairing) return repairing;
 
     if (wantsTraining(state, settings, memory, now)) {
       return { type: 'training', reason: 'Train a stat with spare gold' };
@@ -248,6 +248,18 @@
   }
 
   // ------------------------------------------------------------ repair
+
+  function repairDecision(settings, memory, now) {
+    const r = memory.repair;
+    // Gear is off the character: hold every fight until it is back on.
+    if (r && r.until > now) {
+      return { type: 'wait', until: r.until, reason: `Repairing ${r.name}`, next: { label: 'Repair done', at: r.until } };
+    }
+    if (r) return { type: 'repair', reason: `Repair ${r.name}: ${r.stage}` };
+    if (memory.repairAll) return { type: 'repair', reason: 'Repair all gear' };
+    if (settings.repair.enabled && (memory.nextRepairCheck || 0) <= now) return { type: 'repair', reason: 'Check gear condition' };
+    return null;
+  }
 
   // Conditioning from an item tooltip's lines. Item tooltips list
   // "Durability a/b (p%)" and then "Conditioning a/b (p%)"; the words are
