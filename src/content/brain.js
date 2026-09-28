@@ -44,6 +44,10 @@
       smeltNext: 0,
       smeltFailures: 0,
       smeltFailingCn: null,
+      // Auction house: when to look again, and this round's bids
+      // ({ rank, spent, bids: { lotId: amount } }).
+      nextAuctionCheck: 0,
+      auctionRound: null,
       questSteps: { since: 0, count: 0 },
       breakUntil: 0,
       nextBreakAt: 0,
@@ -62,6 +66,7 @@
         training: 0,
         repairs: 0,
         smelted: 0,
+        auctionBids: 0,
         goldSpent: 0,
         goldStart: null,
         goldNow: null,
@@ -208,6 +213,10 @@
     const repairing = repairDecision(settings, memory, now);
     if (repairing) return repairing;
 
+    if (settings.auction.enabled && (memory.nextAuctionCheck || 0) <= now && !isBlocked(memory, 'auction', now)) {
+      return { type: 'auction', reason: 'Check the auction house' };
+    }
+
     // Smelting only sends requests (no page change) and never touches the
     // character, so it goes before the fights.
     if (settings.smelting.enabled && memory.smeltNext && memory.smeltNext <= now && !isBlocked(memory, 'smelt', now)) {
@@ -247,6 +256,7 @@
     }
 
     if (settings.smelting.enabled && memory.smeltNext > now) wake.push({ label: 'Smelting', at: memory.smeltNext });
+    if (settings.auction.enabled && memory.nextAuctionCheck > now) wake.push({ label: 'Auction house', at: memory.nextAuctionCheck });
 
     const maxIdleMs = settings.timing.maxIdle * 1000;
     let next = { label: 'Re-check', at: now + maxIdleMs };
@@ -309,6 +319,46 @@
     if (queued > 0 && slots.some((s) => stateOf(s) === 'closed')) return now + 60 * 1000;
     const ends = slots.filter((s) => stateOf(s) === 'crafting').map((s) => now + Math.max(0, Number(s['forge_slots.finishedIn']) || 0) * 1000);
     return ends.length ? Math.min(...ends) + 5000 : 0;
+  }
+
+  // ----------------------------------------------------------- auction
+
+  // May the bot bid at this point of the auction round? rank: 1 = very
+  // short ... 5 = very long (null = not understood). Late bids are safer:
+  // a losing bid keeps the gold.
+  function auctionTimeOk(rank, bidWhen) {
+    if (bidWhen === 'any') return true;
+    if (rank === null || rank === undefined) return false;
+    return rank <= (bidWhen === 'medium' ? 3 : 2);
+  }
+
+  // How long until the next look at the auction house, by round state.
+  function auctionRecheckMs(rank) {
+    const minutes = { 1: 2, 2: 4, 3: 10, 4: 30, 5: 60 }[rank] || 30;
+    return minutes * 60 * 1000;
+  }
+
+  // Which lots to bid on ([{ id, heal, minBid }]): the best HP per gold
+  // first, only at or above minHpPerGold, one bid per lot per round, within
+  // the gold above the reserve, this round's budget and the food limit.
+  function planAuctionBids(lots, cfg, { gold, spent, bids, owned }) {
+    const ratio = (l) => l.heal / l.minBid;
+    const good = lots
+      .filter((l) => l.heal > 0 && l.minBid > 0 && !(l.id in bids) && ratio(l) >= cfg.minHpPerGold)
+      .sort((a, b) => ratio(b) - ratio(a));
+    const plan = [];
+    let free = gold - cfg.keepGold;
+    let budget = cfg.maxPerRound - spent;
+    let count = owned + Object.keys(bids).length;
+    for (const lot of good) {
+      if (count >= cfg.maxFood) break;
+      if (lot.minBid > free || lot.minBid > budget) continue;
+      plan.push(lot);
+      free -= lot.minBid;
+      budget -= lot.minBid;
+      count += 1;
+    }
+    return plan;
   }
 
   // Does the "Repair all" button take this item? (at or below the cutoff)
@@ -618,6 +668,9 @@
     inRepairAll,
     expeditionTarget,
     nextSmeltCheck,
+    auctionTimeOk,
+    auctionRecheckMs,
+    planAuctionBids,
     freeSpot,
     materialsAvailable,
     recordFight,

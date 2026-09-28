@@ -370,7 +370,7 @@
 
     // Quests, repairs and smelting are multi-step and keep their own
     // failure counts.
-    if (decision.type !== 'quests' && decision.type !== 'repair' && decision.type !== 'smelt') {
+    if (!['quests', 'repair', 'smelt', 'auction'].includes(decision.type)) {
       const attempt = brain.beginAttempt(memory, decision.type, now, settings, state);
       if (!attempt.ok) {
         log('warn', attempt.message);
@@ -382,7 +382,7 @@
     }
     // Multi-step actions (navigate, then act) re-decide on every page; log
     // the reason once per run. Repairs log their own steps (workbench.js).
-    if (decision.type === 'repair' || decision.type === 'smelt') log('debug', decision.reason);
+    if (['repair', 'smelt', 'auction'].includes(decision.type)) log('debug', decision.reason);
     else if (!memory.pending || memory.pending.attempts === 1) log('info', decision.reason);
     await persist();
     await send({ type: 'heartbeat', host: location.host, nextAt: now + 60000, enabled: true });
@@ -457,6 +457,14 @@
     if (!changes[S.STORAGE_KEY]) return;
     const next = S.normalize(changes[S.STORAGE_KEY].newValue);
     const wasEnabled = settings && settings.enabled;
+    // New auction settings (price, limits, timing): look again right away
+    // instead of at the next scheduled check.
+    if (settings && JSON.stringify(settings.auction) !== JSON.stringify(next.auction)) {
+      editMemory((m) => {
+        m.nextAuctionCheck = 0;
+        m.auctionNote = null;
+      }).catch(() => {});
+    }
     settings = next;
     panel.update({ settings, status: statusFor(lastState) });
     renderRepairButton(lastState);

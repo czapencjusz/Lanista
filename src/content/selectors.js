@@ -103,6 +103,16 @@
       avatar: '#avatar',
     },
 
+    // Auction house: one form per lot. Add-ons (e.g. Gladiatus Crazy Addon)
+    // put their own price hints next to these; only the game's are read.
+    auction: {
+      time: '.description_span_right b', // "Remaining time of auction: Long"
+      lotId: 'input[name="auctionid"]',
+      item: '.auction_item_div [data-content-type]',
+      bidAmount: 'input[name="bid_amount"]',
+      bidButton: 'input[name="bid"]',
+    },
+
     // Training ground: one button and one cost per stat, in stat order.
     training: {
       buttons: '#training_box .training_button',

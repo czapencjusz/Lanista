@@ -367,6 +367,7 @@
           ['training', 'Stats trained'],
           ['repairs', 'Items repaired'],
           ['smelted', 'Items smelted'],
+          ['auctionBids', 'Auction bids'],
           ['quests', 'Quests finished'],
           ['work', 'Work shifts'],
         ]) {

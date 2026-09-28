@@ -116,6 +116,22 @@
       storeIn: 'horreum',
     },
 
+    auction: {
+      // Bid on healing items in the auction house.
+      enabled: false,
+      // Only lots that heal at least this many HP per gold of the bid.
+      minHpPerGold: 4,
+      // 'short' (short or very short) | 'medium' (medium or shorter) |
+      // 'any': how late in the round to bid. A losing bid keeps the gold.
+      bidWhen: 'short',
+      // Most gold to bid in one auction round.
+      maxPerRound: 10000,
+      // Never let gold drop below this.
+      keepGold: 100000,
+      // Stop bidding while the bags and packages hold this many healing items.
+      maxFood: 50,
+    },
+
     quests: {
       enabled: false,
       types: {
@@ -195,6 +211,11 @@
     'repair.belowPercent': { int: true, min: 1, max: 99 },
     'repair.allUpToPercent': { int: true, min: 1, max: 99 },
     'smelting.storeIn': { enum: ['horreum', 'packages'] },
+    'auction.minHpPerGold': { min: 0.1, max: 1000 },
+    'auction.bidWhen': { enum: ['short', 'medium', 'any'] },
+    'auction.maxPerRound': { int: true, min: 0, max: 2000000000 },
+    'auction.keepGold': { int: true, min: 0, max: 2000000000 },
+    'auction.maxFood': { int: true, min: 1, max: 500 },
     'repair.maxQuality': { int: true, min: -1, max: 4 },
     'schedule.start': { pattern: TIME },
     'schedule.end': { pattern: TIME },

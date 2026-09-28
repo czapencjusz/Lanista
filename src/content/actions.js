@@ -351,8 +351,22 @@
       await sleep(400);
     }
 
+    // Auction wins and other food arrive as packages: take one out.
+    if (GBot.auction) {
+      try {
+        const hp = GBot.state.readHp(document);
+        const taken = await GBot.auction.takeFoodFromPackages(ctx, hp.max && hp.value !== null ? hp.max - hp.value : null);
+        if (taken) {
+          ctx.log('info', `Took ${taken} from the packages to eat`);
+          return { refresh: true };
+        }
+      } catch (e) {
+        ctx.log('warn', `Could not take food from the packages: ${e.message}`);
+      }
+    }
+
     brain.markNoFood(ctx.memory, ctx.now());
-    ctx.log('warn', 'No food in the inventory; waiting for HP to regenerate (retrying food in 30 min)');
+    ctx.log('warn', 'No food in the bags or packages; waiting for HP to regenerate (retrying food in 30 min)');
     if (ctx.notify) ctx.notify('noFood', `GBot: HP is ${state.hp.percent}% and there is no food left in your bags.`);
     return { retick: true };
   }

@@ -236,6 +236,30 @@
       ],
     },
     {
+      id: 'auction',
+      title: 'Auction house',
+      icon: 'auction',
+      enable: 'auction.enabled',
+      description: 'Bid on healing items (food and potions) in the auction house. Careful: the game keeps your gold if someone outbids you, so the bot bids late, once per lot, and only at a price you accept. Buyout costs rubies and is never used. Won items arrive as packages; healing takes food from there when the bags are empty.',
+      fields: [
+        { path: 'auction.minHpPerGold', type: 'number', label: 'Only lots that heal at least', unit: 'HP per gold', step: 0.1, help: 'Heal amount divided by the bid. 4 means a 2,000 HP bread may cost up to 500 gold.' },
+        {
+          path: 'auction.bidWhen',
+          type: 'select',
+          label: 'Bid when the auction time is',
+          options: [
+            { value: 'short', label: 'Short or very short (safest)' },
+            { value: 'medium', label: 'Medium or shorter' },
+            { value: 'any', label: 'Any time' },
+          ],
+          help: 'The later the bid, the fewer players can still outbid you.',
+        },
+        { path: 'auction.maxPerRound', type: 'number', label: 'Spend at most', unit: 'gold per auction round', step: 1000 },
+        { path: 'auction.keepGold', type: 'number', label: 'Always keep', unit: 'gold', step: 10000 },
+        { path: 'auction.maxFood', type: 'number', label: 'Stop at', unit: 'healing items owned', help: 'Food and potions in your bags and packages.' },
+      ],
+    },
+    {
       id: 'quests',
       title: 'Quests',
       icon: 'quests',

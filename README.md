@@ -18,7 +18,7 @@ through the game the way a player would.
 | **Arena Provinciarum** | Attacks the lowest-level, highest-level or a random opponent. It can stick to opponents near your level and skip names on a never-attack list. Opponents who beat you are skipped for a while (24 hours by default). If the game refuses a fight, it tries another opponent. |
 | **Circus Turma Provinciarum** | Same options as the arena. |
 | **Enemy nests** | After some wins the game offers to search the enemy's nest for extra loot. The bot does a quick search, a thorough search, or returns to safety, as you choose. |
-| **Healing** | Eats food below one HP threshold and stops fighting below another. It searches every bag and picks the food that best fills the missing HP. |
+| **Healing** | Eats food below one HP threshold and stops fighting below another. It searches every bag and picks the food that best fills the missing HP; when the bags are empty it takes food from the packages. |
 | **Training** | Optional. Spends gold above a reserve you set on stat points, always on the cheapest of the stats you pick, which keeps them balanced. Gold you spend cannot be stolen in the arena. |
 | **Repair** | Optional. When an item you wear drops below a conditioning threshold, the bot takes it off, repairs it at the workbench with materials from the Horreum, and puts it back on (see below). |
 | **Stable work** | Optional. Once you are out of expedition and dungeon points, it starts the job and number of hours you chose. |
@@ -26,9 +26,13 @@ through the game the way a player would.
 | **Pop-ups** | Collects the daily login bonus and closes notification dialogs. |
 | **Packages** | A **Store all resources in the Horreum** button on the packages page moves every resource from all your packages into the Horreum in one go. Items and food stay in the packages. |
 | **Smelting** | Tick weapons, armour and jewellery on the packages page (one by one, or **Tick all on this page**) to queue them for smelting. While running, the bot fills free smelter slots from the queue, pays the rent in gold and puts the resources of finished smelts in the Horreum (or in a package). |
+| **Auction house** | Optional. Bids on food and healing potions that heal at least the HP per gold you set, late in the auction round, once per lot, within a gold reserve, a budget per round and a limit on how much food you hold. Won items arrive as packages. |
 
-**The bot never spends rubies.** Workbench rent is paid in gold, and expedition bonuses are only
-learned by fighting, never bought.
+**The bot never spends rubies.** Workbench and smelter rent is paid in gold, expedition bonuses are
+only learned by fighting, and auction Buyout (which costs rubies) is never used.
+
+**Careful with the auction house:** the game keeps your gold if someone outbids you. That is why the
+bot bids only when the round is ending (by default) and never twice on the same lot.
 
 ### Expedition bonuses before the boss
 
@@ -118,12 +122,13 @@ what is enabled. Changes save as you make them and take effect immediately.
 | Training | Gold to always keep, stats to train |
 | Repair | Repair below X% conditioning, cutoff for the *Repair all* button, best material quality to use |
 | Smelting | Smelting on/off, put the resources in the Horreum or in a package |
+| Auction house | Bidding on/off, minimum HP per gold, how late in the round to bid, gold per round, gold to keep, food limit |
 | Quests | Quest types to accept (combat, arena, circus, expedition, dungeon, items, work), only quests for my location and dungeon, only quests for activities that are on |
 | Schedule | Active hours, random breaks |
 | Timing & safety | Click delay range, longest idle time, failed attempts before pausing, pause length |
 | Notifications | Which desktop notifications to show |
 | Interface | Show the bar, floating or docked |
-| Statistics | Fights per activity with wins, losses and win rate; meals, nests, quests, work shifts, stats trained, items repaired, items smelted; gold looted, experience, honour and fame; gold change; per-hour rates; reset |
+| Statistics | Fights per activity with wins, losses and win rate; meals, nests, quests, work shifts, stats trained, items repaired, items smelted, auction bids; gold looted, experience, honour and fame; gold change; per-hour rates; reset |
 | Log | Recent activity, filter to warnings only, clear |
 | Backup | Export to a file or the clipboard, import, reset to defaults |
 

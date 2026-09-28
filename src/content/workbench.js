@@ -66,6 +66,22 @@
     return response.text();
   }
 
+  // POST a game form (not AJAX), e.g. an auction bid; returns the page.
+  async function post(url, body) {
+    const csrf = document.querySelector('meta[name="csrf-token"]');
+    const response = await pageFetch()(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        ...(csrf ? { 'X-CSRF-Token': csrf.getAttribute('content') } : {}),
+      },
+      body,
+    });
+    if (!response.ok) throw new ActionError(`Sending the form failed (${response.status})`);
+    return response.text();
+  }
+
   const forge = (sh, submod, slot, params = '') =>
     ajax(sh, `mod=forge&submod=${submod}`, `mod=forge&submod=${submod}&mode=workbench&slot=${slot}${params ? `&${params}` : ''}`);
 
@@ -106,14 +122,20 @@
 
   // All eight bags come with every page that shows the inventory, as
   // new BagLoader(..., JSON.parse('[["<div ...>", ...], ...]')).
-  function readBags(html) {
+  function bagDocs(html) {
     const m = html.match(/new BagLoader\([\s\S]*?JSON\.parse\('((?:[^'\\]|\\.)*)'\)/);
     if (!m) throw new ActionError('Could not read the inventory bags');
     const literal = m[1].replace(/\\(u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|.)/g, (_, e) =>
       e[0] === 'u' || e[0] === 'x' ? String.fromCharCode(parseInt(e.slice(1), 16)) : { n: '\n', r: '\r', t: '\t' }[e] || e
     );
-    return JSON.parse(literal).map((bag, i) => {
-      const doc = new DOMParser().parseFromString(bag.join(''), 'text/html');
+    return JSON.parse(literal).map((bag) => new DOMParser().parseFromString(bag.join(''), 'text/html'));
+  }
+
+  // Every item element in the bags.
+  const readBagItems = (html) => bagDocs(html).flatMap((doc) => Array.from(doc.querySelectorAll('[data-content-type]')));
+
+  function readBags(html) {
+    return bagDocs(html).map((doc, i) => {
       const cells = Array.from(doc.querySelectorAll('[data-content-type]')).map((el) => ({
         x: Number(el.dataset.positionX),
         y: Number(el.dataset.positionY),
@@ -381,7 +403,7 @@
   GBot.actions.repair = repair;
   GBot.workbench = { readDoll, readBags, readSlots, readStock, stockTotal, storePackagedResources };
   // Request helpers shared with the smelter (smelter.js).
-  GBot.forge = { getDoc, ajax, moveItem, tooltipLines, readBags, readSlots, freeBagSpot, RENT_GOLD };
+  GBot.forge = { getDoc, ajax, post, moveItem, tooltipLines, readBags, readBagItems, readSlots, freeBagSpot, RENT_GOLD };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = GBot.workbench;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
