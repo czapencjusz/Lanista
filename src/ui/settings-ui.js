@@ -366,6 +366,7 @@
           ['nest', 'Nests searched'],
           ['training', 'Stats trained'],
           ['repairs', 'Items repaired'],
+          ['smelted', 'Items smelted'],
           ['quests', 'Quests finished'],
           ['work', 'Work shifts'],
         ]) {

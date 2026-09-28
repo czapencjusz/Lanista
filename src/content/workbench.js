@@ -380,6 +380,8 @@
 
   GBot.actions.repair = repair;
   GBot.workbench = { readDoll, readBags, readSlots, readStock, stockTotal, storePackagedResources };
+  // Request helpers shared with the smelter (smelter.js).
+  GBot.forge = { getDoc, ajax, moveItem, tooltipLines, readBags, readSlots, freeBagSpot, RENT_GOLD };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = GBot.workbench;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

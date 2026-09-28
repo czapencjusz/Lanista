@@ -50,6 +50,7 @@
         "src/content/brain.js",
         "src/content/actions.js",
         "src/content/workbench.js",
+        "src/content/smelter.js",
         "src/ui/dom.js",
         "src/ui/styles.js",
         "src/ui/schema.js",

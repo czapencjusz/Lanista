@@ -37,6 +37,13 @@
       // "Repair all" run started from the overview button:
       // { done: [doll slots], skipped: [names], repaired, failures }.
       repairAll: null,
+      // Items ticked for smelting on the packages page ({ cn, name, basis,
+      // w, h }), when to look at the smelter next (0 = nothing to do), and
+      // failures of the item at the head of the queue.
+      smeltQueue: [],
+      smeltNext: 0,
+      smeltFailures: 0,
+      smeltFailingCn: null,
       questSteps: { since: 0, count: 0 },
       breakUntil: 0,
       nextBreakAt: 0,
@@ -54,6 +61,7 @@
         nest: 0,
         training: 0,
         repairs: 0,
+        smelted: 0,
         goldSpent: 0,
         goldStart: null,
         goldNow: null,
@@ -85,6 +93,7 @@
       },
       avoid: { arena: { ...((memory.avoid && memory.avoid.arena) || {}) }, circus: { ...((memory.avoid && memory.avoid.circus) || {}) } },
       repairSkip: { ...(memory.repairSkip || {}) },
+      smeltQueue: Array.isArray(memory.smeltQueue) ? memory.smeltQueue : [],
       log: Array.isArray(memory.log) ? memory.log : [],
     };
   }
@@ -199,6 +208,12 @@
     const repairing = repairDecision(settings, memory, now);
     if (repairing) return repairing;
 
+    // Smelting only sends requests (no page change) and never touches the
+    // character, so it goes before the fights.
+    if (settings.smelting.enabled && memory.smeltNext && memory.smeltNext <= now && !isBlocked(memory, 'smelt', now)) {
+      return { type: 'smelt', reason: 'Smelting' };
+    }
+
     if (wantsTraining(state, settings, memory, now)) {
       return { type: 'training', reason: 'Train a stat with spare gold' };
     }
@@ -230,6 +245,8 @@
     if (settings.work.enabled && !isBlocked(memory, 'work', now) && shouldWork(state, settings)) {
       return { type: 'work', reason: 'Out of expedition/dungeon points' };
     }
+
+    if (settings.smelting.enabled && memory.smeltNext > now) wake.push({ label: 'Smelting', at: memory.smeltNext });
 
     const maxIdleMs = settings.timing.maxIdle * 1000;
     let next = { label: 'Re-check', at: now + maxIdleMs };
@@ -281,6 +298,17 @@
     if (!cfg.bonusesFirst || chosen !== 3) return chosen;
     const pending = enemies.slice(0, 3).findIndex((e) => e && e.learnable > 0);
     return pending >= 0 ? pending : chosen;
+  }
+
+  // When to look at the smelter again, from its slots (as in slotsData):
+  // now when a smelt is done, or a queued item can go into a free slot;
+  // otherwise when the first running smelt ends; 0 when there is nothing to do.
+  function nextSmeltCheck(slots, queued, now) {
+    const stateOf = (s) => s && s['forge_slots.state'];
+    if (slots.some((s) => stateOf(s) === 'finished-succeeded')) return now;
+    if (queued > 0 && slots.some((s) => stateOf(s) === 'closed')) return now + 60 * 1000;
+    const ends = slots.filter((s) => stateOf(s) === 'crafting').map((s) => now + Math.max(0, Number(s['forge_slots.finishedIn']) || 0) * 1000);
+    return ends.length ? Math.min(...ends) + 5000 : 0;
   }
 
   // Does the "Repair all" button take this item? (at or below the cutoff)
@@ -589,6 +617,7 @@
     pickRepair,
     inRepairAll,
     expeditionTarget,
+    nextSmeltCheck,
     freeSpot,
     materialsAvailable,
     recordFight,

@@ -109,6 +109,13 @@
       maxQuality: 1,
     },
 
+    smelting: {
+      // Smelt the items ticked on the packages page.
+      enabled: true,
+      // Where the resources go: 'horreum' | 'packages'.
+      storeIn: 'horreum',
+    },
+
     quests: {
       enabled: false,
       types: {
@@ -187,6 +194,7 @@
     'training.keepGold': { int: true, min: 0, max: 2000000000 },
     'repair.belowPercent': { int: true, min: 1, max: 99 },
     'repair.allUpToPercent': { int: true, min: 1, max: 99 },
+    'smelting.storeIn': { enum: ['horreum', 'packages'] },
     'repair.maxQuality': { int: true, min: -1, max: 4 },
     'schedule.start': { pattern: TIME },
     'schedule.end': { pattern: TIME },

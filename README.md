@@ -25,6 +25,7 @@ through the game the way a player would.
 | **Pantheon quests** | Optional. Collects finished quests and accepts the best-paying new one of the types you pick. It skips quests for places you do not fight at and for activities that are switched off, and stops when all quest slots are taken. |
 | **Pop-ups** | Collects the daily login bonus and closes notification dialogs. |
 | **Packages** | A **Store all resources in the Horreum** button on the packages page moves every resource from all your packages into the Horreum in one go. Items and food stay in the packages. |
+| **Smelting** | Tick weapons, armour and jewellery on the packages page (one by one, or **Tick all on this page**) to queue them for smelting. While running, the bot fills free smelter slots from the queue, pays the rent in gold and puts the resources of finished smelts in the Horreum (or in a package). |
 
 **The bot never spends rubies.** Workbench rent is paid in gold, and expedition bonuses are only
 learned by fighting, never bought.
@@ -116,12 +117,13 @@ what is enabled. Changes save as you make them and take effect immediately.
 | Stable work | Job number, hours |
 | Training | Gold to always keep, stats to train |
 | Repair | Repair below X% conditioning, cutoff for the *Repair all* button, best material quality to use |
+| Smelting | Smelting on/off, put the resources in the Horreum or in a package |
 | Quests | Quest types to accept (combat, arena, circus, expedition, dungeon, items, work), only quests for my location and dungeon, only quests for activities that are on |
 | Schedule | Active hours, random breaks |
 | Timing & safety | Click delay range, longest idle time, failed attempts before pausing, pause length |
 | Notifications | Which desktop notifications to show |
 | Interface | Show the bar, floating or docked |
-| Statistics | Fights per activity with wins, losses and win rate; meals, nests, quests, work shifts, stats trained, items repaired; gold looted, experience, honour and fame; gold change; per-hour rates; reset |
+| Statistics | Fights per activity with wins, losses and win rate; meals, nests, quests, work shifts, stats trained, items repaired, items smelted; gold looted, experience, honour and fame; gold change; per-hour rates; reset |
 | Log | Recent activity, filter to warnings only, clear |
 | Backup | Export to a file or the clipboard, import, reset to defaults |
 
@@ -180,6 +182,7 @@ src/content/brain.js          pure decision engine: priority, schedule, retries,
                               quest choice, training, repair planning
 src/content/actions.js        performs decisions: navigate, click, drag food, fill forms
 src/content/workbench.js      gear repair through the game's own AJAX requests
+src/content/smelter.js        smelting queue: packages → smelter → Horreum, the same way
 src/content/main.js           runner: show the bar, then read state → decide → act, once per
                               page load; also the overview page's "Repair all" button
 src/content/panel.js          in-game control bar + settings window (shadow DOM)

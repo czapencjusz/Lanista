@@ -218,6 +218,24 @@
       ],
     },
     {
+      id: 'smelting',
+      title: 'Smelting',
+      icon: 'smelting',
+      enable: 'smelting.enabled',
+      description: 'Tick items on the packages page to smelt them. While the bot runs it fills free smelter slots from that queue and collects finished smelts. Rent is paid in gold, never rubies.',
+      fields: [
+        {
+          path: 'smelting.storeIn',
+          type: 'select',
+          label: 'Put the resources',
+          options: [
+            { value: 'horreum', label: 'In the Horreum' },
+            { value: 'packages', label: 'In a package' },
+          ],
+        },
+      ],
+    },
+    {
       id: 'quests',
       title: 'Quests',
       icon: 'quests',

@@ -174,7 +174,10 @@
       if (box) box.remove();
       return;
     }
-    if (box) return;
+    if (box) {
+      renderSmeltTicks(box);
+      return;
+    }
     box = document.createElement('div');
     box.id = 'gbot-store-resources';
     box.style.cssText = 'margin:6px 0;text-align:center;font:11px Arial,sans-serif;color:#4a2d0d';
@@ -202,11 +205,73 @@
         button.disabled = false;
       }
     });
-    box.append(button, status);
+    const tickAll = document.createElement('button');
+    tickAll.type = 'button';
+    tickAll.className = 'awesome-button gbot-smelt-all';
+    tickAll.style.marginLeft = '6px';
+    tickAll.addEventListener('click', () => {
+      const items = smeltableOnPage();
+      const all = items.length && items.every((el) => smeltQueued(el));
+      setSmeltQueued(items, !all);
+    });
+    const queueLine = document.createElement('div');
+    queueLine.className = 'gbot-smelt-status';
+    queueLine.style.marginTop = '3px';
+    box.append(button, tickAll, status, queueLine);
     // Above the packages ("Content"), with or without add-ons restyling the page.
     const header = wrapper.previousElementSibling;
     const anchor = header && header.classList.contains('section-header') ? header : wrapper;
     anchor.parentNode.insertBefore(box, anchor);
+    renderSmeltTicks(box);
+  }
+
+  // ------------------------------------------------ smelting queue (packages)
+
+  const packageCn = (el) => util.parseNumber(el.parentElement.getAttribute('data-container-number'));
+  const smeltableOnPage = () =>
+    Array.from(document.querySelectorAll('#packages_wrapper .packageItem [data-content-type]')).filter(GBot.smelter.isSmeltable);
+  const smeltQueued = (el) => !!(memory && memory.smeltQueue.some((q) => q.cn === packageCn(el)));
+
+  function setSmeltQueued(items, on) {
+    const entries = items.map(GBot.smelter.queueEntry);
+    editMemory((m) => {
+      for (const entry of entries) {
+        const i = m.smeltQueue.findIndex((q) => q.cn === entry.cn);
+        if (on && i < 0) m.smeltQueue.push(entry);
+        if (!on && i >= 0) m.smeltQueue.splice(i, 1);
+      }
+      // Let the bot look at the smelter soon.
+      if (on && m.smeltQueue.length) m.smeltNext = Math.min(m.smeltNext || Infinity, Date.now());
+    }).then(() => renderPackagesButton(lastState));
+  }
+
+  // One tickbox per smeltable item, the "tick all" label and the queue size.
+  function renderSmeltTicks(box) {
+    const items = smeltableOnPage();
+    for (const el of items) {
+      const pkg = el.closest('.packageItem');
+      let tick = pkg.querySelector('.gbot-smelt-tick');
+      if (!tick) {
+        if (getComputedStyle(pkg).position === 'static') pkg.style.position = 'relative';
+        tick = document.createElement('input');
+        tick.type = 'checkbox';
+        tick.className = 'gbot-smelt-tick';
+        tick.title = 'Smelt this item (GBot)';
+        tick.style.cssText = 'position:absolute;top:2px;right:2px;z-index:5;margin:0;width:15px;height:15px;cursor:pointer;accent-color:#b8382b';
+        tick.addEventListener('click', (e) => e.stopPropagation());
+        tick.addEventListener('change', () => setSmeltQueued([el], tick.checked));
+        pkg.appendChild(tick);
+      }
+      tick.checked = smeltQueued(el);
+    }
+    const tickAll = box.querySelector('.gbot-smelt-all');
+    const all = items.length && items.every((el) => smeltQueued(el));
+    tickAll.textContent = all ? 'Untick all on this page' : 'Tick all on this page for smelting';
+    tickAll.disabled = !items.length;
+    tickAll.title = 'Queue every weapon, armour and jewellery item on this page for smelting. Smelting destroys the item and gives resources.';
+    const queued = memory ? memory.smeltQueue.length : 0;
+    const note = !settings || !settings.smelting.enabled ? ' (smelting is off under Settings > Smelting)' : !settings.enabled ? ' (starts when the bot runs)' : '';
+    box.querySelector('.gbot-smelt-status').textContent = queued ? `${queued} item${queued === 1 ? '' : 's'} queued for smelting${note}` : '';
   }
 
   function renderPageButtons(state) {
@@ -303,8 +368,9 @@
       return;
     }
 
-    // Quests and repairs are multi-step and keep their own failure counts.
-    if (decision.type !== 'quests' && decision.type !== 'repair') {
+    // Quests, repairs and smelting are multi-step and keep their own
+    // failure counts.
+    if (decision.type !== 'quests' && decision.type !== 'repair' && decision.type !== 'smelt') {
       const attempt = brain.beginAttempt(memory, decision.type, now, settings, state);
       if (!attempt.ok) {
         log('warn', attempt.message);
@@ -316,7 +382,7 @@
     }
     // Multi-step actions (navigate, then act) re-decide on every page; log
     // the reason once per run. Repairs log their own steps (workbench.js).
-    if (decision.type === 'repair') log('debug', decision.reason);
+    if (decision.type === 'repair' || decision.type === 'smelt') log('debug', decision.reason);
     else if (!memory.pending || memory.pending.attempts === 1) log('info', decision.reason);
     await persist();
     await send({ type: 'heartbeat', host: location.host, nextAt: now + 60000, enabled: true });
@@ -386,6 +452,7 @@
     if (changes[MEMORY_KEY] && !running && changes[MEMORY_KEY].newValue) {
       memory = brain.normalizeMemory(changes[MEMORY_KEY].newValue, Date.now());
       panel.update({ memory, status: statusFor(lastState) });
+      renderPageButtons(lastState);
     }
     if (!changes[S.STORAGE_KEY]) return;
     const next = S.normalize(changes[S.STORAGE_KEY].newValue);
