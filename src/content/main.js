@@ -21,6 +21,8 @@
   let running = false;
   let timer = null;
   let lastAlertAt = 0;
+  // True while the packages -> Horreum transfer runs; the bot waits.
+  let storing = false;
 
   window.addEventListener('beforeunload', () => {
     unloading = true;
@@ -166,6 +168,64 @@
     button.title = `Repair every item on your character at or below ${cutoff}% conditioning at the workbench, with Horreum materials up to ${quality} (lowest quality first). Rent is paid in gold. Works even while the bot is stopped. Change the cutoff under Settings > Repair.`;
   }
 
+  // "Send resources to the Horreum" button at the top of the packages page.
+  function renderHorreumButton(state) {
+    let box = document.getElementById('gbot-horreum');
+    const container = document.querySelector(GBot.selectors.SEL.packages.container);
+    if (!state || !state.inGame || state.page.mod !== 'packages' || !container) {
+      if (box) box.remove();
+      return;
+    }
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'gbot-horreum';
+      box.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:6px 0 8px;font:11px Arial,sans-serif;color:#4a2d0d';
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'awesome-button';
+      button.textContent = 'Send resources to the Horreum';
+      button.title =
+        'Moves the resources from all your packages (every page) to the Horreum, using the Horreum\'s own "Store resources" function. ' +
+        'Resources that do not fit are sold, never deleted. Resources in your bags stay where they are.';
+      const status = document.createElement('span');
+      status.className = 'gbot-horreum-status';
+      button.addEventListener('click', () => storeResources(button, status));
+      box.append(button, status);
+      container.insertBefore(box, container.firstChild);
+    }
+    if (storing) return;
+    const { packages } = GBot.horreum.countPackageResources(document);
+    box.querySelector('.gbot-horreum-status').textContent = packages
+      ? `${packages} resource package${packages === 1 ? '' : 's'} on this page`
+      : 'No resources on this page (other pages may have some)';
+  }
+
+  async function storeResources(button, status) {
+    if (storing) return;
+    storing = true;
+    cancel();
+    button.disabled = true;
+    status.style.color = '';
+    try {
+      await GBot.horreum.storeFromPackages({
+        sh: GBot.state.readSessionHash(document, location),
+        onStep: (text) => (status.textContent = text),
+      });
+      log('info', 'Packages: resources sent to the Horreum');
+      await persist();
+      status.textContent = 'Done. Reloading…';
+      location.reload();
+    } catch (e) {
+      storing = false;
+      button.disabled = false;
+      status.textContent = e.message;
+      status.style.color = '#9b2a20';
+      log('warn', `Packages to Horreum: ${e.message}`);
+      await persist().catch(() => {});
+      if (settings && settings.enabled) schedule(tick, 3000);
+    }
+  }
+
   // Remember facts about the game for the settings UI and statistics.
   function recordGameInfo(state, now) {
     if (!state.inGame) return;
@@ -195,10 +255,11 @@
     const decision = brain.decide(state, settings, memory, now);
     panel.update({ settings, memory, decision, state, status: statusFor(state) });
     renderRepairButton(state);
+    renderHorreumButton(state);
   }
 
   async function tick() {
-    if (running || unloading || !extensionAlive()) return;
+    if (running || unloading || storing || !extensionAlive()) return;
     running = true;
     cancel();
     let state = null;
@@ -222,6 +283,7 @@
 
       panel.update({ settings, memory, decision, state, status: statusFor(state) });
       renderRepairButton(state);
+      renderHorreumButton(state);
       await persist();
       await execute(decision, state);
     } catch (e) {
