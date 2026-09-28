@@ -9,7 +9,8 @@
     "test:e2e": "node --test --test-concurrency=1 \"test/e2e/*.test.js\"",
     "lint": "node scripts/check-syntax.mjs",
     "icons": "node scripts/make-icons.mjs",
-    "build": "node scripts/build.mjs"
+    "build": "node scripts/build.mjs",
+    "site": "node scripts/build-site.mjs"
   },
   "devDependencies": {
     "jquery": "3.7.1",
