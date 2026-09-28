@@ -117,3 +117,31 @@ test('"Repair all" skips items above its cutoff (60% by default, changeable)', (
   assert.equal(brain.inRepairAll(item(84), custom), true);
   assert.equal(settingsModule.sanitizeSettings({ repair: { allUpToPercent: 100 } }).repair.allUpToPercent, 99, 'full items are never repaired');
 });
+
+test('"Store all resources" sends only the packages to the Horreum and counts what arrived', async () => {
+  // Request shape of the Horreum's own form (forgeStorage.js, s60-en 2026-09).
+  const page = new JSDOM('<meta name="csrf-token" content="tok">', { url: 'https://s1-en.gladiatus.gameforge.com/game/index.php' }).window;
+  const saved = { document: globalThis.document, location: globalThis.location, fetch: globalThis.fetch };
+  const calls = [];
+  Object.assign(globalThis, {
+    document: page.document,
+    location: page.location,
+    fetch: async (url, init = {}) => {
+      calls.push({ url: String(url), init });
+      if (String(url).includes('submod=storageIn')) {
+        return { ok: true, text: async () => JSON.stringify({ amounts: { 24: { '-1': 16, 0: 207 }, 3: { 0: 320 } } }) };
+      }
+      return { ok: true, text: async () => `<input id="remove-resource-amount" data-max='{"24":{"-1":11,"0":207},"3":{"0":314}}'>` };
+    },
+  });
+  try {
+    assert.equal(workbench.stockTotal({ 24: { '-1': 11, 0: 207 }, 3: { 0: 314 } }), 532);
+    assert.equal(await workbench.storePackagedResources('abc'), 11, '5 aquamarine + 6 leather');
+    const store = calls.find((c) => c.url.includes('submod=storageIn'));
+    assert.equal(store.init.method, 'POST');
+    assert.match(store.init.body, /^inventory=0&packages=1&sell=1&a=\d+&sh=abc$/);
+    assert.equal(store.init.headers['X-CSRF-Token'], 'tok');
+  } finally {
+    Object.assign(globalThis, saved);
+  }
+});

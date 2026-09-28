@@ -166,6 +166,54 @@
     button.title = `Repair every item on your character at or below ${cutoff}% conditioning at the workbench, with Horreum materials up to ${quality} (lowest quality first). Rent is paid in gold. Works even while the bot is stopped. Change the cutoff under Settings > Repair.`;
   }
 
+  // "Store all resources in the Horreum" button on the packages page.
+  function renderPackagesButton(state) {
+    let box = document.getElementById('gbot-store-resources');
+    const wrapper = document.getElementById('packages_wrapper');
+    if (!(state && state.inGame && state.page.mod === 'packages') || !wrapper) {
+      if (box) box.remove();
+      return;
+    }
+    if (box) return;
+    box = document.createElement('div');
+    box.id = 'gbot-store-resources';
+    box.style.cssText = 'margin:6px 0;text-align:center;font:11px Arial,sans-serif;color:#4a2d0d';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'awesome-button';
+    button.textContent = 'Store all resources in the Horreum';
+    button.title = 'Move every resource from all your packages into the Horreum, like the Horreum\'s own "Store resources" with only "Packages" ticked. Surplus above 99,999 per type and quality is sold. Items and food stay in the packages.';
+    const status = document.createElement('div');
+    status.style.marginTop = '3px';
+    button.addEventListener('click', async () => {
+      if (button.disabled) return;
+      button.disabled = true;
+      status.textContent = 'Storing…';
+      try {
+        const stored = await GBot.workbench.storePackagedResources(state.sh);
+        const message = stored > 0 ? `Stored ${stored.toLocaleString('en-US')} resources from the packages in the Horreum` : 'There were no resources in the packages';
+        status.textContent = message;
+        log('info', message);
+        await persist();
+        if (stored > 0) setTimeout(() => location.reload(), 1500);
+        else button.disabled = false;
+      } catch (e) {
+        status.textContent = `Could not store the resources: ${e.message}`;
+        button.disabled = false;
+      }
+    });
+    box.append(button, status);
+    // Above the packages ("Content"), with or without add-ons restyling the page.
+    const header = wrapper.previousElementSibling;
+    const anchor = header && header.classList.contains('section-header') ? header : wrapper;
+    anchor.parentNode.insertBefore(box, anchor);
+  }
+
+  function renderPageButtons(state) {
+    renderRepairButton(state);
+    renderPackagesButton(state);
+  }
+
   // Remember facts about the game for the settings UI and statistics.
   function recordGameInfo(state, now) {
     if (!state.inGame) return;
@@ -194,7 +242,7 @@
     lastState = state;
     const decision = brain.decide(state, settings, memory, now);
     panel.update({ settings, memory, decision, state, status: statusFor(state) });
-    renderRepairButton(state);
+    renderPageButtons(state);
   }
 
   async function tick() {
@@ -221,7 +269,7 @@
       }
 
       panel.update({ settings, memory, decision, state, status: statusFor(state) });
-      renderRepairButton(state);
+      renderPageButtons(state);
       await persist();
       await execute(decision, state);
     } catch (e) {
@@ -300,7 +348,7 @@
 
     await persist();
     panel.update({ memory, status: statusFor(state) });
-    renderRepairButton(state);
+    renderPageButtons(state);
     if (!result || result.navigated || unloading) return;
     if (result.refresh) schedule(() => navigate(overviewUrl(state), 'overview (refresh)', 'debug'), 1500);
     else if (result.retick) schedule(tick, result.delayMs || 1000);

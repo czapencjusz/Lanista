@@ -24,6 +24,7 @@ through the game the way a player would.
 | **Stable work** | Optional. Once you are out of expedition and dungeon points, it starts the job and number of hours you chose. |
 | **Pantheon quests** | Optional. Collects finished quests and accepts the best-paying new one of the types you pick. It skips quests for places you do not fight at and for activities that are switched off, and stops when all quest slots are taken. |
 | **Pop-ups** | Collects the daily login bonus and closes notification dialogs. |
+| **Packages** | A **Store all resources in the Horreum** button on the packages page moves every resource from all your packages into the Horreum in one go. Items and food stay in the packages. |
 
 **The bot never spends rubies.** Workbench rent is paid in gold, and expedition bonuses are only
 learned by fighting, never bought.

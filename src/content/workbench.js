@@ -354,8 +354,32 @@
   }
 
   GBot.actions = GBot.actions || {};
+  // ------------------------------------------------------------- horreum
+
+  // Total number of resources in a Horreum stock ({ type: { quality: n } }).
+  const stockTotal = (stock) =>
+    Object.values(stock || {}).reduce((sum, byQuality) => sum + Object.values(byQuality || {}).reduce((n, v) => n + (Number(v) || 0), 0), 0);
+
+  // Moves every resource in the packages into the Horreum, like the
+  // Horreum's own "Store resources" form with only "Packages" ticked.
+  // Surplus above the Horreum's limit (99,999 per type and quality) is sold,
+  // the game's default. Returns how many resources were stored.
+  async function storePackagedResources(sh) {
+    const before = readStock((await getDoc(sh, { mod: 'forge', submod: 'storage' })).doc);
+    const text = await ajax(sh, 'mod=forge&submod=storageIn', 'inventory=0&packages=1&sell=1');
+    let data = null;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      throw new ActionError('Unexpected answer from the Horreum');
+    }
+    if (data.error) throw new ActionError(String(data.error));
+    const after = data.amounts || readStock((await getDoc(sh, { mod: 'forge', submod: 'storage' })).doc);
+    return stockTotal(after) - stockTotal(before);
+  }
+
   GBot.actions.repair = repair;
-  GBot.workbench = { readDoll, readBags, readSlots, readStock };
+  GBot.workbench = { readDoll, readBags, readSlots, readStock, stockTotal, storePackagedResources };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = GBot.workbench;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
