@@ -3,7 +3,8 @@
 //
 //   collect   finished smelts -> Horreum ("Store resources") or a package
 //   fill      for each free smelter slot and queued item:
-//             package -> free bag spot -> preview -> rent (gold) -> start
+//             package -> free bag spot -> preview -> rent (gold), which
+//             starts the smelt
 //
 // The queue (memory.smeltQueue) holds packages by their container number,
 // which stays the same until the package is opened. Smelting takes a while
@@ -99,9 +100,16 @@
     }
 
     await ctx.humanDelay();
+    // In the smelter renting the slot starts smelting at once (the rent
+    // buttons are the "Smelt" button); a separate "start" is refused (400).
+    // Only send it if the game ever leaves the slot waiting, as the
+    // workbench does.
     await smelt(sh, 'rent', slot, `rent=${GBot.forge.RENT_GOLD}&item=${iid}`);
-    await smelt(sh, 'start', slot);
-    const started = (await readSmelter(sh))[slot];
+    let started = (await readSmelter(sh))[slot];
+    if (state(started) === 'opened') {
+      await smelt(sh, 'start', slot);
+      started = (await readSmelter(sh))[slot];
+    }
     if (state(started) !== 'crafting' && state(started) !== 'finished-succeeded') {
       throw new ActionError(`Smelting ${entry.name} did not start (slot ${slot + 1} is ${state(started) || 'unknown'})`);
     }

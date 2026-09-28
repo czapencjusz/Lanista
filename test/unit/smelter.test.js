@@ -16,19 +16,27 @@ const entry = { cn: CN, name: 'Táliths Sandals', basis: '8-1', w: 2, h: 2 };
 
 // Page shapes from s60-en (2026-09), trimmed to what the bot reads.
 const tip = (name) => JSON.stringify([[[name, 'lime']]]).replace(/"/g, '&quot;');
-const packagesPage = (present) =>
-  present
-    ? `<div class="packageItem"><div data-container-number="${CN}"><div data-content-type="512" data-basis="8-1" data-measurement-x="2" data-measurement-y="2" data-tooltip="${tip('Táliths Sandals')}"></div></div></div>`
-    : '<div id="packages_wrapper"></div>';
+const packageHtml = (cn, name) =>
+  `<div class="packageItem"><div data-container-number="${cn}"><div data-content-type="512" data-basis="8-1" data-measurement-x="2" data-measurement-y="2" data-tooltip="${tip(name)}"></div></div></div>`;
+const packagesPage = (present, extra) =>
+  present ? packageHtml(CN, 'Táliths Sandals') + extra.map((e) => packageHtml(e.cn, e.name)).join('') : '<div id="packages_wrapper"></div>';
 const bagLiteral = JSON.stringify([[], [], [], [], [], [], [], []]).replace(/"/g, '\\"');
 const overviewPage = `<script>new BagLoader(jQuery('#inv'), jQuery('#inventory_nav'), JSON.parse('${bagLiteral}'));</script>`;
 const smelteryPage = (slots) => `<script>var slotsData = ${JSON.stringify(slots)};\nvar x = 1;</script>`;
 const RELOAD = 'document.location.href=document.location.href;';
 
-// A mock game: answers the smelter's requests and records them.
-function mockGame({ slots, present = true }) {
+// A mock game: answers the smelter's requests and records them. As on the
+// live server, renting a smelter slot starts smelting at once and a separate
+// "start" is refused with HTTP 400 (rentStarts: false mimics the workbench,
+// where the slot waits for "start").
+function mockGame({ slots, present = true, rentStarts = true, extra = [] }) {
   const calls = [];
   let smelterSlots = slots;
+  const setSlot = (body, value) => {
+    const n = Number(/slot=(\d+)/.exec(body)[1]);
+    smelterSlots = smelterSlots.map((s, i) => (i === n ? value : s));
+  };
+  const crafting = { 'forge_slots.state': 'crafting', 'forge_slots.finishedIn': 3382 };
   const fetch = async (url, init = {}) => {
     const u = new URL(url);
     const body = init.body || '';
@@ -37,14 +45,24 @@ function mockGame({ slots, present = true }) {
     calls.push(`${q.get('mod')}/${q.get('submod') || ''} ${detail}`.trim());
     const reply = (text) => ({ ok: true, text: async () => text });
     if (u.pathname.endsWith('index.php')) {
-      if (u.searchParams.get('mod') === 'packages') return reply(packagesPage(present));
+      if (u.searchParams.get('mod') === 'packages') return reply(packagesPage(present, extra));
       if (u.searchParams.get('mod') === 'overview') return reply(overviewPage);
       return reply(smelteryPage(smelterSlots));
     }
     const submod = u.searchParams.get('submod');
     if (submod === 'move') return reply(JSON.stringify({ to: { data: { itemId: ITEM_ID } } }));
-    if (submod === 'getSmeltingPreview') return reply(JSON.stringify({ slots: [{ 'forge_slots.state': 'closed', formula: { rent: { 2: 902, 3: 1 }, duration: 3382 } }] }));
-    if (submod === 'start') smelterSlots = smelterSlots.map((s, i) => (i === 0 ? { 'forge_slots.state': 'crafting', 'forge_slots.finishedIn': 3382 } : s));
+    if (submod === 'getSmeltingPreview') {
+      // All six slots, with the preview in the one asked about.
+      const n = Number(/slot=(\d+)/.exec(body)[1]);
+      const preview = { 'forge_slots.state': 'closed', formula: { rent: { 2: 902, 3: 1 }, duration: 3382 } };
+      return reply(JSON.stringify({ slots: smelterSlots.map((s, i) => (i === n ? preview : s)) }));
+    }
+    if (submod === 'rent') setSlot(body, rentStarts ? crafting : { 'forge_slots.state': 'opened' });
+    if (submod === 'start') {
+      const n = Number(/slot=(\d+)/.exec(body)[1]);
+      if (smelterSlots[n]['forge_slots.state'] !== 'opened') return { ok: false, status: 400, text: async () => '' };
+      setSlot(body, crafting);
+    }
     if (submod === 'storeSmelted' || submod === 'lootbox') smelterSlots = smelterSlots.map((s) => (s['forge_slots.state'] === 'finished-succeeded' ? { 'forge_slots.state': 'closed' } : s));
     return reply(RELOAD);
   };
@@ -92,14 +110,41 @@ test('a ticked package goes to the bag, then into a smelter slot rented for gold
     `inventory/move from=${CN} to=512 at=1,1`,
     `forge/getSmeltingPreview mod=forge&submod=getSmeltingPreview&mode=smelting&slot=0&iid=${ITEM_ID}&amount=1`,
     `forge/rent mod=forge&submod=rent&mode=smelting&slot=0&rent=2&item=${ITEM_ID}`,
-    'forge/start mod=forge&submod=start&mode=smelting&slot=0',
     'forge/smeltery',
     'forge/smeltery',
   ]);
+  assert.ok(!game.calls.some((c) => c.startsWith('forge/start')), 'renting already starts the smelt');
   assert.deepEqual(ctx.memory.smeltQueue, []);
   assert.equal(ctx.memory.stats.goldSpent, 902);
   assert.equal(ctx.memory.smeltNext, NOW + 3382 * 1000 + 5000, 'back when the smelt is done');
   assert.deepEqual(logs, ['info: Smelting Táliths Sandals (56:22, 902 gold)']);
+});
+
+test('one run fills every free slot from the queue (the 4-of-6 slots bug)', async () => {
+  const more = [
+    { cn: -11, name: 'Bilgs Sugilith pendant of Blocking', basis: '8-1', w: 2, h: 2 },
+    { cn: -12, name: 'Frientas Gold symbol of Calling', basis: '8-1', w: 2, h: 2 },
+  ];
+  const slots = closed();
+  slots[0] = { 'forge_slots.state': 'crafting', 'forge_slots.finishedIn': 1432 };
+  slots[1] = { 'forge_slots.state': 'crafting', 'forge_slots.finishedIn': 4251 };
+  slots[2] = { 'forge_slots.state': 'crafting', 'forge_slots.finishedIn': 2352 };
+  slots[3] = { 'forge_slots.state': 'crafting', 'forge_slots.finishedIn': 5748 };
+  const game = mockGame({ slots, extra: more });
+  const { ctx } = context(1_000_000, [entry, ...more]);
+  await withGame(game, () => GBot.actions.smelt(ctx));
+  const rented = game.calls.filter((c) => c.startsWith('forge/rent')).map((c) => /slot=(\d)/.exec(c)[1]);
+  assert.deepEqual(rented, ['4', '5'], 'slots 5 and 6 filled in the same run');
+  assert.equal(ctx.memory.smeltQueue.length, 1, 'the third item waits for a free slot');
+  assert.equal(ctx.memory.smeltNext, NOW + 1432 * 1000 + 5000, 'back when the first slot is free');
+});
+
+test('if the smelter ever waits for "start" after renting, the bot sends it', async () => {
+  const game = mockGame({ slots: closed(), rentStarts: false });
+  const { ctx } = context();
+  await withGame(game, () => GBot.actions.smelt(ctx));
+  assert.ok(game.calls.includes('forge/start mod=forge&submod=start&mode=smelting&slot=0'));
+  assert.deepEqual(ctx.memory.smeltQueue, []);
 });
 
 test('finished smelts go to the Horreum (or a package) before new ones start', async () => {
