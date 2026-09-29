@@ -17,10 +17,13 @@ const menu = (areas = 1) =>
      <a href="index.php?mod=underworld&submod=pray&sh=x">Pray</a>
      ${Array.from({ length: areas }, (_, i) => `<a href="index.php?mod=location&loc=${i}&sh=x">Area ${i}</a>`).join('')}
    </div>`;
-const box = (n, name, open, cost = '<span>1</span><div class="icon_expeditionpoints small"></div>') =>
-  `<div class="expedition_box"><div id="expedition_info${n}"><div class="expedition_name ellipsis">${name}</div></div>
+// As the live page leaves them after its script ran: every Attack button
+// enabled, locked enemies too. Whose turn it is only shows in the script.
+const box = (n, name, points, cost = '<span>1</span><div class="icon_expeditionpoints small"></div>') =>
+  `<div class="expedition_box" data-can-enable="true" data-costs="1" data-points="${points}" data-rubies="14" data-stage="${n}">
+     <div id="expedition_info${n}"><div class="expedition_name ellipsis">${name}</div></div>
      <div id="slider${n}" class="slider"></div>
-     <button id="expedition_button${n}" class="expedition_button awesome-button${open ? '' : ' disabled'}" type="button"${open ? '' : ' disabled'}>Attack</button>
+     <button id="expedition_button${n}" class="expedition_button awesome-button" type="button">Attack</button>
      <table class="expedition_cooldown_reduce"><tr id="cost${n}"><th>Cost:</th><td>${cost}</td></tr></table></div>`;
 const header = (points) =>
   `<div id="header_game"></div><span id="expeditionpoints_value_point">${points}</span><span id="expeditionpoints_value_pointmax">18</span>
@@ -30,9 +33,11 @@ const header = (points) =>
    <div id="cooldown_bar_dungeon"><a class="cooldown_bar_link" href="index.php?mod=dungeon&loc=0&sh=x"></a></div>
    <div id="cooldown_bar_fill_dungeon" class="cooldown_bar_fill cooldown_bar_fill_ready"></div><div id="cooldown_bar_text_dungeon">Go to dungeon</div>
    <span id="dungeonpoints_value_point">8</span><span id="dungeonpoints_value_pointmax">12</span>`;
-const areaPage = ({ points = 18, open = 2, cost } = {}) =>
-  `${header(points)}${menu(1)}<div id="content"><div id="underwold_enemies">
-     ${['Your shadow', 'Mercury', 'Dead Souls', 'Ferryman Charon'].map((name, i) => box(i + 1, name, i < open, cost)).join('')}
+const areaPage = ({ points = 18, next = 2, cost } = {}) =>
+  `${header(points)}${menu(1)}<div id="content">
+     <script>(function($) { var initialEnemy = ${next}; var currentEnemy = initialEnemy; })</script>
+     <div id="underwold_enemies">
+     ${['Your shadow', 'Mercury', 'Dead Souls', 'Ferryman Charon'].map((name, i) => box(i + 1, name, points, cost)).join('')}
    </div></div>`;
 
 function page(body, query) {
@@ -115,10 +120,11 @@ async function runExpedition(body) {
   }
 }
 
-test('attacks the newest open enemy of the newest area, only for expedition points', async () => {
-  const { result, clicked } = await runExpedition(areaPage({ open: 2 }));
-  assert.deepEqual(clicked, ['expedition_button2']);
+test('attacks the enemy whose turn it is in the newest area, only for expedition points', async () => {
+  const { result, clicked } = await runExpedition(areaPage({ next: 2 }));
+  assert.deepEqual(clicked, ['expedition_button2'], 'not the last enabled button: locked enemies look enabled too');
   assert.deepEqual(result, { navigated: true });
+  await assert.rejects(runExpedition(areaPage().replace(/var initialEnemy = \d+;/, '')), /Cannot tell which Underworld enemy is next/);
 
   await assert.rejects(runExpedition(areaPage({ points: 0 })), /Out of Underworld expedition points \(attacks would cost rubies\)/);
   const rubies = areaPage({ cost: '<span>1</span><div class="icon_rubies small"></div>' });

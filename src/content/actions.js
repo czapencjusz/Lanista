@@ -114,10 +114,19 @@
 
   // ------------------------------------------------------------- underworld
 
+  // The enemy whose turn it is in this Underworld area (1-based), or null.
+  function underworldEnemy() {
+    for (const script of document.querySelectorAll('script')) {
+      const m = SEL.underworld.nextEnemy.exec(script.textContent);
+      if (m) return Number(m[1]);
+    }
+    return null;
+  }
+
   // The Underworld's areas and enemies unlock one after another: fight the
-  // newest area (last in the location menu) and its newest open enemy. The
-  // stakes slider stays at its default, and an attack is only made while it
-  // costs expedition points (without them it would cost rubies).
+  // newest area (last in the location menu) and the enemy whose turn it is.
+  // The stakes slider stays at its default, and an attack is only made while
+  // expedition points pay for it (without them it would cost rubies).
   async function underworldExpedition(ctx) {
     const { state } = ctx;
     const target = lastLocationLink();
@@ -126,17 +135,20 @@
     const onPage = state.page.mod === 'location' && numericLocation(state.page.loc) === wanted && $(SEL.underworld.enemies);
     if (!onPage) return ctx.navigate(target, 'Underworld area');
 
-    const open = $$(SEL.expedition.attackButtons, $(SEL.underworld.enemies)).filter(
-      (b) => !b.disabled && !b.classList.contains(SEL.expedition.disabledClass)
-    );
-    if (!open.length) throw new ActionError('No Underworld enemy can be attacked right now');
-    const button = open[open.length - 1];
+    const buttons = $$(SEL.expedition.attackButtons, $(SEL.underworld.enemies));
+    const next = underworldEnemy();
+    const button = next ? buttons[next - 1] : null;
+    if (!button) throw new ActionError(`Cannot tell which Underworld enemy is next (${next === null ? 'not on the page' : `#${next} of ${buttons.length}`})`);
+    if (button.disabled || button.classList.contains(SEL.expedition.disabledClass)) {
+      throw new ActionError(`Underworld enemy #${next} cannot be attacked right now`);
+    }
     const box = button.closest(SEL.expedition.box);
-    if (!(state.expedition.points > 0) || !box || !box.querySelector(SEL.underworld.pointsCost)) {
+    const paid = box && box.querySelector(SEL.underworld.pointsCost) && Number(box.dataset.points) >= Number(box.dataset.costs || 1);
+    if (!(state.expedition.points > 0) || !paid) {
       throw new ActionError('Out of Underworld expedition points (attacks would cost rubies)');
     }
     const name = ((box.querySelector('.expedition_name') || {}).textContent || '').trim();
-    await click(ctx, button, `attack Underworld enemy ${name || `#${open.length}`}`);
+    await click(ctx, button, `attack Underworld enemy ${name || `#${next}`}`);
     if (await expectNavigation(ctx)) return { navigated: true };
     throw new ActionError('Underworld attack did not open a combat report');
   }

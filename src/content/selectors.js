@@ -134,6 +134,11 @@
       marker: 'a[href*="?mod=underworld"]',
       // Enemies of an Underworld area (the game's own spelling).
       enemies: '#underwold_enemies',
+      // The enemy whose turn it is (1-based), from the page's script. The
+      // Attack buttons cannot tell: the page enables every one that points
+      // (or rubies) would pay for, locked enemies too, and the game sends a
+      // locked one's attack straight back to the area page.
+      nextEnemy: /var\s+initialEnemy\s*=\s*(\d+)/,
       // What an attack costs: expedition points, or rubies once they are gone.
       pointsCost: '.icon_expeditionpoints',
       // Close ("Cancel") button of the game's notification dialog.
