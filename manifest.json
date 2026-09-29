@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "GBot - Gladiatus Autopilot",
   "short_name": "GBot",
-  "version": "1.1.0",
-  "description": "Automates Gladiatus: expeditions, dungeons, arena, circus, healing, quests and stable work, with an in-game control bar and settings.",
+  "version": "2.0.0",
+  "description": "Automates Gladiatus: expeditions, dungeons, Underworld, arena, circus, healing, quests, work, repair, smelting, packages, auctions.",
   "minimum_chrome_version": "121",
   "icons": {
     "16": "icons/icon16.png",

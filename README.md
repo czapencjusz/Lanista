@@ -220,7 +220,8 @@ npm run build        # -> dist/gbot-chrome.zip and dist/gbot-firefox.zip
 3. Press **Start**.
 
 Keep the game tab open (it can be in the background). The bot never logs in for you: if the session
-expires, log in again and it carries on. Settings saved by version 1.0 are migrated automatically.
+expires, log in again and it carries on. Settings from older versions are migrated automatically:
+version 1 kept one set for all servers, and 2.0 gives each server you played on its own copy.
 
 ## How it works
 
