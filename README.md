@@ -105,7 +105,9 @@ that matches no rule stays where it is. All of it is off until you switch it on.
 
 The overview page also gets a **Repair all** button under your character. It repairs every item at
 or below a cutoff (60% by default, changeable under *Repair*), worst first, one at a time. It works
-even while the bot is stopped.
+even while the bot is stopped. The button is also there on the other overview tabs (X and the four
+mercenaries) and repairs that tab's gear, and under *Repair* you can choose which tabs the automatic
+repair looks after (only your character by default).
 
 You can also tailor how the bot behaves:
 
@@ -166,7 +168,7 @@ what is enabled. Changes save as you make them and take effect immediately.
 | Health | Eat food on/off, eat below X% HP, stop fighting below Y% HP |
 | Stable work | Job number, hours |
 | Training | Gold to always keep, stats to train |
-| Repair | Repair below X% conditioning, cutoff for the *Repair all* button, best material quality to use |
+| Repair | Repair below X% conditioning, cutoff for the *Repair all* button, best material quality to use, whose gear to look after (character, tab X, mercenaries I-IV) |
 | Smelting | Smelting on/off, put the resources in the Horreum or in a package, smelt package items automatically by quality and kind |
 | Packages | Tidying on/off, take gold out of gold packages, store resources in the Horreum, sell gear by quality and kind, what to do with packages about to expire |
 | Auction house | Bidding on/off, minimum HP per gold, how late in the round to bid, gold per round, gold to keep, food limit |

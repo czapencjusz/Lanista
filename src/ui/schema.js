@@ -292,6 +292,20 @@
           options: qualityOptions('Standard (white) only'),
           help: 'The lowest quality in stock is used first. Fights wait while an item is off your character.',
         },
+        {
+          path: 'repair.dolls',
+          type: 'checks',
+          label: 'Look after the gear of',
+          help: 'The tabs on the overview page. Every repair costs workbench rent in gold and materials. The "Repair all" button works on whichever tab is open.',
+          items: [
+            { path: 'repair.dolls.d1', label: 'My character' },
+            { path: 'repair.dolls.d2', label: 'Tab X' },
+            { path: 'repair.dolls.d3', label: 'Mercenary I' },
+            { path: 'repair.dolls.d4', label: 'Mercenary II' },
+            { path: 'repair.dolls.d5', label: 'Mercenary III' },
+            { path: 'repair.dolls.d6', label: 'Mercenary IV' },
+          ],
+        },
       ],
     },
     {

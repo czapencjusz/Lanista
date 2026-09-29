@@ -521,6 +521,18 @@
   const inRepairAll = (item, settings) => !!item.condition && item.condition.percent <= settings.repair.allUpToPercent;
 
   // The worn item most in need of repair: [{ id, condition, ... }] -> item.
+  // Overview tabs ("dolls"): 1 your character, 2 tab X, 3-6 mercenaries.
+  const DOLL_LABELS = { 1: 'your character', 2: 'tab X', 3: 'mercenary I', 4: 'mercenary II', 5: 'mercenary III', 6: 'mercenary IV' };
+
+  // Dolls the automatic repair looks after (settings.repair.dolls).
+  const repairDolls = (settings) => [1, 2, 3, 4, 5, 6].filter((d) => settings.repair.dolls[`d${d}`]);
+
+  // An item's place for "Repair all" runs: doll and slot.
+  const repairKey = (item) => `${item.doll || 1}:${item.slot}`;
+
+  // " (mercenary II)" for log lines about other dolls than the character.
+  const dollSuffix = (doll) => (doll && doll !== 1 ? ` (${DOLL_LABELS[doll] || `doll ${doll}`})` : '');
+
   function pickRepair(items, belowPercent, skip, now) {
     const due = items.filter((i) => i.condition && i.condition.percent < belowPercent && !((skip || {})[i.id] > now));
     return due.length ? due.reduce((a, b) => (b.condition.percent < a.condition.percent ? b : a)) : null;
@@ -839,6 +851,10 @@
     wantsTraining,
     conditionOf,
     pickRepair,
+    repairDolls,
+    repairKey,
+    dollSuffix,
+    DOLL_LABELS,
     inRepairAll,
     expeditionTarget,
     nextSmeltCheck,

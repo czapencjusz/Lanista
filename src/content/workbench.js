@@ -27,7 +27,7 @@
   function skipInRun(memory, r) {
     const all = memory.repairAll;
     if (!all) return;
-    if (!all.done.includes(r.slot)) all.done.push(r.slot);
+    if (!all.done.includes(brain.repairKey(r))) all.done.push(brain.repairKey(r));
     all.skipped.push(r.name);
   }
 
@@ -109,13 +109,15 @@
 
   const size = (el) => ({ w: Number(el.dataset.measurementX) || 1, h: Number(el.dataset.measurementY) || 1 });
 
-  function readDoll(doc) {
+  // The gear shown on an overview page: the character (doll 1) or one of the
+  // other tabs (doll 2 = X, 3-6 = mercenaries), same markup for all.
+  function readDoll(doc, doll = 1) {
     const items = [];
     for (const slot of DOLL_SLOTS) {
       const el = doc.querySelector(`#char [data-container-number="${slot}"] [data-content-type], #char [data-content-type][data-container-number="${slot}"]`);
       if (!el || !el.getAttribute('data-item-id')) continue;
       const lines = tooltipLines(el);
-      items.push({ slot, id: el.getAttribute('data-item-id'), name: lines[0] || `item in slot ${slot}`, basis: el.dataset.basis, ...size(el), condition: brain.conditionOf(lines) });
+      items.push({ doll, slot, id: el.getAttribute('data-item-id'), name: lines[0] || `item in slot ${slot}`, basis: el.dataset.basis, ...size(el), condition: brain.conditionOf(lines) });
     }
     return items;
   }
@@ -173,8 +175,8 @@
 
   async function putBack(ctx, r) {
     const sh = ctx.state.sh;
-    await moveItem(sh, { from: r.bag, fromX: r.x, fromY: r.y, to: r.slot, toX: 1, toY: 1, amount: 1, doll: 1 });
-    ctx.log('info', `Repair: put ${r.name} back on`);
+    await moveItem(sh, { from: r.bag, fromX: r.x, fromY: r.y, to: r.slot, toX: 1, toY: 1, amount: 1, doll: r.doll || 1 });
+    ctx.log('info', `Repair: put ${r.name} back on${brain.dollSuffix(r.doll)}`);
   }
 
   async function pick(ctx) {
@@ -182,10 +184,14 @@
     const sh = ctx.state.sh;
     const now = ctx.now();
     const all = memory.repairAll;
-    const { doc } = await getDoc(sh, { mod: 'overview', doll: 1 });
+    // "Repair all" works on the tab it was pressed on; the automatic repair
+    // on the tabs chosen under Settings > Repair.
+    const dolls = all ? all.dolls || [1] : brain.repairDolls(settings);
+    const items = [];
+    for (const doll of dolls) items.push(...readDoll((await getDoc(sh, { mod: 'overview', doll })).doc, doll));
     // "Repair all" takes every item at or below its cutoff, once each; the
     // automatic repair only items below the threshold.
-    const worn = readDoll(doc).filter((i) => !all || (!all.done.includes(i.slot) && brain.inRepairAll(i, settings)));
+    const worn = items.filter((i) => !all || (!all.done.includes(brain.repairKey(i)) && brain.inRepairAll(i, settings)));
     const item = all ? brain.pickRepair(worn, 101, {}, now) : brain.pickRepair(worn, settings.repair.belowPercent, memory.repairSkip, now);
     if (!item) {
       memory.nextRepairCheck = now + RECHECK_MS;
@@ -208,12 +214,13 @@
       return { retick: true };
     }
     await ctx.humanDelay();
-    await moveItem(sh, { from: item.slot, fromX: 1, fromY: 1, to: spot.bag, toX: spot.x, toY: spot.y, amount: 1, doll: 1 });
+    await moveItem(sh, { from: item.slot, fromX: 1, fromY: 1, to: spot.bag, toX: spot.x, toY: spot.y, amount: 1, doll: item.doll });
     memory.repair = {
       stage: 'unequipped',
       id: item.id,
       name: item.name,
       basis: item.basis,
+      doll: item.doll,
       slot: item.slot,
       w: item.w,
       h: item.h,
@@ -222,7 +229,7 @@
       until: 0,
       failures: 0,
     };
-    ctx.log('info', `Repair: taking off ${item.name} (conditioning ${item.condition.percent}%)`);
+    ctx.log('info', `Repair: taking off ${item.name}${brain.dollSuffix(item.doll)} (conditioning ${item.condition.percent}%)`);
     return { retick: true };
   }
 
@@ -312,18 +319,18 @@
     await moveItem(sh, { from, fromX: 1, fromY: 1, to: spot.bag, toX: spot.x, toY: spot.y, amount: 1 });
     Object.assign(r, spot, { stage: 'inBag' });
     await ctx.persist();
-    await moveItem(sh, { from: r.bag, fromX: r.x, fromY: r.y, to: r.slot, toX: 1, toY: 1, amount: 1, doll: 1 });
+    await moveItem(sh, { from: r.bag, fromX: r.x, fromY: r.y, to: r.slot, toX: 1, toY: 1, amount: 1, doll: r.doll || 1 });
 
     memory.stats.repairs = (memory.stats.repairs || 0) + 1;
     if (memory.repairAll) {
       memory.repairAll.repaired += 1;
       // Once per run, even when the materials only allowed a partial repair.
-      if (!memory.repairAll.done.includes(r.slot)) memory.repairAll.done.push(r.slot);
+      if (!memory.repairAll.done.includes(brain.repairKey(r))) memory.repairAll.done.push(brain.repairKey(r));
     }
     memory.stats.goldSpent = (memory.stats.goldSpent || 0) + (r.rent || 0);
     memory.repair = null;
     memory.nextRepairCheck = ctx.now() + 60 * 1000;
-    ctx.log('info', `Repaired ${r.name}: ${r.before}% -> ${after ? after.percent : '?'}%`);
+    ctx.log('info', `Repaired ${r.name}${brain.dollSuffix(r.doll)}: ${r.before}% -> ${after ? after.percent : '?'}%`);
     return { refresh: true };
   }
 

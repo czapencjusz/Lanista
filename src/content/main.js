@@ -116,10 +116,12 @@
 
   const repairRunning = () => !!(memory && (memory.repair || memory.repairAll));
 
-  // "Repair all" button under the character on the overview page.
+  // "Repair all" button under the character (or the mercenary shown) on the
+  // overview page.
   function renderRepairButton(state) {
     let box = document.getElementById('gbot-repair-all');
-    const onOverview = state && state.inGame && state.page.mod === 'overview' && (!state.page.doll || state.page.doll === '1');
+    const onOverview = state && state.inGame && state.page.mod === 'overview' && !state.page.submod;
+    const dollNumber = Math.min(6, Math.max(1, Number((state && state.page.doll) || 1) || 1));
     const doll = document.querySelector('#char');
     if (!onOverview || !doll) {
       if (box) box.remove();
@@ -134,11 +136,12 @@
       button.className = 'awesome-button';
       button.addEventListener('click', () => {
         if (button.disabled) return;
+        const which = Number(button.dataset.doll) || 1;
         editMemory((m) => {
-          m.repairAll = { done: [], skipped: [], repaired: 0, failures: 0, startedAt: Date.now() };
+          m.repairAll = { dolls: [which], done: [], skipped: [], repaired: 0, failures: 0, startedAt: Date.now() };
           m.nextRepairCheck = 0;
         }).then(() => {
-          log('info', 'Repair all: started');
+          log('info', `Repair all: started${brain.dollSuffix(which)}`);
           cancel();
           tick();
         });
@@ -150,9 +153,10 @@
       doll.insertAdjacentElement('afterend', box);
     }
     const button = box.querySelector('button');
+    button.dataset.doll = String(dollNumber);
     const status = box.querySelector('.gbot-repair-status');
     const cutoff = settings.repair.allUpToPercent;
-    const worn = GBot.workbench.readDoll(document).filter((i) => brain.inRepairAll(i, settings));
+    const worn = GBot.workbench.readDoll(document, dollNumber).filter((i) => brain.inRepairAll(i, settings));
     const quality = ['Standard', 'Ceres', 'Neptun', 'Mars', 'Jupiter', 'Olymp'][settings.repair.maxQuality + 1];
     if (repairRunning()) {
       button.disabled = true;
@@ -166,7 +170,8 @@
       const lowest = worn.reduce((a, b) => (!a || b.condition.percent < a.condition.percent ? b : a), null);
       status.textContent = lowest ? `Lowest: ${lowest.name} ${lowest.condition.percent}%` : '';
     }
-    button.title = `Repair every item on your character at or below ${cutoff}% conditioning at the workbench, with Horreum materials up to ${quality} (lowest quality first). Rent is paid in gold. Works even while the bot is stopped. Change the cutoff under Settings > Repair.`;
+    const whose = dollNumber === 1 ? 'your character' : brain.DOLL_LABELS[dollNumber];
+    button.title = `Repair every item on ${whose} at or below ${cutoff}% conditioning at the workbench, with Horreum materials up to ${quality} (lowest quality first). Rent is paid in gold for each item. Works even while the bot is stopped. Change the cutoff under Settings > Repair.`;
   }
 
   // "Store all resources in the Horreum" button on the packages page.

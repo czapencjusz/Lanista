@@ -77,8 +77,10 @@ test('reads bags, doll, workbench slots and Horreum stock from game pages', () =
       <div data-container-number="10" data-content-type="512" data-item-id="257564915" data-basis="8-2" data-measurement-x="2" data-measurement-y="2" data-tooltip="${tooltip}"></div>
     </div></div>`).window.document;
   assert.deepEqual(workbench.readDoll(doc), [
-    { slot: 10, id: '257564915', name: 'Kerrannas Leather sandals of harmony', basis: '8-2', w: 2, h: 2, condition: { value: 20081, max: 61184, percent: 33 } },
+    { doll: 1, slot: 10, id: '257564915', name: 'Kerrannas Leather sandals of harmony', basis: '8-2', w: 2, h: 2, condition: { value: 20081, max: 61184, percent: 33 } },
   ]);
+
+  assert.equal(workbench.readDoll(doc, 4)[0].doll, 4, 'a mercenary page (overview&doll=4) has the same markup');
 
   const slots = workbench.readSlots('<script>var slotsData = [{"forge_slots.state":"closed"},{"forge_slots.state":"crafting","forge_slots.finishedIn":14}];\nvar x = 1;</script>');
   assert.equal(slots[1]['forge_slots.finishedIn'], 14);
@@ -104,6 +106,15 @@ test('"Repair all" runs even while the bot is paused, and only then', () => {
   assert.equal(brain.decide(st, running, m, NOW).type, 'repair', 'before fights, even with automatic repair off');
   m.repairAll = null;
   assert.equal(brain.decide(st, running, m, NOW).type, 'expedition');
+});
+
+test('mercenaries: the automatic repair looks after the chosen tabs, "Repair all" tracks doll and slot', () => {
+  assert.deepEqual(brain.repairDolls(settingsModule.sanitizeSettings({})), [1], 'only the character by default');
+  assert.deepEqual(brain.repairDolls(settingsModule.sanitizeSettings({ repair: { dolls: { d4: true, d6: true } } })), [1, 4, 6]);
+  assert.equal(brain.repairKey({ doll: 4, slot: 5 }), '4:5');
+  assert.equal(brain.repairKey({ slot: 5 }), '1:5', 'repairs started by older versions were on the character');
+  assert.equal(brain.dollSuffix(1), '');
+  assert.equal(brain.dollSuffix(4), ' (mercenary II)');
 });
 
 test('"Repair all" skips items above its cutoff (60% by default, changeable)', () => {

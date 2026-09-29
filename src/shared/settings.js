@@ -140,6 +140,10 @@
       // Best material quality to use: -1 Standard, 0 Ceres (green),
       // 1 Neptun (blue), 2 Mars, 3 Jupiter, 4 Olymp. Lower ones go first.
       maxQuality: 1,
+      // Whose gear the automatic repair looks after, by overview tab: d1 your
+      // character, d2 tab X, d3-d6 mercenaries I-IV. ("Repair all" works on
+      // the tab it is pressed on.)
+      dolls: { d1: true, d2: false, d3: false, d4: false, d5: false, d6: false },
     },
 
     smelting: {
