@@ -153,6 +153,38 @@
     throw new ActionError('Underworld attack did not open a combat report');
   }
 
+  // Uses one owned premium item (Mobilisation or 100% Healing Potion) with
+  // its "Activate" button in the premium inventory. Nothing is ever bought:
+  // without an Activate button (none owned, or none usable right now) the
+  // bot stops asking for the rest of the visit.
+  async function premium(ctx, decision) {
+    const { state, memory } = ctx;
+    const page = PAGES.premiumInventory();
+    const label = decision.item === 'mobilisation' ? 'Mobilisation' : '100% Healing Potion';
+    const key = decision.item === 'mobilisation' ? 'mobilisations' : 'potions';
+    if (state.page.mod !== page.mod || state.page.submod !== page.submod) return ctx.navigate(ctx.url(page), `the premium inventory (${label})`);
+
+    const run = memory.underworldRun || (memory.underworldRun = { since: ctx.now(), mobilisations: 0, potions: 0 });
+    const feature = SEL.premium[decision.item];
+    const button = $$(SEL.premium.activate).find((b) => {
+      const m = SEL.premium.feature.exec(b.getAttribute('onclick') || b.getAttribute('href') || '');
+      return m && Number(m[1]) === feature;
+    });
+    if (!button) {
+      run[key] = Math.max(run[key], ctx.settings.underworld[key]);
+      ctx.log('warn', `Underworld: no ${label} to use (none owned, or none usable now)`);
+      return { refresh: true };
+    }
+    const holder = button.closest(SEL.premium.box);
+    const count = parseNumber(((holder && holder.parentElement.querySelector(SEL.premium.count)) || {}).textContent);
+    run[key] += 1;
+    ctx.log('info', `Underworld: using a ${label}${count !== null ? ` (${count - 1} left)` : ''}`);
+    await ctx.persist();
+    await click(ctx, button, `activate ${label}`);
+    if (await expectNavigation(ctx)) return { navigated: true };
+    throw new ActionError(`Activating the ${label} did not reload the page`);
+  }
+
   // Enters the Underworld at the chosen difficulty on the Hermit's page.
   // The travel afterwards is waited out (never shortened with rubies, never
   // turned back).
@@ -688,6 +720,7 @@
     nest,
     expedition,
     underworld,
+    premium,
     dungeon,
     arena,
     circus,

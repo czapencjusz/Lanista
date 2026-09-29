@@ -50,6 +50,9 @@
       dungeonLosses: 0,
       // When to look at the Hermit again for entering the Underworld.
       nextUnderworldCheck: 0,
+      // Premium items used during the current Underworld visit:
+      // { since, mobilisations, potions }; null outside.
+      underworldRun: null,
       // Auction house: when to look again, and this round's bids
       // ({ rank, spent, bids: { lotId: amount } }).
       nextAuctionCheck: 0,
@@ -196,6 +199,32 @@
     };
   }
 
+  // Keeps memory.underworldRun: started on the first page inside the
+  // Underworld, dropped once the character is back (and not travelling).
+  function trackUnderworld(state, memory, now) {
+    if (!state.inGame || state.travel) return;
+    if (state.underworld && !memory.underworldRun) memory.underworldRun = { since: now, mobilisations: 0, potions: 0 };
+    if (!state.underworld) memory.underworldRun = null;
+  }
+
+  // Owned premium items to use in the Underworld, within the per-visit
+  // limits: a 100% Healing Potion when HP is very low, a Mobilisation when
+  // the points are gone (the next attack would cost rubies otherwise).
+  function premiumDecision(state, settings, memory) {
+    if (!state.underworld) return null;
+    const u = settings.underworld;
+    const run = memory.underworldRun || { mobilisations: 0, potions: 0 };
+    const hp = state.hp || {};
+    if (run.potions < u.potions && hpKnown(hp) && hp.percent < u.potionBelowPercent) {
+      return { type: 'premium', item: 'healingPotion', reason: `HP ${hp.percent}% is below ${u.potionBelowPercent}%: use a 100% Healing Potion` };
+    }
+    const points = state.expedition && state.expedition.points;
+    if (u.enabled && run.mobilisations < u.mobilisations && points === 0) {
+      return { type: 'premium', item: 'mobilisation', reason: 'Out of Underworld points: use a Mobilisation' };
+    }
+    return null;
+  }
+
   function wantsUnderworldEntry(state, settings, memory, now) {
     if (settings.underworld.enter === 'off' || state.underworld || (memory.nextUnderworldCheck || 0) > now) return false;
     if (state.level !== null && state.level !== undefined && state.level < UNDERWORLD_LEVEL) return false;
@@ -250,6 +279,9 @@
         return { type: 'heal', reason: `HP ${hp.percent}% is below ${settings.heal.eatBelowPercent}%` };
       }
     }
+
+    const item = !isBlocked(memory, 'premium', now) && premiumDecision(state, settings, memory);
+    if (item) return item;
 
     const repairing = repairDecision(settings, memory, now);
     if (repairing) return repairing;
@@ -766,6 +798,8 @@
     nextSmeltCheck,
     dungeonChoice,
     underworldSettings,
+    trackUnderworld,
+    premiumDecision,
     UNDERWORLD_COST,
     gearKind,
     wantsPackages,

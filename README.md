@@ -50,6 +50,11 @@ out it stops: further attacks would cost rubies.
 *Enter automatically* takes the Hermit's offer on the difficulty you choose whenever it is allowed
 again. The journey (about 30 minutes, less on speed servers) is waited out.
 
+You can also let it use items you already own in the premium inventory, up to a number per visit:
+a **Mobilisation** (+3 Underworld points) when the points run out, and a **100% Healing Potion**
+when HP drops below a limit (20% by default). Both are off until you set a number; nothing is ever
+bought.
+
 **Careful with the auction house:** the game keeps your gold if someone outbids you. That is why the
 bot bids only when the round is ending (by default) and never twice on the same lot.
 
@@ -155,7 +160,7 @@ what is enabled. Changes save as you make them and take effect immediately.
 | General | Bot on/off, activity priority order, enemy nest search (quick / thorough / return to safety / leave it to me) |
 | Expedition | Location (last visited, one from the game's list, or any id), enemy 1-4, learn the other enemies' bonuses before the boss, points to keep in reserve |
 | Dungeon | Location, Normal/Advanced, points to keep in reserve, never fight the boss, start a new dungeon after lost fights |
-| Underworld | Fighting on/off, minimum HP to fight, enter automatically (off, Normal, Middle, Hard) |
+| Underworld | Fighting on/off, minimum HP to fight, enter automatically (off, Normal, Middle, Hard), Mobilisations and 100% Healing Potions to use per visit |
 | Arena / Circus Turma | Lowest / highest / random opponent, level range around yours, never-attack list, how long to skip opponents who beat you |
 | Health | Eat food on/off, eat below X% HP, stop fighting below Y% HP |
 | Stable work | Job number, hours |

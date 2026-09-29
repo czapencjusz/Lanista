@@ -169,6 +169,19 @@
           ],
           help: 'Whenever the Underworld can be entered again. Costs 8,000 gold and about 30 minutes of travel (less on speed servers). On Hard, dying costs a skill point.',
         },
+        {
+          path: 'underworld.mobilisations',
+          type: 'number',
+          label: 'Mobilisations to use per visit',
+          help: 'From your premium inventory, one at a time when the Underworld points run out (+3 points each). Only ones you own; nothing is bought. 0 = never.',
+        },
+        {
+          path: 'underworld.potions',
+          type: 'number',
+          label: '100% Healing Potions to use per visit',
+          help: 'From your premium inventory, when HP drops below the value below. 0 = never.',
+        },
+        { path: 'underworld.potionBelowPercent', type: 'number', label: 'Use a healing potion below', unit: '% HP' },
       ],
     },
     {

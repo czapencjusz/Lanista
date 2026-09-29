@@ -328,6 +328,7 @@
       lastState = state;
 
       recordGameInfo(state, now);
+      brain.trackUnderworld(state, memory, now);
       for (const event of brain.resolvePending(state, memory, now)) log(event.level, event.message);
       if (settings.enabled) brain.updateBreaks(settings.schedule, memory, now);
 
@@ -375,7 +376,7 @@
 
     // Quests, repairs, smelting, the auction house and the packages are
     // multi-step and keep their own failure handling.
-    if (!['quests', 'repair', 'smelt', 'auction', 'packages', 'underworld'].includes(decision.type)) {
+    if (!['quests', 'repair', 'smelt', 'auction', 'packages', 'underworld', 'premium'].includes(decision.type)) {
       const attempt = brain.beginAttempt(memory, decision.type, now, settings, state);
       if (!attempt.ok) {
         log('warn', attempt.message);

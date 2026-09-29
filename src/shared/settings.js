@@ -81,6 +81,12 @@
       // Enter automatically when allowed: 'off' | 'normal' | 'medium' |
       // 'hard'. Costs 8,000 gold; the travel is never shortened with rubies.
       enter: 'off',
+      // Owned premium items to use per visit (never bought): Mobilisations
+      // (+3 Underworld points) once the points run out, and 100% Healing
+      // Potions once HP drops below potionBelowPercent.
+      mobilisations: 0,
+      potions: 0,
+      potionBelowPercent: 20,
     },
 
     heal: {
@@ -247,6 +253,9 @@
     'dungeon.restartAfterLosses': { int: true, min: 0, max: 20 },
     'underworld.minHpPercent': { int: true, min: 10, max: 100 },
     'underworld.enter': { enum: ['off', 'normal', 'medium', 'hard'] },
+    'underworld.mobilisations': { int: true, min: 0, max: 50 },
+    'underworld.potions': { int: true, min: 0, max: 50 },
+    'underworld.potionBelowPercent': { int: true, min: 1, max: 99 },
     'heal.eatBelowPercent': { int: true, min: 0, max: 100 },
     'heal.minHpPercent': { int: true, min: 0, max: 100 },
     'work.job': { int: true, min: 0, max: 19 },

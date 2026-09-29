@@ -151,6 +151,19 @@
       },
     },
 
+    // Premium inventory (mod=premium&submod=inventory): items already owned,
+    // each with a count and an "Activate" button that loads
+    // ...submod=inventoryActivate&feature=<id>. Using one never costs
+    // rubies; the ruby shop is a different page and is never opened.
+    premium: {
+      box: '.premiumfeature_content',
+      count: '.premiumfeature_tokencount',
+      activate: '.premium_activate_button',
+      feature: /[?&]feature=(\d+)/,
+      mobilisation: 5, // +3 expedition points (Underworld points inside)
+      healingPotion: 18, // 100% Healing Potion
+    },
+
     // Packages page (the Crazy Addon renames the section around #packages,
     // so only #packages itself is relied on). Each package holds one item
     // in a [data-container-number] element and an expiry countdown in ms.
@@ -211,6 +224,7 @@
     location: (loc) => ({ mod: 'location', loc }),
     dungeon: (loc) => ({ mod: 'dungeon', loc }),
     underworldEntry: () => ({ mod: 'hermit', submod: 'underworld' }),
+    premiumInventory: () => ({ mod: 'premium', submod: 'inventory' }),
     arena: () => ({ mod: 'arena', submod: 'serverArena', aType: 2 }),
     circus: () => ({ mod: 'arena', submod: 'serverArena', aType: 3 }),
     work: () => ({ mod: 'work' }),

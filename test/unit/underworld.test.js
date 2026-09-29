@@ -93,6 +93,83 @@ test('entering: only when switched on, from level 100, with 8,000 gold, when due
   assert.notEqual(enter({ enter: 'medium' }).type, 'underworld');
 });
 
+test('owned premium items: a Mobilisation at 0 points, a potion at low HP, within the per-visit limits', () => {
+  const memory = brain.createMemory(NOW);
+  const inside = page(areaPage({ points: 0 }), 'mod=overview').st;
+  brain.trackUnderworld(inside, memory, NOW);
+  assert.deepEqual(memory.underworldRun, { since: NOW, mobilisations: 0, potions: 0 });
+
+  const cfg = on({ mobilisations: 1, potions: 1, potionBelowPercent: 20 });
+  assert.equal(brain.decide(inside, on(), memory, NOW).type, 'wait', 'none by default');
+  assert.deepEqual(brain.decide(inside, cfg, memory, NOW).item, 'mobilisation');
+  memory.underworldRun.mobilisations = 1;
+  assert.equal(brain.decide(inside, cfg, memory, NOW).type, 'wait', 'exactly as many as allowed');
+
+  const dying = { ...page(areaPage(), 'mod=overview').st, hp: { value: 1000, max: 10000, percent: 10, regenPerHour: 100 } };
+  assert.equal(brain.decide(dying, cfg, memory, NOW).item, 'healingPotion');
+  memory.underworldRun.potions = 1;
+  assert.equal(brain.decide(dying, cfg, memory, NOW).type, 'wait');
+
+  const outside = page(`${header(17)}<div id="content"></div>`, 'mod=overview').st;
+  assert.equal(brain.premiumDecision(outside, cfg, memory), null, 'only in the Underworld');
+  brain.trackUnderworld(outside, memory, NOW);
+  assert.equal(memory.underworldRun, null, 'a new visit starts from zero');
+});
+
+// The premium inventory as on s303-en: owned items with a count and an
+// Activate button (Gate Keys cannot be used in the Underworld: no button).
+const inventoryPage = (items) =>
+  `${header(0)}${menu(1)}<div id="content">${items
+    .map(
+      ([feature, title, count, usable]) => `<div><div class="premiumfeature_picture"><img class="premiumfeature_picture" src="token/${feature}.jpg"><div class="premiumfeature_tokencount">${count}</div></div>
+        <div class="premiumfeature_content"><div class="premiumfeature_title">${title}</div>
+        ${usable ? `<div class="premiumfeature_activate_box"><input class="premium_activate_button" type="button" value="Activate" onclick="document.location.href='index.php?mod=premium&amp;submod=inventoryActivate&amp;feature=${feature}&amp;token=${count}&amp;sh=x'"></div>` : ''}</div></div>`
+    )
+    .join('')}</div>`;
+
+test('uses the owned item by its feature id, never anything else', async () => {
+  const body = inventoryPage([[5, 'Mobilisation', 19, true], [6, 'Gate Key', 26, false], [18, '100% Healing Potion', 89, true]]);
+  const mob = await runPremiumKeepingIds(body, 'mobilisation');
+  assert.deepEqual(mob.clicked, ['Mobilisation']);
+  assert.equal(mob.run.mobilisations, 1);
+  assert.deepEqual(mob.logs.filter((l) => !l.startsWith('debug')), ['info: Underworld: using a Mobilisation (18 left)']);
+
+  const pot = await runPremiumKeepingIds(body, 'healingPotion');
+  assert.deepEqual(pot.clicked, ['100% Healing Potion']);
+
+  const none = await runPremiumKeepingIds(inventoryPage([[18, '100% Healing Potion', 89, true]]), 'mobilisation');
+  assert.deepEqual(none.clicked, []);
+  assert.equal(none.run.mobilisations, 1, 'stops asking for this visit');
+  assert.match(none.logs[0], /no Mobilisation to use/);
+});
+
+// Runs the premium action on a copy of the page; clicks are recorded (the
+// inline onclick, which the bot reads the feature id from, is not run).
+async function runPremiumKeepingIds(body, item) {
+  const { dom, st } = page(body, 'mod=premium&submod=inventory');
+  const saved = { document: globalThis.document, location: globalThis.location };
+  Object.assign(globalThis, { document: dom.window.document, location: dom.window.location });
+  const clicked = [];
+  let unloading = false;
+  for (const b of dom.window.document.querySelectorAll('.premium_activate_button')) {
+    b.addEventListener('click', (e) => {
+      e.stopImmediatePropagation();
+      clicked.push(b.closest('.premiumfeature_content').querySelector('.premiumfeature_title').textContent);
+      unloading = true;
+    }, true);
+    b.onclick = null;
+  }
+  const logs = [];
+  const memory = brain.createMemory(NOW);
+  memory.underworldRun = { since: NOW, mobilisations: 0, potions: 0 };
+  const ctx = { state: st, settings: on({ mobilisations: 1, potions: 2 }), memory, log: (l, m) => logs.push(`${l}: ${m}`), humanDelay: async () => {}, persist: async () => {}, isUnloading: () => unloading, now: () => NOW };
+  try {
+    return { result: await GBot.actions.premium(ctx, { item }), clicked, logs, run: memory.underworldRun };
+  } finally {
+    Object.assign(globalThis, saved);
+  }
+}
+
 async function runExpedition(body) {
   const { dom, st } = page(body, 'mod=location&loc=0');
   const saved = { document: globalThis.document, location: globalThis.location };
