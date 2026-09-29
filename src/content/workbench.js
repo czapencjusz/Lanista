@@ -214,10 +214,13 @@
       return { retick: true };
     }
     await ctx.humanDelay();
-    await moveItem(sh, { from: item.slot, fromX: 1, fromY: 1, to: spot.bag, toX: spot.x, toY: spot.y, amount: 1, doll: item.doll });
+    const moved = await moveItem(sh, { from: item.slot, fromX: 1, fromY: 1, to: spot.bag, toX: spot.x, toY: spot.y, amount: 1, doll: item.doll });
+    // The id the item has in the bag, as the game reports it (the smelter
+    // relies on the same answer); the doll page's id otherwise.
+    const bagId = moved && moved.to && moved.to.data && moved.to.data.itemId;
     memory.repair = {
       stage: 'unequipped',
-      id: item.id,
+      id: bagId ? String(bagId) : item.id,
       name: item.name,
       basis: item.basis,
       doll: item.doll,
@@ -245,9 +248,19 @@
     const slot = bench.findIndex((s) => state(s) === 'closed');
     if (slot < 0) throw new ActionError('All workbench slots are busy');
 
-    const preview = JSON.parse(await forge(sh, 'getWorkbenchPreview', slot, `iid=${r.id}&amount=1`)).slots[slot];
+    const answer = await forge(sh, 'getWorkbenchPreview', slot, `iid=${r.id}&amount=1`);
+    let data = null;
+    try {
+      data = JSON.parse(answer);
+    } catch (e) {
+      // Not JSON: reported below with the start of the answer.
+    }
+    const preview = data && data.slots ? data.slots[slot] : null;
     const formula = (preview && preview.formula) || {};
-    if (!formula.needed || !formula.rent) throw new ActionError(`The workbench does not accept ${r.name}`);
+    if (!formula.needed || !formula.rent) {
+      const why = data && data.error ? String(data.error) : data ? '' : String(answer).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+      throw new ActionError(`The workbench does not accept ${r.name} (item ${r.id}${why ? `: ${why}` : ''})`);
+    }
     const rent = Number(formula.rent[RENT_GOLD]);
     if (!(ctx.state.gold >= rent)) throw new ActionError(`Not enough gold for the workbench (${rent})`);
 
