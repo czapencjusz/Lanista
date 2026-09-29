@@ -328,7 +328,13 @@
       lastState = state;
 
       recordGameInfo(state, now);
+      const visit = memory.underworldRun;
       brain.trackUnderworld(state, memory, now);
+      // Beating Dīs Pater (or leaving) ends the visit without a report page.
+      if (visit && !memory.underworldRun) {
+        const used = [visit.mobilisations && `${visit.mobilisations} Mobilisation(s)`, visit.potions && `${visit.potions} healing potion(s)`].filter(Boolean);
+        log('info', `Back from the Underworld${used.length ? ` (used ${used.join(' and ')})` : ''}`);
+      }
       for (const event of brain.resolvePending(state, memory, now)) log(event.level, event.message);
       if (settings.enabled) brain.updateBreaks(settings.schedule, memory, now);
 
