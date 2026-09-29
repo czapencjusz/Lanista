@@ -128,6 +128,19 @@ test.describe('GBot extension against a mock Gladiatus server', { skip: !executa
     }, null, { timeout: 15000 });
   });
 
+  test('skip boss: fights the others, then cancels the dungeon and starts a new one', { timeout: 90000 }, async () => {
+    const cooldownMs = { expedition: 60000, dungeon: 2000, arena: 60000, circus: 60000 };
+    await scenario(
+      { expPoints: 0, dunPoints: 5, cooldownMs, dungeonEnemies: ['13', '11'], dungeonBoss: '13' },
+      { expedition: { enabled: false }, dungeon: { enabled: true, skipBoss: true } }
+    );
+    await waitUntil(() => game.events('dungeonStart').length && game.events('dungeon').length >= 2, 75000, 'a new dungeon after the cancel');
+    const order = game.events().filter((e) => /^dungeon/.test(e.type)).map((e) => (e.type === 'dungeon' ? `fight ${e.enemy}` : e.type));
+    assert.deepEqual(order.slice(0, 4), ['fight 11', 'dungeonCancel', 'dungeonStart', 'fight 11'], 'the boss (13) is never fought');
+    const memory = await storageGet(`memory:${HOST}`);
+    assert.ok(memory.log.some((l) => /only the boss is left, cancelling it/.test(l.message)));
+  });
+
   test('eats food (searching other bags) by dragging it onto the avatar', { timeout: 60000 }, async () => {
     await scenario({ hp: 100, expPoints: 0, dunPoints: 0 }, { expedition: { enabled: true }, heal: { enabled: true, minHpPercent: 25 } });
     const [heal] = await waitUntil(() => game.events('heal').length && game.events('heal'), 45000, 'heal');

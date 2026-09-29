@@ -65,7 +65,7 @@
 }
 .gb-tab {
   position: relative; display: flex; align-items: center; gap: 9px; width: 100%;
-  padding: 5px 12px; border: 0; border-left: 3px solid transparent; background: none;
+  padding: 4px 12px; border: 0; border-left: 3px solid transparent; background: none;
   color: #e8d5a8; font: 700 12px/1.2 var(--gb-font); text-align: left; cursor: pointer;
 }
 .gb-tab:hover { background: rgba(255,255,255,.07); }

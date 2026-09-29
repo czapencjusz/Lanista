@@ -57,12 +57,31 @@
     dungeon: {
       enabled: true,
       location: 'auto',
-      difficulty: 'normal', // 'normal' | 'advanced'
+      // 'normal' | 'advanced' (Normal where Advanced is not unlocked yet).
+      difficulty: 'normal',
       keepPoints: 0,
+      // Never fight the boss: once only the boss is left, cancel the dungeon
+      // and start a new one.
+      skipBoss: false,
+      // Cancel and restart the dungeon after this many lost fights in a row
+      // (0 = never).
+      restartAfterLosses: 0,
     },
 
     arena: opponentDefaults(),
     circus: opponentDefaults(),
+
+    underworld: {
+      // Fight the Underworld's enemies (with its own expedition points)
+      // while the character is there.
+      enabled: false,
+      // Food cannot be eaten there and falling to 0 HP offers only to leave
+      // (re-entry takes days), so fights wait for HP to regenerate to this.
+      minHpPercent: 60,
+      // Enter automatically when allowed: 'off' | 'normal' | 'medium' |
+      // 'hard'. Costs 8,000 gold; the travel is never shortened with rubies.
+      enter: 'off',
+    },
 
     heal: {
       // Eat food from the inventory when HP drops below eatBelowPercent.
@@ -225,6 +244,9 @@
     'dungeon.location': { pattern: LOCATION },
     'dungeon.difficulty': { enum: ['normal', 'advanced'] },
     'dungeon.keepPoints': { int: true, min: 0, max: 500 },
+    'dungeon.restartAfterLosses': { int: true, min: 0, max: 20 },
+    'underworld.minHpPercent': { int: true, min: 10, max: 100 },
+    'underworld.enter': { enum: ['off', 'normal', 'medium', 'hard'] },
     'heal.eatBelowPercent': { int: true, min: 0, max: 100 },
     'heal.minHpPercent': { int: true, min: 0, max: 100 },
     'work.job': { int: true, min: 0, max: 19 },

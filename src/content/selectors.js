@@ -8,6 +8,12 @@
     // Present on every in-game page; used to tell game pages from the lobby.
     gameHeader: '#header_game',
 
+    // On the way to the Underworld: the main menu shows "Journey time" with
+    // a countdown (ms), cooldown bars show "-" and nothing can be done. The
+    // travel page's "Reduce journey time" (rubies) and "Turn back" buttons
+    // must never be clicked.
+    travel: '#mainmenu a[href*="submod=travel"] [data-ticker-time-left]',
+
     hpBar: '#header_values_hp_bar', // data-value, data-max-value, data-regen-per-hour
     hpPercent: '#header_values_hp_percent',
     level: '#header_values_level',
@@ -69,9 +75,17 @@
       enemies: ['#content [onclick*="startFight"]', '#content area[onclick]', '#content img[onclick]'],
       startNormal: '#content input[name="dif1"]',
       startAdvanced: '#content input[name="dif2"]',
-      // Only used when the named buttons are missing. A running dungeon also
-      // has a ".button1" (Cancel dungeon), so the fallback needs two buttons.
-      startFallback: '#content form input.button1',
+      // Only used when the named buttons are missing, and never matching the
+      // two other ".button1" buttons: "Cancel dungeon" and, during the
+      // cooldown, "Enter Dungeon" (name="skip"), which costs a ruby.
+      startFallback: '#content form:not([action*="cancelDungeon"]) input.button1:not([name="skip"])',
+      // Ruby button to skip the cooldown: its presence means "not ready yet".
+      skipCooldown: '#content input[name="skip"]',
+      // "Cancel dungeon" form (hidden dungeonId + submit).
+      cancel: '#content form[action*="cancelDungeon"] input[type="submit"]',
+      // Map labels over some positions: "1/3" for a group of enemies, and
+      // a word ("Boss") over the boss once it can be attacked.
+      label: '.map_label',
       disabledClass: 'disabled',
       // First heading of a running dungeon: "Viking Camp open until ...".
       title: '#content h3',
@@ -111,6 +125,25 @@
       item: '.auction_item_div [data-content-type]',
       bidAmount: 'input[name="bid_amount"]',
       bidButton: 'input[name="bid"]',
+    },
+
+    // Inside the Underworld the location menu has "Pray" and "Leave the
+    // Underworld" (index.php?mod=underworld...). Leaving starts a re-entry
+    // cooldown of days: nothing under mod=underworld is clicked or loaded.
+    underworld: {
+      marker: 'a[href*="?mod=underworld"]',
+      // Enemies of an Underworld area (the game's own spelling).
+      enemies: '#underwold_enemies',
+      // What an attack costs: expedition points, or rubies once they are gone.
+      pointsCost: '.icon_expeditionpoints',
+      // Close ("Cancel") button of the game's notification dialog.
+      closeDialog: '#linkcancelnotification',
+      // Entry buttons on the Hermit's page (mod=hermit&submod=underworld).
+      enter: {
+        normal: '#content input[name="difficulty_normal"]',
+        medium: '#content input[name="difficulty_medium"]',
+        hard: '#content input[name="difficulty_hard"]',
+      },
     },
 
     // Packages page (the Crazy Addon renames the section around #packages,
@@ -172,6 +205,7 @@
     overview: () => ({ mod: 'overview' }),
     location: (loc) => ({ mod: 'location', loc }),
     dungeon: (loc) => ({ mod: 'dungeon', loc }),
+    underworldEntry: () => ({ mod: 'hermit', submod: 'underworld' }),
     arena: () => ({ mod: 'arena', submod: 'serverArena', aType: 2 }),
     circus: () => ({ mod: 'arena', submod: 'serverArena', aType: 3 }),
     work: () => ({ mod: 'work' }),

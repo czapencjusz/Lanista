@@ -375,7 +375,7 @@
 
     // Quests, repairs, smelting, the auction house and the packages are
     // multi-step and keep their own failure handling.
-    if (!['quests', 'repair', 'smelt', 'auction', 'packages'].includes(decision.type)) {
+    if (!['quests', 'repair', 'smelt', 'auction', 'packages', 'underworld'].includes(decision.type)) {
       const attempt = brain.beginAttempt(memory, decision.type, now, settings, state);
       if (!attempt.ok) {
         log('warn', attempt.message);

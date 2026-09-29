@@ -97,10 +97,15 @@ function dungeonStartContent(sh) {
     </form>`;
 }
 
-function dungeonMapContent(enemies) {
+// A running dungeon as on s303-en: image-map areas, and a map label "Boss"
+// over the boss once it can be attacked; plus the "Cancel dungeon" form.
+function dungeonMapContent(enemies, boss, sh) {
   return `<img src="img/dungeon/map.jpg" usemap="#dmap"><map name="dmap">${enemies
     .map((id) => `<area shape="circle" coords="10,10,10" onclick="startFight('${id}', '40')">`)
-    .join('')}</map>`;
+    .join('')}</map>${enemies.includes(boss) ? `<div class="map_label" style="cursor:pointer;left:320px;top:240px;" onclick="startFight('${boss}', '40')">Boss</div>` : ''}
+    <form method="post" action="index.php?mod=dungeon&loc=3&action=cancelDungeon&sh=${sh}">
+      <input type="hidden" name="dungeonId" value="40"><input type="submit" class="button1" value="Cancel dungeon">
+    </form>`;
 }
 
 function arenaContent(type, levels) {

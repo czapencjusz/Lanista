@@ -14,7 +14,8 @@ through the game the way a player would.
 | Activity | What the bot does |
 | --- | --- |
 | **Expeditions** | Attacks the enemy you choose (1-4) at a location you pick from the game's own list, or at your last visited one, whenever the cooldown is ready. It can keep some points in reserve. With the boss selected, it can first fight the location's other enemies until all their bonuses are learned, so the boss gets them too (see below). |
-| **Dungeons** | Starts a Normal or Advanced dungeon when none is running, then fights the enemies one by one. It never presses *Cancel dungeon*, and it tells you when a dungeon is not unlocked yet. |
+| **Dungeons** | Starts a Normal or Advanced dungeon when none is running (Normal where Advanced is not unlocked yet), then fights the enemies one by one. Optionally it never fights the boss: the other enemies go first, then the dungeon is cancelled and a new one started. It can also start over after a number of lost fights in a row. The ruby button that skips the cooldown is never used. |
+| **Underworld** | Optional. From level 100: fights the Underworld's enemies with its own expedition points, always the newest area and enemy, and waits for HP to regenerate since food cannot be eaten there. It can also enter the Underworld for you (Normal, Middle or Hard) whenever it is allowed again. It never leaves, never turns back or shortens the journey, and never attacks without points (that would cost rubies). |
 | **Arena Provinciarum** | Attacks the lowest-level, highest-level or a random opponent. It can stick to opponents near your level and skip names on a never-attack list. Opponents who beat you are skipped for a while (24 hours by default). If the game refuses a fight, it tries another opponent. |
 | **Circus Turma Provinciarum** | Same options as the arena. |
 | **Enemy nests** | After some wins the game offers to search the enemy's nest for extra loot. The bot does a quick search, a thorough search, or returns to safety, as you choose. |
@@ -29,7 +30,25 @@ through the game the way a player would.
 | **Auction house** | Optional. Bids on food and healing potions that heal at least the HP per gold you set, late in the auction round, once per lot, within a gold reserve, a budget per round and a limit on how much food you hold. Won items arrive as packages. |
 
 **The bot never spends rubies.** Workbench and smelter rent is paid in gold, expedition bonuses are
-only learned by fighting, and auction Buyout (which costs rubies) is never used.
+only learned by fighting, auction Buyout (which costs rubies) is never used, and neither are the
+buttons that skip a dungeon cooldown, shorten the journey to the Underworld, or attack there without
+expedition points.
+
+### The Underworld
+
+The Hermit sends characters of level 100 and above to the Underworld for 8,000 gold: four areas of
+three enemies and a boss each, ending with Dīs Pater. Inside, the Underworld has its own 18
+expedition points, there are no dungeons, and food cannot be eaten.
+
+With *Underworld* switched on, the bot fights there whenever the expedition cooldown is ready: the
+newest unlocked area and its newest open enemy, with the stakes slider left at its default. It
+waits for HP to regenerate above your limit (60% by default), because falling to 0 HP only offers to
+leave, and leaving locks the Underworld for days. For the same reason it never follows *Leave the
+Underworld*, and closes the game's dialogs there instead of answering them. When the points run
+out it stops: further attacks would cost rubies.
+
+*Enter automatically* takes the Hermit's offer on the difficulty you choose whenever it is allowed
+again. The journey (about 30 minutes, less on speed servers) is waited out.
 
 **Careful with the auction house:** the game keeps your gold if someone outbids you. That is why the
 bot bids only when the round is ending (by default) and never twice on the same lot.
@@ -135,7 +154,8 @@ what is enabled. Changes save as you make them and take effect immediately.
 | --- | --- |
 | General | Bot on/off, activity priority order, enemy nest search (quick / thorough / return to safety / leave it to me) |
 | Expedition | Location (last visited, one from the game's list, or any id), enemy 1-4, learn the other enemies' bonuses before the boss, points to keep in reserve |
-| Dungeon | Location, Normal/Advanced, points to keep in reserve |
+| Dungeon | Location, Normal/Advanced, points to keep in reserve, never fight the boss, start a new dungeon after lost fights |
+| Underworld | Fighting on/off, minimum HP to fight, enter automatically (off, Normal, Middle, Hard) |
 | Arena / Circus Turma | Lowest / highest / random opponent, level range around yours, never-attack list, how long to skip opponents who beat you |
 | Health | Eat food on/off, eat below X% HP, stop fighting below Y% HP |
 | Stable work | Job number, hours |
@@ -206,7 +226,8 @@ src/content/state.js          reads HP, points, cooldowns, locations, dialogs, c
                               and expedition bonuses from the DOM
 src/content/brain.js          pure decision engine: priority, schedule, retries, tile status,
                               quest choice, training, repair planning
-src/content/actions.js        performs decisions: navigate, click, drag food, fill forms
+src/content/actions.js        performs decisions: navigate, click, drag food, fill forms; dungeon
+                              choices and the Underworld
 src/content/workbench.js      gear repair through the game's own AJAX requests
 src/content/smelter.js        smelting queue: packages → smelter → Horreum, the same way
 src/content/packages.js       package rules: gold, resources, smelting, selling, expiring

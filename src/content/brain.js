@@ -46,6 +46,10 @@
       smeltFailingCn: null,
       // When to go through the packages again (gold, rules, expiry).
       nextPackagesCheck: 0,
+      // Dungeon fights lost in a row (for dungeon.restartAfterLosses).
+      dungeonLosses: 0,
+      // When to look at the Hermit again for entering the Underworld.
+      nextUnderworldCheck: 0,
       // Auction house: when to look again, and this round's bids
       // ({ rank, spent, bids: { lotId: amount } }).
       nextAuctionCheck: 0,
@@ -171,7 +175,32 @@
     }
   }
 
-  const outOfPoints = (cd, cfg) => cd.points !== null && cd.points !== undefined && cd.points <= cfg.keepPoints;
+  // strict: unknown points count as none (in the Underworld an attack without
+  // points costs rubies).
+  const outOfPoints = (cd, cfg, strict) => (cd.points === null || cd.points === undefined ? !!strict : cd.points <= cfg.keepPoints);
+
+  const UNDERWORLD_COST = 8000;
+  const UNDERWORLD_LEVEL = 100;
+
+  // The settings as they apply inside the Underworld: expeditions follow
+  // Settings > Underworld, there are no dungeons, food cannot be eaten, and
+  // fights wait for more HP (at 0 HP the game only offers to leave, and
+  // re-entry takes days).
+  function underworldSettings(settings) {
+    const u = settings.underworld;
+    return {
+      ...settings,
+      expedition: { ...settings.expedition, enabled: u.enabled, keepPoints: 0, bonusesFirst: false },
+      dungeon: { ...settings.dungeon, enabled: false },
+      heal: { ...settings.heal, enabled: false, minHpPercent: Math.max(settings.heal.minHpPercent, u.minHpPercent) },
+    };
+  }
+
+  function wantsUnderworldEntry(state, settings, memory, now) {
+    if (settings.underworld.enter === 'off' || state.underworld || (memory.nextUnderworldCheck || 0) > now) return false;
+    if (state.level !== null && state.level !== undefined && state.level < UNDERWORLD_LEVEL) return false;
+    return state.gold === null || state.gold === undefined || state.gold >= UNDERWORLD_COST;
+  }
 
   function decide(state, settings, memory, now) {
     if (!settings.enabled) {
@@ -181,6 +210,13 @@
       return repairing || { type: 'idle', reason: 'Paused' };
     }
     if (!state.inGame) return { type: 'idle', reason: 'Not on an in-game page' };
+
+    // On the way to the Underworld nothing can be done: wait for the journey.
+    if (state.travel) {
+      const until = now + Math.max(state.travel.remainingMs || 0, MIN_WAIT_MS) + 3000;
+      return { type: 'wait', until, reason: 'Travelling to the Underworld', next: { label: 'Journey ends', at: until } };
+    }
+    if (state.underworld) settings = underworldSettings(settings);
 
     const hours = scheduleWindow(settings.schedule, now);
     if (!hours.active) {
@@ -232,6 +268,10 @@
       return { type: 'packages', reason: 'Go through the packages' };
     }
 
+    if (wantsUnderworldEntry(state, settings, memory, now)) {
+      return { type: 'underworld', reason: `Enter the Underworld (${settings.underworld.enter})` };
+    }
+
     if (wantsTraining(state, settings, memory, now)) {
       return { type: 'training', reason: 'Train a stat with spare gold' };
     }
@@ -255,8 +295,8 @@
         if (eta !== null) wake.push({ label: `HP ${minHp}%`, at: now + eta });
         continue;
       }
-      if (USES_POINTS[type] && outOfPoints(cd, cfg)) continue;
-      if (cd.ready) return { type, reason: `${LABELS[type]} is ready` };
+      if (USES_POINTS[type] && outOfPoints(cd, cfg, state.underworld)) continue;
+      if (cd.ready) return { type, reason: `${state.underworld && type === 'expedition' ? 'Underworld expedition' : LABELS[type]} is ready` };
       if (cd.remainingMs !== null && cd.remainingMs !== undefined) wake.push({ label: LABELS[type], at: now + cd.remainingMs });
     }
 
@@ -267,6 +307,7 @@
     if (settings.smelting.enabled && memory.smeltNext > now) wake.push({ label: 'Smelting', at: memory.smeltNext });
     if (settings.auction.enabled && memory.nextAuctionCheck > now) wake.push({ label: 'Auction house', at: memory.nextAuctionCheck });
     if (wantsPackages(settings) && memory.nextPackagesCheck > now) wake.push({ label: 'Packages', at: memory.nextPackagesCheck });
+    if (settings.underworld.enter !== 'off' && !state.underworld && memory.nextUnderworldCheck > now) wake.push({ label: 'Underworld', at: memory.nextUnderworldCheck });
 
     const maxIdleMs = settings.timing.maxIdle * 1000;
     let next = { label: 'Re-check', at: now + maxIdleMs };
@@ -318,6 +359,18 @@
     if (!cfg.bonusesFirst || chosen !== 3) return chosen;
     const pending = enemies.slice(0, 3).findIndex((e) => e && e.learnable > 0);
     return pending >= 0 ? pending : chosen;
+  }
+
+  // Which dungeon enemy to fight. targets = [{ position, boss }] in page
+  // order. Returns { position }, or { cancel: reason } to cancel the dungeon
+  // and start a new one, or null when there is nothing to fight.
+  function dungeonChoice(targets, cfg, memory) {
+    if (!targets.length) return null;
+    const losses = memory.dungeonLosses || 0;
+    if (cfg.restartAfterLosses > 0 && losses >= cfg.restartAfterLosses) return { cancel: `${losses} lost fights in a row` };
+    if (!cfg.skipBoss) return { position: targets[0].position };
+    const others = targets.filter((t) => !t.boss);
+    return others.length ? { position: others[0].position } : { cancel: 'only the boss is left' };
   }
 
   // When to look at the smelter again, from its slots (as in slotsData):
@@ -463,6 +516,7 @@
   // Per-activity summary for the control bar tiles.
   //   { enabled, text, until?, ready?, warn?, points? }
   function activityStatus(state, settings, memory, now) {
+    if (state.underworld) settings = underworldSettings(settings);
     const out = {};
     const hp = state.hp || {};
     const hpLow = hpKnown(hp) && hp.percent < settings.heal.minHpPercent;
@@ -476,7 +530,7 @@
       if (!cfg.enabled) s.text = 'off';
       else if (!cd || !cd.available) s.text = 'n/a';
       else if (isBlocked(memory, type, now)) Object.assign(s, { text: 'paused', until: memory.blockedUntil[type], warn: true });
-      else if (USES_POINTS[type] && outOfPoints(cd, cfg)) s.text = 'no points';
+      else if (USES_POINTS[type] && outOfPoints(cd, cfg, state.underworld)) s.text = 'no points';
       else if (NEEDS_HP[type] && hpLow) Object.assign(s, { text: 'low HP', warn: true });
       else if (cd.ready) Object.assign(s, { text: 'ready', ready: true });
       else if (cd.remainingMs) Object.assign(s, { text: 'cooldown', until: now + cd.remainingMs });
@@ -596,6 +650,7 @@
     const renownKind = type === 'dungeon' || type === 'circus' ? 'fame' : 'honour';
     loot[renownKind] = (loot[renownKind] || 0) + (report.renown || 0);
     memory.lastFight = { type, at: now, ...report };
+    if (type === 'dungeon') memory.dungeonLosses = report.win ? 0 : (memory.dungeonLosses || 0) + 1;
     const gains = [];
     if (report.gold) gains.push(`+${fmt(report.gold)} gold`);
     if (report.xp) gains.push(`+${fmt(report.xp)} XP`);
@@ -709,6 +764,9 @@
     inRepairAll,
     expeditionTarget,
     nextSmeltCheck,
+    dungeonChoice,
+    underworldSettings,
+    UNDERWORLD_COST,
     gearKind,
     wantsPackages,
     packageAction,

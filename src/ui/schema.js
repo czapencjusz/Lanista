@@ -114,7 +114,7 @@
       title: 'Dungeon',
       icon: 'dungeon',
       enable: 'dungeon.enabled',
-      description: 'Start a dungeon when none is running and fight its enemies one after another.',
+      description: 'Start a dungeon when none is running and fight its enemies one after another. The ruby button that skips the cooldown is never used.',
       fields: [
         { path: 'dungeon.location', type: 'location', label: 'Location' },
         {
@@ -125,8 +125,50 @@
             { value: 'normal', label: 'Normal' },
             { value: 'advanced', label: 'Advanced' },
           ],
+          help: 'Where Advanced is not unlocked yet, Normal is started instead.',
         },
         { path: 'dungeon.keepPoints', type: 'number', label: 'Keep points in reserve', help: 'Stop when this many dungeon points are left.' },
+        {
+          path: 'dungeon.skipBoss',
+          type: 'toggle',
+          label: 'Never fight the boss',
+          help: 'The other enemies go first; once only the boss is left, the dungeon is cancelled and a new one started. Its tasks and the boss loot are given up.',
+        },
+        {
+          path: 'dungeon.restartAfterLosses',
+          type: 'number',
+          label: 'Start a new dungeon after',
+          unit: 'lost fights in a row',
+          help: 'Cancels a dungeon that is too hard and starts a fresh one. 0 turns it off.',
+        },
+      ],
+    },
+    {
+      id: 'underworld',
+      title: 'Underworld',
+      icon: 'underworld',
+      enable: 'underworld.enabled',
+      description: 'From level 100, the Hermit sends you to the Underworld: four areas of three enemies and a boss each, with their own 18 expedition points. The bot fights the newest area and enemy, never spends rubies (without points an attack would cost them), never shortens or turns back the journey, and never leaves: leaving, or falling to 0 HP, locks the Underworld for days.',
+      fields: [
+        {
+          path: 'underworld.minHpPercent',
+          type: 'number',
+          label: 'Only fight above',
+          unit: '% HP',
+          help: 'Food cannot be eaten in the Underworld, so the bot waits for HP to regenerate. Dungeons are not available there.',
+        },
+        {
+          path: 'underworld.enter',
+          type: 'select',
+          label: 'Enter automatically',
+          options: [
+            { value: 'off', label: 'No, I enter myself' },
+            { value: 'normal', label: 'Yes, on Normal' },
+            { value: 'medium', label: 'Yes, on Middle' },
+            { value: 'hard', label: 'Yes, on Hard' },
+          ],
+          help: 'Whenever the Underworld can be entered again. Costs 8,000 gold and about 30 minutes of travel (less on speed servers). On Hard, dying costs a skill point.',
+        },
       ],
     },
     {
