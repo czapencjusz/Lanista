@@ -22,6 +22,7 @@
   "background": {
     "service_worker": "src/background/background.js",
     "scripts": [
+      "src/shared/settings.js",
       "src/background/background.js"
     ]
   },

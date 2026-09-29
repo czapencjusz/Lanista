@@ -317,25 +317,77 @@
 
   const normalize = (raw) => sanitizeSettings(migrateSettings(raw) || {});
 
+  // Every game server keeps its own settings under "settings:<host>". The
+  // plain "settings" key holds the settings saved last (with the bot stopped):
+  // a server the bot has not seen yet starts from those.
   const STORAGE_KEY = 'settings';
+  const SERVER_PREFIX = 'settings:';
+  const SPLIT_FLAG = 'settingsPerServer';
+  const settingsKey = (host) => (host ? SERVER_PREFIX + host : STORAGE_KEY);
 
   function storageArea() {
     const api = root.browser || root.chrome;
     return api && api.storage && api.storage.local;
   }
 
-  async function loadSettings() {
+  // Picks a server's settings out of a storage snapshot.
+  const pickSettings = (data, host) => normalize(data[settingsKey(host)] !== undefined ? data[settingsKey(host)] : data[STORAGE_KEY]);
+
+  async function loadSettings(host) {
     const area = storageArea();
     if (!area) return normalize({});
-    const data = await area.get(STORAGE_KEY);
-    return normalize(data[STORAGE_KEY]);
+    return pickSettings(await area.get([settingsKey(host), STORAGE_KEY]), host);
   }
 
-  async function saveSettings(settings) {
+  async function saveSettings(settings, host) {
     const clean = sanitizeSettings(settings);
-    await storageArea().set({ [STORAGE_KEY]: clean });
-    return clean;
+    const template = { ...clean, enabled: false };
+    await storageArea().set(host ? { [settingsKey(host)]: clean, [STORAGE_KEY]: template } : { [STORAGE_KEY]: template });
+    return host ? clean : template;
   }
+
+  // Older versions shared one settings object between all servers: give every
+  // server the bot has played on its own copy, once.
+  async function splitSettings() {
+    const area = storageArea();
+    const all = await area.get(null);
+    if (all[SPLIT_FLAG]) return false;
+    const writes = { [SPLIT_FLAG]: true };
+    const shared = all[STORAGE_KEY];
+    if (shared !== undefined) {
+      for (const host of serversIn(all)) {
+        if (all[settingsKey(host)] === undefined) writes[settingsKey(host)] = shared;
+      }
+      writes[STORAGE_KEY] = { ...shared, enabled: false };
+    }
+    await area.set(writes);
+    return true;
+  }
+
+  // Hosts with stored memory or settings, most recently played first.
+  function serversIn(all) {
+    const hosts = new Set();
+    for (const key of Object.keys(all)) {
+      if (key.startsWith('memory:')) hosts.add(key.slice(7));
+      else if (key.startsWith(SERVER_PREFIX)) hosts.add(key.slice(SERVER_PREFIX.length));
+    }
+    const playedAt = (host) => {
+      const m = all[`memory:${host}`];
+      return (m && m.gameInfo && m.gameInfo.updatedAt) || 0;
+    };
+    return Array.from(hosts).sort((a, b) => playedAt(b) - playedAt(a));
+  }
+
+  async function listServers() {
+    const area = storageArea();
+    return area ? serversIn(await area.get(null)) : [];
+  }
+
+  // "s303-en.gladiatus.gameforge.com" -> "Server 303 (EN)".
+  const serverName = (host) => {
+    const m = String(host).match(/^s(\d+)-(\w+)\./);
+    return m ? `Server ${m[1]} (${m[2].toUpperCase()})` : host;
+  };
 
   GBot.settings = {
     SETTINGS_VERSION,
@@ -345,6 +397,13 @@
     QUEST_TYPES,
     TRAINING_STATS,
     STORAGE_KEY,
+    SERVER_PREFIX,
+    settingsKey,
+    pickSettings,
+    splitSettings,
+    serversIn,
+    listServers,
+    serverName,
     getPath,
     setPath,
     mergeSettings,

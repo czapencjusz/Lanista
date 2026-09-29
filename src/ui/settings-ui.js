@@ -7,6 +7,9 @@
 //     settings, memory, compact, initialTab,
 //     onChange: async (settings) => savedSettings,  // persist
 //     onResetStats: async () => {}, onClearLog: async () => {},
+//     // optional, for "Copy from another server":
+//     host: 'sNN-xx...' or () => host, listServers: async () => [host],
+//     loadServerSettings: async (host) => settings,
 //   });
 //   container.appendChild(view.element);
 //   view.update({ settings, memory });  // push external changes in
@@ -56,6 +59,8 @@
     let savedTimer = null;
 
     const get = (path) => S.getPath(view.settings, path);
+    // The server whose settings are shown (the popup can switch servers).
+    const currentHost = () => (typeof opts.host === 'function' ? opts.host() : opts.host) || null;
 
     function flash(text, isError) {
       if (!savedLabel) return;
@@ -482,6 +487,7 @@
       );
 
       return [
+        ...copyFromServer(status),
         h('h3', {}, 'Export'),
         h(
           'div',
@@ -502,6 +508,41 @@
         h('h3', {}, 'Reset'),
         h('div', { class: 'gb-actions' }, reset),
       ];
+    }
+
+    // Settings are kept per game server: take over another server's.
+    function copyFromServer(status) {
+      if (!opts.listServers || !opts.loadServerSettings) return [];
+      const host = currentHost();
+      const select = h('select', { class: 'gb-input gb-select', 'aria-label': 'Server to copy from', hidden: true });
+      const note = h('p', { class: 'gb-help' }, 'Looking for your other servers…');
+      const button = h(
+        'button',
+        {
+          type: 'button',
+          class: 'gb-btn',
+          hidden: true,
+          onclick: () =>
+            confirmThen(button, 'Copy settings', async () => {
+              const from = select.value;
+              const copied = await opts.loadServerSettings(from);
+              // Copying never starts or stops the bot.
+              save({ ...copied, enabled: view.settings.enabled });
+              status.classList.remove('error');
+              status.textContent = `Settings copied from ${S.serverName(from)}.`;
+            }),
+        },
+        'Copy settings'
+      );
+      opts.listServers().then((hosts) => {
+        const others = hosts.filter((x) => x !== host);
+        for (const x of others) select.appendChild(h('option', { value: x }, S.serverName(x)));
+        select.hidden = button.hidden = !others.length;
+        note.textContent = others.length
+          ? `Replace the settings of ${host ? S.serverName(host) : 'this server'} with those of another server you play on.`
+          : 'GBot has only been used on this server so far.';
+      });
+      return [h('h3', {}, 'Copy from another server'), note, h('div', { class: 'gb-actions' }, select, button)];
     }
 
     // Two-click confirmation (window.confirm() is unreliable in popups).

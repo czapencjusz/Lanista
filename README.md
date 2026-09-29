@@ -81,7 +81,11 @@ You can also tailor how the bot behaves:
   HP is low and there is no food left. Each one can be turned off.
 * **One tab per server, with a watchdog.** Only one game tab runs the bot. If that tab hangs, it is
   reloaded.
-* **Backup.** Export your settings to a file, import them in another browser, or reset them.
+* **Settings per server.** Each server you play on has its own settings and its own Start/Stop,
+  so two accounts never overwrite each other's locations or budgets. A server GBot has not seen
+  before starts with a copy of the settings you saved last, with the bot stopped.
+* **Backup.** Copy the settings of another server, export them to a file, import them in another
+  browser, or reset them.
 
 ## The interface
 
@@ -130,14 +134,14 @@ what is enabled. Changes save as you make them and take effect immediately.
 | Interface | Show the bar, floating or docked |
 | Statistics | Fights per activity with wins, losses and win rate; meals, nests, quests, work shifts, stats trained, items repaired, items smelted, auction bids; gold looted, experience, honour and fame; gold change; per-hour rates; reset |
 | Log | Recent activity, filter to warnings only, clear |
-| Backup | Export to a file or the clipboard, import, reset to defaults |
+| Backup | Copy from another server, export to a file or the clipboard, import, reset to defaults |
 
 ### Toolbar popup and options page
 
 The toolbar button opens a compact version of the same settings, with icon-only tabs, a Start/Stop
 button and the server's status. The *open in tab* button, or the browser's extension options,
-shows the full-size settings page. If you play on several servers, it also has a server selector
-for statistics and logs.
+shows the full-size settings page. If you play on several servers, it also has a server selector:
+the settings, Start/Stop, statistics and log shown are those of the selected server.
 
 <img src="docs/popup.png" alt="Popup" width="330">
 
@@ -207,7 +211,8 @@ again on every page load:
 4. Perform it.
 
 Anything that must survive a page load, such as attempt counters, work end time, a repair in
-progress, stats and the log, is kept per server in extension storage.
+progress, stats and the log, is kept per server in extension storage, next to that server's
+settings.
 
 The bar is filled in from storage and the page as soon as the page is parsed. The first action
 waits 0.8-2 seconds so the game's own scripts are ready, and every click waits the human-like

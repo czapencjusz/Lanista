@@ -21,19 +21,7 @@
     return null;
   }
 
-  // Servers the bot has played on, most recently active first.
-  async function knownServers() {
-    const all = await ext.storage.local.get(null);
-    return Object.keys(all)
-      .filter((k) => k.startsWith('memory:'))
-      .map((k) => ({ host: k.slice(7), updatedAt: (all[k].gameInfo && all[k].gameInfo.updatedAt) || 0 }))
-      .sort((a, b) => b.updatedAt - a.updatedAt);
-  }
-
-  const serverName = (host) => {
-    const m = host.match(/^s(\d+)-(\w+)\./);
-    return m ? `Server ${m[1]} (${m[2].toUpperCase()})` : host;
-  };
+  const { serverName } = S;
 
   async function mount({ compact }) {
     const style = document.createElement('style');
@@ -41,9 +29,11 @@
     document.head.appendChild(style);
     document.body.classList.add('gb-root');
 
-    let settings = await S.loadSettings();
-    const servers = await knownServers();
-    let host = (await activeGameHost()) || (servers[0] && servers[0].host) || null;
+    // Servers the bot has played on, most recently active first. Settings
+    // and statistics shown are those of the selected server.
+    const servers = await S.listServers();
+    let host = (await activeGameHost()) || servers[0] || null;
+    let settings = await S.loadSettings(host);
     let memory = null;
 
     const loadMemory = async () => {
@@ -68,8 +58,9 @@
         type: 'button',
         id: 'toggle',
         class: 'gb-play',
+        disabled: !host,
         onclick: async () => {
-          settings = await S.saveSettings({ ...settings, enabled: !settings.enabled });
+          settings = await S.saveSettings({ ...settings, enabled: !settings.enabled }, host);
           render();
         },
       },
@@ -82,13 +73,14 @@
       hidden: servers.length < 2,
       onchange: async () => {
         host = serverSelect.value;
-        memory = await loadMemory();
-        view.update({ memory });
+        [settings, memory] = await Promise.all([S.loadSettings(host), loadMemory()]);
+        view.update({ settings, memory });
+        view.showTab(view.getTab());
         render();
       },
     });
-    for (const s of servers) serverSelect.appendChild(h('option', { value: s.host }, serverName(s.host)));
-    if (host && !servers.some((s) => s.host === host)) serverSelect.appendChild(h('option', { value: host }, serverName(host)));
+    for (const s of servers) serverSelect.appendChild(h('option', { value: s }, serverName(s)));
+    if (host && !servers.includes(host)) serverSelect.appendChild(h('option', { value: host }, serverName(host)));
     if (host) serverSelect.value = host;
 
     const subtitle = h('div', { class: 'gb-page-sub', id: 'status-host' });
@@ -128,10 +120,13 @@
       memory,
       compact,
       onChange: async (next) => {
-        settings = await S.saveSettings(next);
+        settings = await S.saveSettings(next, host);
         render();
         return settings;
       },
+      host: () => host,
+      listServers: S.listServers,
+      loadServerSettings: S.loadSettings,
       onResetStats: () =>
         editMemory((m) => {
           m.stats = GBot.brain.createMemory(Date.now()).stats;
@@ -165,9 +160,14 @@
 
     ext.storage.onChanged.addListener((changes, area) => {
       if (area !== 'local') return;
-      if (changes[S.STORAGE_KEY]) {
-        settings = S.normalize(changes[S.STORAGE_KEY].newValue);
-        view.update({ settings });
+      if (changes[S.settingsKey(host)] || changes[S.STORAGE_KEY]) {
+        const shown = host;
+        S.loadSettings(host).then((next) => {
+          if (host !== shown) return;
+          settings = next;
+          view.update({ settings });
+          render();
+        });
       }
       if (host && changes[memoryKey(host)]) {
         const value = changes[memoryKey(host)].newValue;

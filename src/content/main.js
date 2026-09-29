@@ -10,7 +10,10 @@
   const S = GBot.settings;
   const { PAGES, buildUrl } = GBot.selectors;
 
-  const MEMORY_KEY = `memory:${location.host}`;
+  // Memory and settings are kept per game server.
+  const HOST = location.host;
+  const MEMORY_KEY = `memory:${HOST}`;
+  const SETTINGS_KEY = S.settingsKey(HOST);
   const LOG_LIMIT = 150;
   const DEBUG_LOGS = false;
 
@@ -79,7 +82,7 @@
   // Desktop notification, if the user enabled this kind in the settings.
   function notify(kind, message) {
     if (settings && settings.notifications[kind] === false) return;
-    send({ type: 'alert', kind, message });
+    send({ type: 'alert', kind, message, host: HOST });
   }
 
   function schedule(fn, delayMs) {
@@ -299,7 +302,7 @@
   // executed or saved, so the first tick (which may act) keeps its delay.
   async function paintNow() {
     const now = Date.now();
-    const [loadedSettings, loadedMemory] = await Promise.all([S.loadSettings(), loadMemory()]);
+    const [loadedSettings, loadedMemory] = await Promise.all([S.loadSettings(HOST), loadMemory()]);
     if (running) return; // the first tick got here first
     settings = loadedSettings;
     memory = loadedMemory;
@@ -317,7 +320,7 @@
     let state = null;
     try {
       const now = Date.now();
-      settings = await S.loadSettings();
+      settings = await S.loadSettings(HOST);
       memory = await loadMemory();
       state = GBot.state.readState(document, location, now);
       lastState = state;
@@ -422,15 +425,18 @@
 
   const panel = GBot.panel.create({
     onToggleBot: async () => {
-      const current = await S.loadSettings();
-      await S.saveSettings({ ...current, enabled: !current.enabled });
+      const current = await S.loadSettings(HOST);
+      await S.saveSettings({ ...current, enabled: !current.enabled }, HOST);
     },
     onToggleActivity: async (id) => {
-      const current = await S.loadSettings();
+      const current = await S.loadSettings(HOST);
       const path = GBot.ui.ACTIVITIES[id].path;
-      await S.saveSettings(S.setPath(current, path, !S.getPath(current, path)));
+      await S.saveSettings(S.setPath(current, path, !S.getPath(current, path)), HOST);
     },
-    onSaveSettings: (next) => S.saveSettings(next),
+    onSaveSettings: (next) => S.saveSettings(next, HOST),
+    host: HOST,
+    listServers: S.listServers,
+    loadServerSettings: S.loadSettings,
     onRunNow: () => {
       cancel();
       tick();
@@ -454,8 +460,13 @@
       panel.update({ memory, status: statusFor(lastState) });
       renderPageButtons(lastState);
     }
-    if (!changes[S.STORAGE_KEY]) return;
-    const next = S.normalize(changes[S.STORAGE_KEY].newValue);
+    // This server's settings, or the shared ones while it has none of its own.
+    if (changes[SETTINGS_KEY] && changes[SETTINGS_KEY].newValue) applySettings(S.normalize(changes[SETTINGS_KEY].newValue));
+    else if (changes[SETTINGS_KEY] || changes[S.STORAGE_KEY]) S.loadSettings(HOST).then(applySettings, () => {});
+  });
+
+  function applySettings(next) {
+    if (settings && JSON.stringify(next) === JSON.stringify(settings)) return;
     const wasEnabled = settings && settings.enabled;
     // New auction settings (price, limits, timing): look again right away
     // instead of at the next scheduled check.
@@ -478,7 +489,7 @@
       // Settings changed while running: re-evaluate soon.
       schedule(tick, 1500);
     }
-  });
+  }
 
   // Show the bar's state right away, but give the game's own scripts a moment
   // to initialise before the first tick, which may click or navigate.

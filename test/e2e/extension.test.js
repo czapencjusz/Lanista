@@ -15,6 +15,8 @@ const { sanitizeSettings } = require('../../src/shared/settings.js');
 
 const EXTENSION = path.resolve(__dirname, '../..');
 const HOST = new URL(ORIGIN).host;
+// The mock server's own settings.
+const SETTINGS = `settings:${HOST}`;
 
 function findChromium() {
   if (process.env.CHROMIUM_PATH) return process.env.CHROMIUM_PATH;
@@ -61,7 +63,7 @@ async function configure(overrides) {
     arena: { enabled: false, ...(overrides.arena || {}) },
     circus: { enabled: false, ...(overrides.circus || {}) },
   });
-  await worker.evaluate(async (s) => chrome.storage.local.set({ settings: s }), settings);
+  await worker.evaluate(async ([key, s]) => chrome.storage.local.set({ [key]: s }), [SETTINGS, settings]);
   return settings;
 }
 
@@ -191,16 +193,16 @@ test.describe('GBot extension against a mock Gladiatus server', { skip: !executa
     await bar.waitFor();
 
     await bar.locator('[data-activity="arena"]').click();
-    await waitUntil(async () => (await storageGet('settings')).arena.enabled === true, 5000, 'arena on');
+    await waitUntil(async () => (await storageGet(SETTINGS)).arena.enabled === true, 5000, 'arena on');
     await page.waitForFunction(() => document.querySelector('#gbot-root').shadowRoot.querySelector('[data-activity="arena"]').classList.contains('on'));
     await bar.locator('[data-activity="arena"]').click();
-    await waitUntil(async () => (await storageGet('settings')).arena.enabled === false, 5000, 'arena off');
+    await waitUntil(async () => (await storageGet(SETTINGS)).arena.enabled === false, 5000, 'arena off');
 
     await bar.locator('.gb-play').click();
-    await waitUntil(async () => (await storageGet('settings')).enabled === true, 5000, 'bot started');
+    await waitUntil(async () => (await storageGet(SETTINGS)).enabled === true, 5000, 'bot started');
     assert.match(await bar.locator('.gb-play').textContent(), /Stop/);
     await bar.locator('.gb-play').click();
-    await waitUntil(async () => (await storageGet('settings')).enabled === false, 5000, 'bot stopped');
+    await waitUntil(async () => (await storageGet(SETTINGS)).enabled === false, 5000, 'bot stopped');
 
     // Docked layout pushes the page down instead of covering it.
     await configure({ enabled: false, ui: { panel: true, layout: 'bar' } });
@@ -229,7 +231,7 @@ test.describe('GBot extension against a mock Gladiatus server', { skip: !executa
     await dialog.locator('[data-path="arena.maxAbove"]').fill('5');
     await dialog.locator('[data-path="arena.maxAbove"]').press('Tab');
     const saved = await waitUntil(async () => {
-      const s = await storageGet('settings');
+      const s = await storageGet(SETTINGS);
       return s.arena.enabled && s.arena.limitLevels && s.arena.ignorePlayers === 'Player1' && s.arena.maxAbove === 5 ? s : null;
     }, 5000, 'arena settings saved');
     assert.equal(saved.arena.maxBelow, 20);
@@ -260,7 +262,7 @@ test.describe('GBot extension against a mock Gladiatus server', { skip: !executa
     assert.match(await popup.textContent('#toggle'), /Start/);
 
     await popup.click('#toggle');
-    await waitUntil(async () => (await storageGet('settings')).enabled === true, 5000, 'enabled');
+    await waitUntil(async () => (await storageGet(SETTINGS)).enabled === true, 5000, 'enabled');
 
     await popup.click('[data-tab="work"]');
     assert.equal(await popup.inputValue('[data-path="work.job"]'), '1', 'job index is shown 1-based');
@@ -271,17 +273,17 @@ test.describe('GBot extension against a mock Gladiatus server', { skip: !executa
     await popup.fill('[data-path="dungeon.location#custom"]', '7');
     await popup.press('[data-path="dungeon.location#custom"]', 'Tab');
     await waitUntil(async () => {
-      const s = await storageGet('settings');
+      const s = await storageGet(SETTINGS);
       return s.expedition.enemy === 3 && s.dungeon.location === '7';
     }, 5000, 'settings saved');
 
     // Priority: move Arena to the top.
     await popup.click('[data-tab="general"]');
     for (let i = 0; i < 3; i++) await popup.click('[data-item="arena"] button[title="Move Arena up"]');
-    await waitUntil(async () => (await storageGet('settings')).general.order[0] === 'arena', 5000, 'arena first');
+    await waitUntil(async () => (await storageGet(SETTINGS)).general.order[0] === 'arena', 5000, 'arena first');
 
     await popup.click('#toggle');
-    await waitUntil(async () => (await storageGet('settings')).enabled === false, 5000, 'disabled');
+    await waitUntil(async () => (await storageGet(SETTINGS)).enabled === false, 5000, 'disabled');
     await popup.close();
   });
 
@@ -305,7 +307,7 @@ test.describe('GBot extension against a mock Gladiatus server', { skip: !executa
     await options.fill('.gb-pane textarea', exported);
     await options.click('text=Import pasted settings');
     const imported = await waitUntil(async () => {
-      const s = await storageGet('settings');
+      const s = await storageGet(SETTINGS);
       return s.expedition.enemy === 4 ? s : null;
     }, 5000, 'import');
     assert.equal(imported.expedition.keepPoints, 6);
@@ -319,7 +321,43 @@ test.describe('GBot extension against a mock Gladiatus server', { skip: !executa
     const reset = options.locator('text=Reset all settings');
     await reset.click();
     await options.click('text=Click again to confirm');
-    await waitUntil(async () => (await storageGet('settings')).expedition.enemy === 1, 5000, 'reset');
+    await waitUntil(async () => (await storageGet(SETTINGS)).expedition.enemy === 1, 5000, 'reset');
     await options.close();
+  });
+
+  test('settings are kept per server and can be copied from another one', { timeout: 30000 }, async () => {
+    const OTHER = 's99-de.gladiatus.gameforge.com';
+    await configure({ enabled: false, expedition: { enemy: 1 } });
+    await worker.evaluate(async (key) => chrome.storage.local.set({ [key]: { enabled: true, expedition: { enemy: 3 }, heal: { eatBelowPercent: 40 } } }), `settings:${OTHER}`);
+    const extensionId = new URL(worker.url()).host;
+    const options = await context.newPage();
+    await options.goto(`chrome-extension://${extensionId}/src/pages/options.html`);
+    await options.waitForSelector('.gb-settings');
+    assert.match(await options.textContent('#status-host'), /Server 1 \(EN\)/);
+
+    await options.click('[data-tab="profile"]');
+    const from = options.locator('select[aria-label="Server to copy from"]');
+    await from.waitFor();
+    assert.deepEqual(await from.locator('option').allTextContents(), ['Server 99 (DE)']);
+    const copy = options.getByRole('button', { name: 'Copy settings' });
+    await copy.click();
+    await options.getByRole('button', { name: 'Click again to confirm' }).click();
+    const copied = await waitUntil(async () => {
+      const s = await storageGet(SETTINGS);
+      return s.expedition.enemy === 3 ? s : null;
+    }, 5000, 'settings copied');
+    assert.equal(copied.heal.eatBelowPercent, 40);
+    assert.equal(copied.enabled, false, 'copying never starts the bot');
+    assert.equal((await storageGet(`settings:${OTHER}`)).enabled, true, 'the other server is left alone');
+
+    // The server list switches the settings shown, start/stop included.
+    await options.selectOption('.gb-server', OTHER);
+    await options.waitForFunction(() => /Server 99 \(DE\)/.test(document.querySelector('#status-host').textContent));
+    assert.match(await options.textContent('#toggle'), /Stop/);
+    await options.click('#toggle');
+    await waitUntil(async () => (await storageGet(`settings:${OTHER}`)).enabled === false, 5000, 'other server stopped');
+    assert.equal((await storageGet(SETTINGS)).enabled, false);
+    await options.close();
+    await worker.evaluate(async (key) => chrome.storage.local.remove(key), `settings:${OTHER}`);
   });
 });

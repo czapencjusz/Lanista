@@ -353,7 +353,7 @@
     },
     { id: 'stats', title: 'Statistics', icon: 'stats', custom: 'stats', description: 'What the bot has done on this server.' },
     { id: 'log', title: 'Log', icon: 'log', custom: 'log', description: 'Recent bot activity on this server.' },
-    { id: 'profile', title: 'Backup', icon: 'profile', custom: 'profile', description: 'Export your settings to a file, import them on another browser, or reset them.' },
+    { id: 'profile', title: 'Backup', icon: 'profile', custom: 'profile', description: 'Every server keeps its own settings. Copy them from another server, export them to a file, import them on another browser, or reset them.' },
   ];
 
   // Labels/icons for the priority list and the control bar tiles.

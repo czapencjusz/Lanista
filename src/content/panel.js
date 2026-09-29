@@ -279,6 +279,9 @@
         onChange: (s) => handlers.onSaveSettings(s),
         onResetStats: () => handlers.onResetStats(),
         onClearLog: () => handlers.onClearLog(),
+        host: handlers.host,
+        listServers: handlers.listServers,
+        loadServerSettings: handlers.loadServerSettings,
       });
       const close = () => {
         backdrop.remove();
@@ -295,7 +298,7 @@
           'div',
           { class: 'gb-modal-head' },
           icon('arena', 18),
-          h('span', { class: 'gb-title' }, 'GBot settings'),
+          h('span', { class: 'gb-title' }, handlers.host ? `GBot settings · ${GBot.settings.serverName(handlers.host)}` : 'GBot settings'),
           h('button', { type: 'button', class: 'gb-icon-btn', title: 'Close (Esc)', dataset: { action: 'close' }, onclick: close }, icon('close', 18))
         ),
         h('div', { class: 'gb-modal-body' }, view.element)
