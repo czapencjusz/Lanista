@@ -27,6 +27,8 @@
     ignorePlayers: '',
     // Skip an opponent for this many hours after losing to them (0 = off).
     avoidLostHours: 24,
+    // Try opponents beaten in the last two weeks first (most wins first).
+    preferBeaten: false,
   });
 
   const DEFAULT_SETTINGS = {

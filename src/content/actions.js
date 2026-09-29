@@ -364,7 +364,8 @@
     const avoided = brain.avoidedNames(ctx.memory, type, ctx.now());
     const allowed = brain.filterOpponents(opponents, settings[type], state.level, avoided);
     if (!allowed.length) throw new ActionError(`None of the ${opponents.length} ${type} opponents match your filters`);
-    const order = brain.pickOpponents(allowed, settings[type].target);
+    let order = brain.pickOpponents(allowed, settings[type].target);
+    if (settings[type].preferBeaten) order = brain.preferBeaten(order, ctx.memory.beaten[type], ctx.now());
     for (const opponent of order.slice(0, 3)) {
       // Remembered so the combat report can be tied to this opponent.
       if (ctx.memory.pending) Object.assign(ctx.memory.pending, { opponent: opponent.name, avoidHours: settings[type].avoidLostHours });

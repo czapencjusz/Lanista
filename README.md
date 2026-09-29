@@ -16,7 +16,8 @@ through the game the way a player would.
 | **Expeditions** | Attacks the enemy you choose (1-4) at a location you pick from the game's own list, or at your last visited one, whenever the cooldown is ready. It can keep some points in reserve. With the boss selected, it can first fight the location's other enemies until all their bonuses are learned, so the boss gets them too (see below). |
 | **Dungeons** | Starts a Normal or Advanced dungeon when none is running (Normal where Advanced is not unlocked yet), then fights the enemies one by one. Optionally it never fights the boss: the other enemies go first, then the dungeon is cancelled and a new one started. It can also start over after a number of lost fights in a row. The ruby button that skips the cooldown is never used. |
 | **Underworld** | Optional. From level 100: fights the Underworld's enemies with its own expedition points, always the newest area and enemy, and waits for HP to regenerate since food cannot be eaten there. It can also enter the Underworld for you (Normal, Middle or Hard) whenever it is allowed again. It never leaves, never turns back or shortens the journey, and never attacks without points (that would cost rubies). |
-| **Arena Provinciarum** | Attacks the lowest-level, highest-level or a random opponent. It can stick to opponents near your level and skip names on a never-attack list. Opponents who beat you are skipped for a while (24 hours by default). If the game refuses a fight, it tries another opponent. |
+| **Arena Provinciarum** | Attacks the lowest-level, highest-level or a random opponent. It can stick to opponents near your level and skip names on a never-attack list. Opponents who beat you are skipped for a while (24 hours by default), and optionally those you have beaten go first. If the game refuses a fight, it tries another opponent. |
+| **Points refills** | Optional. Uses Gate Keys and Mobilisations you own (never bought) when dungeon or expedition points run out, up to a number per day. |
 | **Circus Turma Provinciarum** | Same options as the arena. |
 | **Enemy nests** | After some wins the game offers to search the enemy's nest for extra loot. The bot does a quick search, a thorough search, or returns to safety, as you choose. |
 | **Healing** | Eats food below one HP threshold and stops fighting below another. It searches every bag and picks the food that best fills the missing HP; when the bags are empty it takes food from the packages. |
@@ -158,10 +159,10 @@ what is enabled. Changes save as you make them and take effect immediately.
 | Tab | Options |
 | --- | --- |
 | General | Bot on/off, activity priority order, enemy nest search (quick / thorough / return to safety / leave it to me) |
-| Expedition | Location (last visited, one from the game's list, or any id), enemy 1-4, learn the other enemies' bonuses before the boss, points to keep in reserve |
-| Dungeon | Location, Normal/Advanced, points to keep in reserve, never fight the boss, start a new dungeon after lost fights |
+| Expedition | Location (last visited, one from the game's list, or any id), enemy 1-4, learn the other enemies' bonuses before the boss, points to keep in reserve, Mobilisations to use per day |
+| Dungeon | Location, Normal/Advanced, points to keep in reserve, never fight the boss, start a new dungeon after lost fights, Gate Keys to use per day |
 | Underworld | Fighting on/off, minimum HP to fight, enter automatically (off, Normal, Middle, Hard), Mobilisations and 100% Healing Potions to use per visit |
-| Arena / Circus Turma | Lowest / highest / random opponent, level range around yours, never-attack list, how long to skip opponents who beat you |
+| Arena / Circus Turma | Lowest / highest / random opponent, level range around yours, never-attack list, how long to skip opponents who beat you, prefer opponents you have beaten |
 | Health | Eat food on/off, eat below X% HP, stop fighting below Y% HP |
 | Stable work | Job number, hours |
 | Training | Gold to always keep, stats to train |

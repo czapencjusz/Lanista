@@ -51,6 +51,12 @@
       unit: 'h',
       help: 'After a lost fight that player is skipped for this long. 0 turns it off.',
     },
+    {
+      path: `${type}.preferBeaten`,
+      type: 'toggle',
+      label: 'Prefer opponents I have beaten',
+      help: 'Opponents beaten in the last two weeks are tried first, most wins first, before the choice above.',
+    },
   ];
 
   const TABS = [

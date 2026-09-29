@@ -90,6 +90,8 @@
       },
       // Arena / circus opponents that beat us: type -> { name: until }.
       avoid: { arena: {}, circus: {} },
+      // ... and that we beat: type -> { name: { wins, at } }.
+      beaten: { arena: {}, circus: {} },
       log: [],
     };
   }
@@ -111,6 +113,7 @@
         loot: { ...base.stats.loot, ...((memory.stats && memory.stats.loot) || {}) },
       },
       avoid: { arena: { ...((memory.avoid && memory.avoid.arena) || {}) }, circus: { ...((memory.avoid && memory.avoid.circus) || {}) } },
+      beaten: { arena: { ...((memory.beaten && memory.beaten.arena) || {}) }, circus: { ...((memory.beaten && memory.beaten.circus) || {}) } },
       repairSkip: { ...(memory.repairSkip || {}) },
       smeltQueue: Array.isArray(memory.smeltQueue) ? memory.smeltQueue : [],
       log: Array.isArray(memory.log) ? memory.log : [],
@@ -654,6 +657,11 @@
       if (state.report) {
         success = true;
         message = recordFight(memory, type, state.report, pending.opponent, now);
+        if (state.report.win && pending.opponent && memory.beaten && memory.beaten[type]) {
+          const key = pending.opponent.toLowerCase();
+          const prev = memory.beaten[type][key];
+          memory.beaten[type][key] = { wins: ((prev && prev.wins) || 0) + 1, at: now };
+        }
         if (!state.report.win && pending.opponent && memory.avoid[type] && pending.avoidHours > 0) {
           memory.avoid[type][pending.opponent.toLowerCase()] = now + pending.avoidHours * 3600 * 1000;
           events.push({ level: 'info', message: `${LABELS[type]}: avoiding ${pending.opponent} for ${pending.avoidHours}h after a loss` });
@@ -750,6 +758,17 @@
       }
     } else list.sort((a, b) => a.level - b.level);
     return list.concat(rest);
+  }
+
+  const BEATEN_KEEP_MS = 14 * 24 * 3600 * 1000;
+
+  // Moves opponents beaten in the last two weeks to the front (most wins
+  // first), keeping the rest in the order given. Drops older entries.
+  function preferBeaten(opponents, beaten, now) {
+    for (const [name, b] of Object.entries(beaten || {})) if (!b || now - b.at > BEATEN_KEEP_MS) delete beaten[name];
+    const wins = (o) => (o.name && beaten && beaten[o.name.trim().toLowerCase()] ? beaten[o.name.trim().toLowerCase()].wins : 0);
+    const known = opponents.filter((o) => wins(o) > 0).sort((a, b) => wins(b) - wins(a));
+    return known.concat(opponents.filter((o) => !known.includes(o)));
   }
 
   // Splits a user-entered list ("a, b\nc") into lower-case names.
@@ -854,6 +873,7 @@
     questStep,
     markNoFood,
     pickOpponents,
+    preferBeaten,
     filterOpponents,
     parseNameList,
     pickFood,
