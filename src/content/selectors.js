@@ -161,6 +161,7 @@
       activate: '.premium_activate_button',
       feature: /[?&]feature=(\d+)/,
       mobilisation: 5, // +3 expedition points (Underworld points inside)
+      gateKey: 6, // +3 dungeon points
       healingPotion: 18, // 100% Healing Potion
     },
 

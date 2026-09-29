@@ -107,6 +107,12 @@
           help: 'Only with the boss selected. Fights enemies 1-3 in turn until all their bonuses are learned (each win has a chance to learn one; the chance, shown in the bonus tooltip, depends on your character and the enemy). The boss then gets those bonuses automatically and the bot fights the boss. Bonuses are never bought with rubies.',
         },
         { path: 'expedition.keepPoints', type: 'number', label: 'Keep points in reserve', help: 'Stop when this many expedition points are left.' },
+        {
+          path: 'expedition.mobilisationsPerDay',
+          type: 'number',
+          label: 'Mobilisations to use per day',
+          help: 'From your premium inventory, one at a time once the points run out (+3 points each). Only ones you own; nothing is bought. 0 = never.',
+        },
       ],
     },
     {
@@ -140,6 +146,12 @@
           label: 'Start a new dungeon after',
           unit: 'lost fights in a row',
           help: 'Cancels a dungeon that is too hard and starts a fresh one. 0 turns it off.',
+        },
+        {
+          path: 'dungeon.gateKeysPerDay',
+          type: 'number',
+          label: 'Gate Keys to use per day',
+          help: 'From your premium inventory, one at a time once the dungeon points run out (+3 points each). Only ones you own; nothing is bought. 0 = never.',
         },
       ],
     },

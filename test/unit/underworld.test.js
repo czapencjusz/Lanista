@@ -116,6 +116,22 @@ test('owned premium items: a Mobilisation at 0 points, a potion at low HP, withi
   assert.equal(memory.underworldRun, null, 'a new visit starts from zero');
 });
 
+test('outside the Underworld: Gate Keys and Mobilisations per day once the points run out', () => {
+  const memory = brain.createMemory(NOW);
+  const st = page(`${header(0)}<div id="content"></div>`, 'mod=overview').st;
+  st.dungeon = { ...st.dungeon, points: 0 };
+  const cfg = (e, d) => S.sanitizeSettings({ enabled: true, expedition: { enabled: true, mobilisationsPerDay: e }, dungeon: { enabled: true, gateKeysPerDay: d } });
+  assert.equal(brain.premiumDecision(st, cfg(0, 0), memory, NOW), null, 'off by default');
+  assert.equal(brain.premiumDecision(st, cfg(2, 1), memory, NOW).item, 'gateKey');
+  memory.itemsToday = { day: new Date(NOW).toDateString(), mobilisations: 0, gateKeys: 1 };
+  assert.equal(brain.premiumDecision(st, cfg(2, 1), memory, NOW).item, 'mobilisation');
+  memory.itemsToday.mobilisations = 2;
+  assert.equal(brain.premiumDecision(st, cfg(2, 1), memory, NOW), null, 'daily limit reached');
+  assert.equal(brain.premiumDecision(st, cfg(2, 1), memory, NOW + 24 * 3600 * 1000).item, 'gateKey', 'a new day');
+  const unknown = { ...st, expedition: { ...st.expedition, points: null }, dungeon: { ...st.dungeon, points: null } };
+  assert.equal(brain.premiumDecision(unknown, cfg(2, 1), brain.createMemory(NOW), NOW), null, 'never on unknown points');
+});
+
 // The premium inventory as on s303-en: owned items with a count and an
 // Activate button (Gate Keys cannot be used in the Underworld: no button).
 const inventoryPage = (items) =>

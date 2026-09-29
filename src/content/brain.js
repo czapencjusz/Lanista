@@ -53,6 +53,8 @@
       // Premium items used during the current Underworld visit:
       // { since, mobilisations, potions }; null outside.
       underworldRun: null,
+      // ... and outside it, per local day: { day, mobilisations, gateKeys }.
+      itemsToday: null,
       // Auction house: when to look again, and this round's bids
       // ({ rank, spent, bids: { lotId: amount } }).
       nextAuctionCheck: 0,
@@ -207,21 +209,46 @@
     if (!state.underworld) memory.underworldRun = null;
   }
 
-  // Owned premium items to use in the Underworld, within the per-visit
-  // limits: a 100% Healing Potion when HP is very low, a Mobilisation when
-  // the points are gone (the next attack would cost rubies otherwise).
-  function premiumDecision(state, settings, memory) {
-    if (!state.underworld) return null;
-    const u = settings.underworld;
-    const run = memory.underworldRun || { mobilisations: 0, potions: 0 };
-    const hp = state.hp || {};
-    if (run.potions < u.potions && hpKnown(hp) && hp.percent < u.potionBelowPercent) {
-      return { type: 'premium', item: 'healingPotion', reason: `HP ${hp.percent}% is below ${u.potionBelowPercent}%: use a 100% Healing Potion` };
+  // Owned premium items: the count kept for each, and its limit.
+  const ITEM_KEYS = { mobilisation: 'mobilisations', healingPotion: 'potions', gateKey: 'gateKeys' };
+  const dayOf = (now) => new Date(now).toDateString();
+
+  // Items used so far: per visit inside the Underworld, per local day
+  // outside it.
+  function itemsUsed(state, memory, now) {
+    if (state.underworld) return memory.underworldRun || { since: now, mobilisations: 0, potions: 0 };
+    const today = memory.itemsToday;
+    return today && today.day === dayOf(now) ? today : { day: dayOf(now), mobilisations: 0, gateKeys: 0 };
+  }
+
+  function itemLimit(item, settings, underworld) {
+    if (underworld) return settings.underworld[ITEM_KEYS[item]] || 0;
+    if (item === 'mobilisation') return settings.expedition.mobilisationsPerDay;
+    if (item === 'gateKey') return settings.dungeon.gateKeysPerDay;
+    return 0;
+  }
+
+  // Owned premium items to use, within their limits. In the Underworld: a
+  // 100% Healing Potion when HP is very low, a Mobilisation when the points
+  // are gone (the next attack would cost rubies otherwise). Outside: a Gate
+  // Key or a Mobilisation once dungeon or expedition points run out.
+  function premiumDecision(state, settings, memory, now) {
+    const used = itemsUsed(state, memory, now);
+    const left = (item) => (used[ITEM_KEYS[item]] || 0) < itemLimit(item, settings, state.underworld);
+    if (state.underworld) {
+      const u = settings.underworld;
+      const hp = state.hp || {};
+      if (left('healingPotion') && hpKnown(hp) && hp.percent < u.potionBelowPercent) {
+        return { type: 'premium', item: 'healingPotion', reason: `HP ${hp.percent}% is below ${u.potionBelowPercent}%: use a 100% Healing Potion` };
+      }
+      if (u.enabled && left('mobilisation') && state.expedition && state.expedition.points === 0) {
+        return { type: 'premium', item: 'mobilisation', reason: 'Out of Underworld points: use a Mobilisation' };
+      }
+      return null;
     }
-    const points = state.expedition && state.expedition.points;
-    if (u.enabled && run.mobilisations < u.mobilisations && points === 0) {
-      return { type: 'premium', item: 'mobilisation', reason: 'Out of Underworld points: use a Mobilisation' };
-    }
+    const empty = (type) => settings[type].enabled && state[type] && state[type].available && outOfPoints(state[type], settings[type]);
+    if (left('gateKey') && empty('dungeon')) return { type: 'premium', item: 'gateKey', reason: 'Out of dungeon points: use a Gate Key' };
+    if (left('mobilisation') && empty('expedition')) return { type: 'premium', item: 'mobilisation', reason: 'Out of expedition points: use a Mobilisation' };
     return null;
   }
 
@@ -280,7 +307,7 @@
       }
     }
 
-    const item = !isBlocked(memory, 'premium', now) && premiumDecision(state, settings, memory);
+    const item = !isBlocked(memory, 'premium', now) && premiumDecision(state, settings, memory, now);
     if (item) return item;
 
     const repairing = repairDecision(settings, memory, now);
@@ -800,6 +827,9 @@
     underworldSettings,
     trackUnderworld,
     premiumDecision,
+    itemsUsed,
+    itemLimit,
+    ITEM_KEYS,
     UNDERWORLD_COST,
     gearKind,
     wantsPackages,

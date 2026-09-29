@@ -52,6 +52,9 @@
       bonusesFirst: false,
       // Stop attacking when this many points are left (saved for later).
       keepPoints: 0,
+      // Owned Mobilisations (+3 points each) to use per day once the points
+      // run out. Never bought.
+      mobilisationsPerDay: 0,
     },
 
     dungeon: {
@@ -66,6 +69,9 @@
       // Cancel and restart the dungeon after this many lost fights in a row
       // (0 = never).
       restartAfterLosses: 0,
+      // Owned Gate Keys (+3 dungeon points each) to use per day once the
+      // points run out. Never bought.
+      gateKeysPerDay: 0,
     },
 
     arena: opponentDefaults(),
@@ -251,6 +257,8 @@
     'dungeon.difficulty': { enum: ['normal', 'advanced'] },
     'dungeon.keepPoints': { int: true, min: 0, max: 500 },
     'dungeon.restartAfterLosses': { int: true, min: 0, max: 20 },
+    'dungeon.gateKeysPerDay': { int: true, min: 0, max: 50 },
+    'expedition.mobilisationsPerDay': { int: true, min: 0, max: 50 },
     'underworld.minHpPercent': { int: true, min: 10, max: 100 },
     'underworld.enter': { enum: ['off', 'normal', 'medium', 'hard'] },
     'underworld.mobilisations': { int: true, min: 0, max: 50 },
