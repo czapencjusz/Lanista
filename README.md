@@ -24,8 +24,8 @@ through the game the way a player would.
 | **Stable work** | Optional. Once you are out of expedition and dungeon points, it starts the job and number of hours you chose. |
 | **Pantheon quests** | Optional. Collects finished quests and accepts the best-paying new one of the types you pick. It skips quests for places you do not fight at and for activities that are switched off, and stops when all quest slots are taken. |
 | **Pop-ups** | Collects the daily login bonus and closes notification dialogs. |
-| **Packages** | A **Store all resources in the Horreum** button on the packages page moves every resource from all your packages into the Horreum in one go. Items and food stay in the packages. |
-| **Smelting** | Tick weapons, armour and jewellery on the packages page (one by one, or **Tick all on this page**) to queue them for smelting. While running, the bot fills free smelter slots from the queue, pays the rent in gold and puts the resources of finished smelts in the Horreum (or in a package). |
+| **Packages** | A **Store all resources in the Horreum** button on the packages page moves every resource from all your packages into the Horreum in one go. Optionally, every 30 minutes the bot also tidies the packages: it takes the gold out of gold packages, stores resources in the Horreum, sells weapons, armour and jewellery up to a quality you choose to a merchant, and moves packages that are about to expire into your bags (or sells them). |
+| **Smelting** | Tick weapons, armour and jewellery on the packages page (one by one, or **Tick all on this page**) to queue them for smelting, or let rules pick them by quality and kind. While running, the bot fills free smelter slots from the queue, pays the rent in gold and puts the resources of finished smelts in the Horreum (or in a package). |
 | **Auction house** | Optional. Bids on food and healing potions that heal at least the HP per gold you set, late in the auction round, once per lot, within a gold reserve, a budget per round and a limit on how much food you hold. Won items arrive as packages. |
 
 **The bot never spends rubies.** Workbench and smelter rent is paid in gold, expedition bonuses are
@@ -61,6 +61,22 @@ default), the bot:
 Fights wait while an item is off your character. If the Horreum has no suitable materials, the item
 goes straight back on and is tried again in 6 hours. If a step keeps failing, the bot puts the item
 back on, or logs where it is (on the workbench or in the packages).
+
+### Tidying the packages
+
+Under *Smelting* and *Packages* you set rules by quality (Standard, Ceres, Neptun, ...) and kind
+(weapons, armour, rings and amulets). Every 30 minutes while the bot runs, it goes through all your
+packages:
+
+1. gold packages are opened, so the gold goes to your character;
+2. resources go to the Horreum, if you want;
+3. gear matching a smelting rule joins the smelting queue, as if you had ticked it;
+4. gear matching a selling rule is sold to a merchant for its value, through a free spot in your
+   bags (like dragging it onto the merchant);
+5. packages about to expire (less than 24 hours left by default) are moved into your bags, or sold.
+
+Items you ticked for smelting are never sold. Smelting rules go before selling rules, and anything
+that matches no rule stays where it is. All of it is off until you switch it on.
 
 The overview page also gets a **Repair all** button under your character. It repairs every item at
 or below a cutoff (60% by default, changeable under *Repair*), worst first, one at a time. It works
@@ -125,14 +141,15 @@ what is enabled. Changes save as you make them and take effect immediately.
 | Stable work | Job number, hours |
 | Training | Gold to always keep, stats to train |
 | Repair | Repair below X% conditioning, cutoff for the *Repair all* button, best material quality to use |
-| Smelting | Smelting on/off, put the resources in the Horreum or in a package |
+| Smelting | Smelting on/off, put the resources in the Horreum or in a package, smelt package items automatically by quality and kind |
+| Packages | Tidying on/off, take gold out of gold packages, store resources in the Horreum, sell gear by quality and kind, what to do with packages about to expire |
 | Auction house | Bidding on/off, minimum HP per gold, how late in the round to bid, gold per round, gold to keep, food limit |
 | Quests | Quest types to accept (combat, arena, circus, expedition, dungeon, items, work), only quests for my location and dungeon, only quests for activities that are on |
 | Schedule | Active hours, random breaks |
 | Timing & safety | Click delay range, longest idle time, failed attempts before pausing, pause length |
 | Notifications | Which desktop notifications to show |
 | Interface | Show the bar, floating or docked |
-| Statistics | Fights per activity with wins, losses and win rate; meals, nests, quests, work shifts, stats trained, items repaired, items smelted, auction bids; gold looted, experience, honour and fame; gold change; per-hour rates; reset |
+| Statistics | Fights per activity with wins, losses and win rate; meals, nests, quests, work shifts, stats trained, items repaired, items smelted, items sold, auction bids; gold looted, experience, honour and fame; gold from sales and gold packages; gold change; per-hour rates; reset |
 | Log | Recent activity, filter to warnings only, clear |
 | Backup | Copy from another server, export to a file or the clipboard, import, reset to defaults |
 
@@ -192,6 +209,7 @@ src/content/brain.js          pure decision engine: priority, schedule, retries,
 src/content/actions.js        performs decisions: navigate, click, drag food, fill forms
 src/content/workbench.js      gear repair through the game's own AJAX requests
 src/content/smelter.js        smelting queue: packages → smelter → Horreum, the same way
+src/content/packages.js       package rules: gold, resources, smelting, selling, expiring
 src/content/main.js           runner: show the bar, then read state → decide → act, once per
                               page load; also the overview page's "Repair all" button
 src/content/panel.js          in-game control bar + settings window (shadow DOM)

@@ -172,8 +172,8 @@
   // "Store all resources in the Horreum" button on the packages page.
   function renderPackagesButton(state) {
     let box = document.getElementById('gbot-store-resources');
-    const wrapper = document.getElementById('packages_wrapper');
-    if (!(state && state.inGame && state.page.mod === 'packages') || !wrapper) {
+    const list = document.querySelector(GBot.selectors.SEL.packages.list);
+    if (!(state && state.inGame && state.page.mod === 'packages') || !list) {
       if (box) box.remove();
       return;
     }
@@ -221,9 +221,11 @@
     queueLine.className = 'gbot-smelt-status';
     queueLine.style.marginTop = '3px';
     box.append(button, tickAll, status, queueLine);
-    // Above the packages ("Content"), with or without add-ons restyling the page.
-    const header = wrapper.previousElementSibling;
-    const anchor = header && header.classList.contains('section-header') ? header : wrapper;
+    // Above the packages' "Content" header, with or without add-ons
+    // restyling the page.
+    const section = list.parentElement;
+    const header = section.previousElementSibling;
+    const anchor = header && header.classList.contains('section-header') ? header : list;
     anchor.parentNode.insertBefore(box, anchor);
     renderSmeltTicks(box);
   }
@@ -232,7 +234,7 @@
 
   const packageCn = (el) => util.parseNumber(el.parentElement.getAttribute('data-container-number'));
   const smeltableOnPage = () =>
-    Array.from(document.querySelectorAll('#packages_wrapper .packageItem [data-content-type]')).filter(GBot.smelter.isSmeltable);
+    Array.from(document.querySelectorAll(`${GBot.selectors.SEL.packages.package} [data-content-type]`)).filter(GBot.smelter.isSmeltable);
   const smeltQueued = (el) => !!(memory && memory.smeltQueue.some((q) => q.cn === packageCn(el)));
 
   function setSmeltQueued(items, on) {
@@ -371,9 +373,9 @@
       return;
     }
 
-    // Quests, repairs and smelting are multi-step and keep their own
-    // failure counts.
-    if (!['quests', 'repair', 'smelt', 'auction'].includes(decision.type)) {
+    // Quests, repairs, smelting, the auction house and the packages are
+    // multi-step and keep their own failure handling.
+    if (!['quests', 'repair', 'smelt', 'auction', 'packages'].includes(decision.type)) {
       const attempt = brain.beginAttempt(memory, decision.type, now, settings, state);
       if (!attempt.ok) {
         log('warn', attempt.message);
@@ -385,7 +387,7 @@
     }
     // Multi-step actions (navigate, then act) re-decide on every page; log
     // the reason once per run. Repairs log their own steps (workbench.js).
-    if (['repair', 'smelt', 'auction'].includes(decision.type)) log('debug', decision.reason);
+    if (['repair', 'smelt', 'auction', 'packages'].includes(decision.type)) log('debug', decision.reason);
     else if (!memory.pending || memory.pending.attempts === 1) log('info', decision.reason);
     await persist();
     await send({ type: 'heartbeat', host: location.host, nextAt: now + 60000, enabled: true });

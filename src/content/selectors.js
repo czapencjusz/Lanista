@@ -113,6 +113,21 @@
       bidButton: 'input[name="bid"]',
     },
 
+    // Packages page (the Crazy Addon renames the section around #packages,
+    // so only #packages itself is relied on). Each package holds one item
+    // in a [data-container-number] element and an expiry countdown in ms.
+    packages: {
+      list: '#packages',
+      package: '#packages .packageItem',
+      expiry: '[data-ticker-time-left]',
+      pages: '.pagination a[href*="page="]',
+    },
+    // Packages filter "Type of object" value for gold.
+    goldFilter: 14,
+
+    // Merchant shop grid (mod=inventory&sub=1..6); selling is a move into it.
+    shop: '#shop[data-container-number]',
+
     // Training ground: one button and one cost per stat, in stat order.
     training: {
       buttons: '#training_box .training_button',

@@ -52,6 +52,7 @@
         "src/content/actions.js",
         "src/content/workbench.js",
         "src/content/smelter.js",
+        "src/content/packages.js",
         "src/content/auction.js",
         "src/ui/dom.js",
         "src/ui/styles.js",

@@ -114,6 +114,28 @@
       enabled: true,
       // Where the resources go: 'horreum' | 'packages'.
       storeIn: 'horreum',
+      // Also queue package items by quality and kind, without ticking them.
+      auto: false,
+      // Best quality smelted automatically: -1 Standard, 0 Ceres (green),
+      // 1 Neptun (blue), 2 Mars, 3 Jupiter, 4 Olymp.
+      autoUpTo: 0,
+      autoTypes: { weapons: true, armour: true, jewellery: false },
+    },
+
+    packages: {
+      // Tidy the packages while the bot runs.
+      enabled: false,
+      // Take the gold out of gold packages.
+      collectGold: true,
+      // Move resources into the Horreum.
+      storeResources: false,
+      // Sell gear to a merchant, up to this quality (as smelting.autoUpTo).
+      sell: false,
+      sellUpTo: -1,
+      sellTypes: { weapons: true, armour: true, jewellery: true },
+      // Packages about to expire: 'off' | 'bag' (move into the bags) | 'sell'.
+      expiring: 'bag',
+      expiringHours: 24,
     },
 
     auction: {
@@ -211,6 +233,10 @@
     'repair.belowPercent': { int: true, min: 1, max: 99 },
     'repair.allUpToPercent': { int: true, min: 1, max: 99 },
     'smelting.storeIn': { enum: ['horreum', 'packages'] },
+    'smelting.autoUpTo': { int: true, min: -1, max: 4 },
+    'packages.sellUpTo': { int: true, min: -1, max: 4 },
+    'packages.expiring': { enum: ['off', 'bag', 'sell'] },
+    'packages.expiringHours': { int: true, min: 1, max: 168 },
     'auction.minHpPerGold': { min: 0.1, max: 1000 },
     'auction.bidWhen': { enum: ['short', 'medium', 'any'] },
     'auction.maxPerRound': { int: true, min: 0, max: 2000000000 },

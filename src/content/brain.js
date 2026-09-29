@@ -44,6 +44,8 @@
       smeltNext: 0,
       smeltFailures: 0,
       smeltFailingCn: null,
+      // When to go through the packages again (gold, rules, expiry).
+      nextPackagesCheck: 0,
       // Auction house: when to look again, and this round's bids
       // ({ rank, spent, bids: { lotId: amount } }).
       nextAuctionCheck: 0,
@@ -66,6 +68,9 @@
         training: 0,
         repairs: 0,
         smelted: 0,
+        sold: 0,
+        soldGold: 0,
+        goldCollected: 0,
         auctionBids: 0,
         goldSpent: 0,
         goldStart: null,
@@ -223,6 +228,10 @@
       return { type: 'smelt', reason: 'Smelting' };
     }
 
+    if (wantsPackages(settings) && (memory.nextPackagesCheck || 0) <= now && !isBlocked(memory, 'packages', now)) {
+      return { type: 'packages', reason: 'Go through the packages' };
+    }
+
     if (wantsTraining(state, settings, memory, now)) {
       return { type: 'training', reason: 'Train a stat with spare gold' };
     }
@@ -257,6 +266,7 @@
 
     if (settings.smelting.enabled && memory.smeltNext > now) wake.push({ label: 'Smelting', at: memory.smeltNext });
     if (settings.auction.enabled && memory.nextAuctionCheck > now) wake.push({ label: 'Auction house', at: memory.nextAuctionCheck });
+    if (wantsPackages(settings) && memory.nextPackagesCheck > now) wake.push({ label: 'Packages', at: memory.nextPackagesCheck });
 
     const maxIdleMs = settings.timing.maxIdle * 1000;
     let next = { label: 'Re-check', at: now + maxIdleMs };
@@ -319,6 +329,37 @@
     if (queued > 0 && slots.some((s) => stateOf(s) === 'closed')) return now + 60 * 1000;
     const ends = slots.filter((s) => stateOf(s) === 'crafting').map((s) => now + Math.max(0, Number(s['forge_slots.finishedIn']) || 0) * 1000);
     return ends.length ? Math.min(...ends) + 5000 : 0;
+  }
+
+  // ---------------------------------------------------------- packages
+
+  // Gear kinds by item content type (one bit per equipment slot, as the
+  // smelter's accepted types): helmet 1, weapon 2, shield 4, armour 8,
+  // rings 16/32, gloves 256, shoes 512, amulet 1024.
+  const GEAR_KINDS = { weapons: 2, armour: 1 | 4 | 8 | 256 | 512, jewellery: 16 | 32 | 1024 };
+
+  function gearKind(type) {
+    for (const [kind, mask] of Object.entries(GEAR_KINDS)) if (type & mask) return kind;
+    return null;
+  }
+
+  const wantsPackages = (settings) => settings.packages.enabled || (settings.smelting.enabled && settings.smelting.auto);
+
+  // What to do with one package ({ type, quality, expiresInMs, queued }):
+  // 'smelt' | 'sell' | 'bag' | null (leave it). Smelting rules go first, then
+  // selling, then rescuing packages about to expire. Items ticked for
+  // smelting (queued) are the smelter's.
+  function packageAction(item, settings) {
+    if (item.queued) return null;
+    const kind = gearKind(item.type);
+    const s = settings.smelting;
+    if (kind && s.enabled && s.auto && s.autoTypes[kind] && item.quality <= s.autoUpTo) return 'smelt';
+    const p = settings.packages;
+    if (!p.enabled) return null;
+    if (kind && p.sell && p.sellTypes[kind] && item.quality <= p.sellUpTo) return 'sell';
+    const expiring = item.expiresInMs !== null && item.expiresInMs !== undefined && item.expiresInMs <= p.expiringHours * 3600000;
+    if (p.expiring !== 'off' && expiring) return p.expiring;
+    return null;
   }
 
   // ----------------------------------------------------------- auction
@@ -668,6 +709,9 @@
     inRepairAll,
     expeditionTarget,
     nextSmeltCheck,
+    gearKind,
+    wantsPackages,
+    packageAction,
     auctionTimeOk,
     auctionRecheckMs,
     planAuctionBids,

@@ -372,6 +372,7 @@
           ['training', 'Stats trained'],
           ['repairs', 'Items repaired'],
           ['smelted', 'Items smelted'],
+          ['sold', 'Items sold'],
           ['auctionBids', 'Auction bids'],
           ['quests', 'Quests finished'],
           ['work', 'Work shifts'],
@@ -387,6 +388,8 @@
           cards.appendChild(card('Honour', formatNumber(loot.honour || 0), rate(loot.honour || 0)));
           cards.appendChild(card('Fame', formatNumber(loot.fame || 0), rate(loot.fame || 0)));
         }
+        if (stats.soldGold) cards.appendChild(card('Gold from sales', formatNumber(stats.soldGold), rate(stats.soldGold)));
+        if (stats.goldCollected) cards.appendChild(card('Gold from packages', formatNumber(stats.goldCollected), rate(stats.goldCollected)));
         if (stats.goldStart !== null && stats.goldNow !== null) {
           const diff = stats.goldNow - stats.goldStart;
           cards.appendChild(card('Gold change', `${diff >= 0 ? '+' : ''}${formatNumber(diff)}`, `now ${formatNumber(stats.goldNow)}`));
@@ -514,14 +517,14 @@
     function copyFromServer(status) {
       if (!opts.listServers || !opts.loadServerSettings) return [];
       const host = currentHost();
-      const select = h('select', { class: 'gb-input gb-select', 'aria-label': 'Server to copy from', hidden: true });
+      const select = h('select', { class: 'gb-input gb-select', 'aria-label': 'Server to copy from' });
       const note = h('p', { class: 'gb-help' }, 'Looking for your other servers…');
+      const actions = h('div', { class: 'gb-actions' });
       const button = h(
         'button',
         {
           type: 'button',
           class: 'gb-btn',
-          hidden: true,
           onclick: () =>
             confirmThen(button, 'Copy settings', async () => {
               const from = select.value;
@@ -537,12 +540,12 @@
       opts.listServers().then((hosts) => {
         const others = hosts.filter((x) => x !== host);
         for (const x of others) select.appendChild(h('option', { value: x }, S.serverName(x)));
-        select.hidden = button.hidden = !others.length;
+        if (others.length) actions.append(select, button);
         note.textContent = others.length
           ? `Replace the settings of ${host ? S.serverName(host) : 'this server'} with those of another server you play on.`
           : 'GBot has only been used on this server so far.';
       });
-      return [h('h3', {}, 'Copy from another server'), note, h('div', { class: 'gb-actions' }, select, button)];
+      return [h('h3', {}, 'Copy from another server'), note, actions];
     }
 
     // Two-click confirmation (window.confirm() is unreliable in popups).

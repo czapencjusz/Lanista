@@ -17,6 +17,17 @@
     { value: 'random', label: 'Random' },
   ];
 
+  // Item and material qualities, as the game's "Minimum quality" filter.
+  const QUALITIES = ['Standard (white)', 'Ceres (green)', 'Neptun (blue)', 'Mars (purple)', 'Jupiter (orange)', 'Olymp (red)'];
+  const qualityOptions = (lowest) => QUALITIES.map((q, i) => ({ value: i - 1, label: i === 0 ? lowest : `Up to ${q}` }));
+
+  const GEAR_KINDS = [
+    ['weapons', 'Weapons'],
+    ['armour', 'Armour'],
+    ['jewellery', 'Rings and amulets'],
+  ];
+  const KINDS_HELP = 'Armour means helmets, shields, chest armour, gloves and shoes.';
+
   const opponentFields = (type) => [
     { path: `${type}.target`, type: 'select', label: 'Opponent choice', options: TARGETS },
     {
@@ -205,14 +216,7 @@
           path: 'repair.maxQuality',
           type: 'select',
           label: 'Best materials to use',
-          options: [
-            { value: -1, label: 'Standard (white) only' },
-            { value: 0, label: 'Up to Ceres (green)' },
-            { value: 1, label: 'Up to Neptun (blue)' },
-            { value: 2, label: 'Up to Mars (purple)' },
-            { value: 3, label: 'Up to Jupiter (orange)' },
-            { value: 4, label: 'Up to Olymp (red)' },
-          ],
+          options: qualityOptions('Standard (white) only'),
           help: 'The lowest quality in stock is used first. Fights wait while an item is off your character.',
         },
       ],
@@ -222,7 +226,7 @@
       title: 'Smelting',
       icon: 'smelting',
       enable: 'smelting.enabled',
-      description: 'Tick items on the packages page to smelt them. While the bot runs it fills free smelter slots from that queue and collects finished smelts. Rent is paid in gold, never rubies.',
+      description: 'Tick items on the packages page to smelt them, or let the rules below pick them. While the bot runs it fills free smelter slots from that queue and collects finished smelts. Rent is paid in gold, never rubies.',
       fields: [
         {
           path: 'smelting.storeIn',
@@ -233,6 +237,64 @@
             { value: 'packages', label: 'In a package' },
           ],
         },
+        {
+          path: 'smelting.auto',
+          type: 'toggle',
+          label: 'Also smelt package items automatically',
+          help: 'Every 30 minutes the bot looks through your packages and queues the items that match the rules below, as if you had ticked them.',
+        },
+        { path: 'smelting.autoUpTo', type: 'select', label: 'Items of quality', options: qualityOptions('Standard (white) only'), dependsOn: 'smelting.auto' },
+        {
+          path: 'smelting.autoTypes',
+          type: 'checks',
+          label: 'Kinds',
+          dependsOn: 'smelting.auto',
+          help: KINDS_HELP,
+          items: GEAR_KINDS.map(([kind, label]) => ({ path: `smelting.autoTypes.${kind}`, label })),
+        },
+      ],
+    },
+    {
+      id: 'packages',
+      title: 'Packages',
+      icon: 'packages',
+      enable: 'packages.enabled',
+      description: 'Tidy the packages every 30 minutes while the bot runs: take out gold, store resources, sell gear you do not want, and save packages before they expire. Items ticked for smelting are left for the smelter.',
+      fields: [
+        { path: 'packages.collectGold', type: 'toggle', label: 'Take the gold out of gold packages' },
+        {
+          path: 'packages.storeResources',
+          type: 'toggle',
+          label: 'Store resources in the Horreum',
+          help: 'Like the "Store all resources in the Horreum" button on the packages page. Surplus above 99,999 per type and quality is sold.',
+        },
+        {
+          path: 'packages.sell',
+          type: 'toggle',
+          label: 'Sell gear to a merchant',
+          help: 'Weapons, armour and jewellery that match the rules below are sold for their value, one at a time through a free spot in your bags. Smelting rules go first.',
+        },
+        { path: 'packages.sellUpTo', type: 'select', label: 'Items of quality', options: qualityOptions('Standard (white) only'), dependsOn: 'packages.sell' },
+        {
+          path: 'packages.sellTypes',
+          type: 'checks',
+          label: 'Kinds',
+          dependsOn: 'packages.sell',
+          help: KINDS_HELP,
+          items: GEAR_KINDS.map(([kind, label]) => ({ path: `packages.sellTypes.${kind}`, label })),
+        },
+        {
+          path: 'packages.expiring',
+          type: 'select',
+          label: 'Packages about to expire',
+          options: [
+            { value: 'bag', label: 'Move them into my bags' },
+            { value: 'sell', label: 'Sell them' },
+            { value: 'off', label: 'Leave them' },
+          ],
+          help: 'Any package, not only gear. Moving needs free room in your bags.',
+        },
+        { path: 'packages.expiringHours', type: 'number', label: 'About to expire means less than', unit: 'h left' },
       ],
     },
     {
