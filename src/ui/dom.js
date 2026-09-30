@@ -112,6 +112,7 @@
     up: [['path', { d: 'M6 15l6-6 6 6' }]],
     down: [['path', { d: 'M6 9l6 6 6-6' }]],
     grip: [['path', { d: 'M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01', 'stroke-width': 3 }]],
+    report: [['path', { d: 'M5.5 21V4M5.5 4.5h12l-2.5 4 2.5 4h-12' }]],
   };
 
   function icon(name, size = 18) {
@@ -140,5 +141,51 @@
     return GBot.util ? GBot.util.formatDuration(until - now) : '';
   }
 
-  Object.assign(ui, { h, append, icon, ICONS, countdown });
+  // "Report a problem": a new issue on the project's GitHub page, with a
+  // short template and the version. Nothing from the game or the log goes
+  // into the link; people add what they want to share themselves.
+  const ISSUES_URL = 'https://github.com/czapencjusz/gbot/issues/new';
+
+  function reportUrl() {
+    let version = '';
+    try {
+      const api = root.browser || root.chrome;
+      version = api.runtime.getManifest().version;
+    } catch (e) {
+      // Outside the extension (tests): no version.
+    }
+    const body = [
+      '**What happened?**',
+      '',
+      '',
+      '**What did you expect instead?**',
+      '',
+      '',
+      '**Where?** (server, game page, which feature; a few lines from the Log tab help a lot)',
+      '',
+      '',
+      `Lanista ${version}`.trim(),
+    ].join('\n');
+    return `${ISSUES_URL}?body=${encodeURIComponent(body)}`;
+  }
+
+  // Link that opens the report page in a new tab: a labelled button, or
+  // an icon-only one for headers.
+  function reportLink({ iconOnly = false } = {}) {
+    return h(
+      'a',
+      {
+        class: iconOnly ? 'gb-icon-btn gb-report' : 'gb-btn gb-report',
+        href: reportUrl(),
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        title: 'Report a problem on GitHub (opens a new tab)',
+        'aria-label': 'Report a problem',
+      },
+      icon('report', 16),
+      iconOnly ? null : 'Report a problem'
+    );
+  }
+
+  Object.assign(ui, { h, append, icon, ICONS, countdown, reportUrl, reportLink, ISSUES_URL });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

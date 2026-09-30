@@ -251,6 +251,14 @@ A few handy things to know:
 - **Older settings carry over.** Settings from older versions are moved over automatically, and each
   server gets its own copy.
 
+## Found a problem?
+
+Hit **Report a problem**: it's the little flag in the settings window and the popup, and there's a
+button in the *Log* tab too. It opens a new issue on
+[GitHub](https://github.com/czapencjusz/gbot/issues) with a short template and your Lanista
+version filled in. Tell us what happened and where, and paste a few lines from the log if you can.
+Nothing from your game or log is sent along unless you paste it in yourself.
+
 ## Under the hood
 
 Gladiatus reloads the page for almost everything you do, so Lanista works in small steps. On every

@@ -48,6 +48,21 @@ test('renders every tab and starts on General', () => {
   assert.equal($('[data-tab="arena"] .gb-dot').classList.contains('on'), false);
 });
 
+test('the Log tab has a "Report a problem" link to a new GitHub issue', () => {
+  const { view, $ } = mount();
+  view.showTab('log');
+  const link = $('a.gb-report');
+  assert.equal(link.textContent, 'Report a problem');
+  assert.equal(link.getAttribute('target'), '_blank');
+  const url = new URL(link.getAttribute('href'));
+  assert.equal(url.origin + url.pathname, 'https://github.com/czapencjusz/gbot/issues/new');
+  const body = url.searchParams.get('body');
+  assert.match(body, /What happened\?/);
+  assert.match(body, /Lanista/);
+  assert.equal(url.searchParams.has('title'), false, 'nothing else is filled in');
+  assert.equal(GBot.ui.reportLink({ iconOnly: true }).textContent, '', 'icon-only version for headers');
+});
+
 test('number fields are clamped before saving', async () => {
   const { view, saved, $, change } = mount();
   view.showTab('heal');

@@ -417,7 +417,7 @@
           list.appendChild(h('div', { class: `gb-log-line ${e.level}` }, h('span', { class: 'gb-log-time' }, time), ' ', e.message));
         }
       });
-      return [h('div', { class: 'gb-actions' }, filter, clear), list];
+      return [h('div', { class: 'gb-actions' }, filter, clear, ui.reportLink()), list];
     }
 
     function profilePane() {

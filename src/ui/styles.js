@@ -39,6 +39,7 @@
   font: 700 11px/1.3 var(--gb-font); cursor: pointer;
 }
 .gb-btn:hover { filter: brightness(1.05); }
+a.gb-btn, a.gb-icon-btn { text-decoration: none; }
 .gb-btn:focus-visible, .gb-icon-btn:focus-visible, .gb-tab:focus-visible, .gb-tile:focus-visible, .gb-play:focus-visible {
   outline: 2px solid var(--gb-gold); outline-offset: 1px;
 }

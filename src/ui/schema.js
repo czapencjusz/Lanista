@@ -515,8 +515,8 @@
         },
       ],
     },
-    { id: 'stats', title: 'Statistics', icon: 'stats', custom: 'stats', description: 'What the bot has done on this server.' },
-    { id: 'log', title: 'Log', icon: 'log', custom: 'log', description: 'Recent bot activity on this server.' },
+    { id: 'stats', title: 'Statistics', icon: 'stats', custom: 'stats', description: 'What Lanista has done on this server.' },
+    { id: 'log', title: 'Log', icon: 'log', custom: 'log', description: 'What Lanista has been up to on this server. Something off? Report it with the button below; a few log lines help a lot.' },
     { id: 'profile', title: 'Backup', icon: 'profile', custom: 'profile', description: 'Every server keeps its own settings. Copy them from another server, export them to a file, import them on another browser, or reset them.' },
   ];
 
