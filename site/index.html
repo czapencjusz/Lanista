@@ -4,9 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>GBot for Gladiatus</title>
-<meta name="description" content="GBot is a browser extension that plays Gladiatus for you: expeditions, dungeons, arena, healing, repairs and quests, controlled from a bar inside the game.">
+<meta name="description" content="GBot is a free browser extension that plays Gladiatus for you: expeditions, dungeons, the arena, the Underworld, healing, repairs, smelting and more, at a human pace.">
 <meta property="og:title" content="GBot for Gladiatus">
-<meta property="og:description" content="Expeditions, dungeons, arena, healing, repairs and quests on autopilot, from a bar inside the game.">
+<meta property="og:description" content="Let GBot play Gladiatus for you. Free for Chrome, Edge, Brave, Opera and Firefox.">
+<meta name="theme-color" content="#110b07">
 <link rel="icon" type="image/png" href="img/icon.png">
 <style>
 @font-face { font-family: "Marcellus"; src: url("fonts/marcellus-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
@@ -14,464 +15,651 @@
 @font-face { font-family: "Alegreya Sans"; src: url("fonts/alegreya-sans-latin-400-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
 @font-face { font-family: "Alegreya Sans"; src: url("fonts/alegreya-sans-latin-700-normal.woff2") format("woff2"); font-weight: 700; font-display: swap; }
 
-/* Dark-first: the extension's own leather, gold and parchment. */
+/* One deliberate look: an arena at night, lit by torches. */
 :root {
   color-scheme: dark;
-  --ground: #1b120c;
-  --surface: #271a11;
-  --surface-2: #33231777;
-  --ink: #f2e5c6;
-  --muted: #b9a57f;
-  --gold: #e2bc5f;
-  --gold-ink: #2a1a08;
-  --blood: #b2372b;
-  --blood-soft: #8e2a2233;
-  --line: #4a3524;
-  --shot-border: #a8822c;
-  --display: "Marcellus", "Trajan Pro", Georgia, "Times New Roman", serif;
+  --night: #110b07;
+  --night-2: #180f0a;
+  --card: #1f150e;
+  --card-2: #281b12;
+  --line: #3a2819;
+  --line-2: #5b4126;
+  --text: #f4e8cc;
+  --muted: #b8a37f;
+  --gold: #e8c46c;
+  --gold-2: #c9973b;
+  --ember: #d65a40;
+  --on-gold: #2a1805;
+  --display: "Marcellus", "Trajan Pro", Georgia, serif;
   --body: "Alegreya Sans", "Gill Sans", "Segoe UI", system-ui, sans-serif;
   --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-}
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    color-scheme: light;
-    --ground: #f3e8cf;
-    --surface: #fbf4e3;
-    --surface-2: #eadbb877;
-    --ink: #2e1c11;
-    --muted: #6d583b;
-    --gold: #8a6414;
-    --gold-ink: #fff7df;
-    --blood: #9b2a20;
-    --blood-soft: #9b2a2018;
-    --line: #d6c197;
-    --shot-border: #a8822c;
-  }
-}
-:root[data-theme="light"] {
-  color-scheme: light;
-  --ground: #f3e8cf;
-  --surface: #fbf4e3;
-  --surface-2: #eadbb877;
-  --ink: #2e1c11;
-  --muted: #6d583b;
-  --gold: #8a6414;
-  --gold-ink: #fff7df;
-  --blood: #9b2a20;
-  --blood-soft: #9b2a2018;
-  --line: #d6c197;
+  --radius: 14px;
 }
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; scroll-padding-top: 80px; }
 body {
   margin: 0;
-  padding-inline: 20px;
-  background: var(--ground);
-  color: var(--ink);
-  font: 18px/1.55 var(--body);
+  background-color: var(--night);
+  background-image:
+    radial-gradient(1100px 700px at 12% -8%, rgba(232, 176, 90, 0.17), transparent 62%),
+    radial-gradient(900px 600px at 100% 4%, rgba(214, 90, 64, 0.10), transparent 60%);
+  background-repeat: no-repeat;
+  color: var(--text);
+  font: 18px/1.6 var(--body);
 }
 img { max-width: 100%; height: auto; display: block; }
 a { color: var(--gold); text-underline-offset: 3px; }
-a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; border-radius: 4px; }
-code, .mono { font-family: var(--mono); font-size: 0.82em; }
-code { padding: 0.1em 0.35em; border-radius: 4px; background: var(--surface-2); }
-
-.wrap { max-width: 1100px; margin: 0 auto; }
-h1, h2, h3 { font-family: var(--display); font-weight: 400; text-wrap: balance; line-height: 1.15; margin: 0; }
-h2 { font-size: clamp(1.7rem, 3.2vw, 2.3rem); letter-spacing: 0.02em; }
-h3 { font-size: 1.3rem; letter-spacing: 0.02em; }
+a:hover { color: #f6dc97; }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; border-radius: 6px; }
+code { font: 0.82em var(--mono); padding: 0.12em 0.4em; border-radius: 5px; background: #2d2016; color: #f1dcae; overflow-wrap: anywhere; }
+h1, h2, h3 { font-family: var(--display); font-weight: 400; line-height: 1.1; margin: 0; text-wrap: balance; }
 p { margin: 0; }
+.ic { width: 22px; height: 22px; flex: none; }
+
+.wrap { max-width: 1160px; margin: 0 auto; padding-inline: 24px; }
+section { padding-block: 96px; }
+.alt { background: linear-gradient(180deg, var(--night-2), var(--night)); border-block: 1px solid #22170f; }
+
 .eyebrow {
-  font: 700 0.78rem/1 var(--body); letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold);
+  display: inline-flex; align-items: center; gap: 12px;
+  font: 700 0.8rem/1 var(--body); letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold);
 }
-.lede { color: var(--muted); max-width: 62ch; }
+.eyebrow::before { content: ""; width: 28px; height: 1px; background: var(--gold); }
+.head { display: grid; gap: 14px; max-width: 62ch; margin-bottom: 44px; }
+.head h2 { font-size: clamp(2rem, 4.2vw, 2.9rem); }
+.head p { color: var(--muted); font-size: 1.1rem; }
 
-section { padding-block: 64px; border-top: 1px solid var(--line); display: grid; gap: 28px; }
-.section-head { display: grid; gap: 10px; max-width: 70ch; }
-
-/* ------------------------------------------------------------ hero */
-.masthead { display: flex; align-items: center; gap: 12px; padding-block: 22px; }
-.masthead img { width: 34px; height: 34px; }
-.masthead span { font-family: var(--display); font-size: 1.25rem; letter-spacing: 0.08em; }
-.masthead .tag { margin-left: auto; }
-
-.tag {
-  display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px;
-  border: 1px solid var(--gold); border-radius: 999px; color: var(--gold);
-  font: 700 0.72rem/1.4 var(--body); letter-spacing: 0.12em; text-transform: uppercase;
-}
-
-.hero { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.9fr); gap: 48px; align-items: start; padding-block: 36px 56px; }
-.hero h1 {
-  font-size: clamp(3.2rem, 7.4vw, 5.4rem);
-  letter-spacing: 0.06em;
-  line-height: 0.95;
-  color: var(--ink);
-}
-.hero h1 em { font-style: normal; color: var(--gold); }
-.hero .thesis { font-size: 1.35rem; line-height: 1.45; max-width: 30ch; margin-top: 22px; }
-.hero .lede { margin-top: 16px; }
-
-.get {
-  display: grid; gap: 14px; padding: 24px; border: 1px solid var(--line); border-radius: 12px;
-  background: var(--surface);
-}
-.get h2 { font-size: 1.5rem; }
+/* ------------------------------------------------------------ buttons */
 .btn {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 13px 16px; border-radius: 8px; text-decoration: none;
-  background: var(--gold); color: var(--gold-ink); font-weight: 700; font-size: 1.05rem;
+  display: inline-flex; align-items: center; gap: 12px; padding: 13px 22px; border-radius: 12px;
+  font: 700 1.05rem/1.2 var(--body); text-decoration: none; cursor: pointer; border: 1px solid transparent;
 }
-.btn:hover { filter: brightness(1.08); }
-.btn.secondary { background: transparent; color: var(--ink); border: 1px solid var(--gold); }
-.btn small { font: 400 0.8rem/1.2 var(--mono); opacity: 0.8; }
-.build { color: var(--muted); font-size: 0.9rem; }
-.warning {
-  padding: 12px 14px; border-left: 3px solid var(--blood); border-radius: 0 8px 8px 0;
-  background: var(--blood-soft); font-size: 0.95rem;
+.btn .ic { width: 20px; height: 20px; }
+.btn small { display: block; font-weight: 400; font-size: 0.78rem; opacity: 0.78; margin-top: 2px; }
+.btn-gold { background: linear-gradient(180deg, #f2d386, #d6a54a); color: var(--on-gold); box-shadow: 0 6px 24px rgba(232, 180, 80, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.45); }
+.btn-gold:hover { color: var(--on-gold); box-shadow: 0 8px 32px rgba(232, 180, 80, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.45); }
+.btn-line { border-color: rgba(232, 196, 108, 0.55); color: var(--text); background: rgba(232, 196, 108, 0.06); }
+.btn-line:hover { color: var(--text); border-color: var(--gold); background: rgba(232, 196, 108, 0.12); }
+
+/* ------------------------------------------------------------- header */
+.top {
+  position: sticky; top: 0; z-index: 10;
+  background: rgba(17, 11, 7, 0.82); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(90, 64, 38, 0.45);
 }
-.warning strong { color: var(--blood); }
+.top .wrap { display: flex; align-items: center; gap: 28px; min-height: 64px; }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none; font: 1.35rem var(--display); letter-spacing: 0.06em; }
+.brand img { width: 30px; height: 30px; }
+.nav { display: flex; gap: 24px; margin-left: auto; }
+.nav a { color: var(--muted); text-decoration: none; font-weight: 700; font-size: 0.95rem; }
+.nav a:hover { color: var(--text); }
+.top .btn { padding: 8px 16px; font-size: 0.95rem; border-radius: 10px; }
 
-.shot {
-  border: 2px solid var(--shot-border); border-radius: 10px; overflow: hidden;
-  box-shadow: 0 18px 50px #00000059;
+/* --------------------------------------------------------------- hero */
+.hero { padding-block: 72px 88px; overflow-x: clip; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 56px; align-items: center; }
+.badge {
+  display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 999px;
+  border: 1px solid rgba(232, 196, 108, 0.45); background: rgba(232, 196, 108, 0.08);
+  color: var(--gold); font: 700 0.8rem/1.3 var(--body); letter-spacing: 0.04em;
 }
-.hero-shot { grid-column: 1 / -1; margin-top: 8px; }
-.caption { color: var(--muted); font-size: 0.92rem; margin-top: 10px; }
+.badge i { width: 7px; height: 7px; border-radius: 50%; background: #7fd35c; box-shadow: 0 0 8px #7fd35c; }
+.hero h1 { font-size: clamp(2.8rem, 6.2vw, 4.6rem); margin-top: 22px; letter-spacing: 0.01em; }
+.hero h1 span { color: var(--gold); }
+.hero .lead { margin-top: 22px; font-size: 1.25rem; line-height: 1.55; color: #e4d4b0; max-width: 34ch; }
+.cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
+.fine { margin-top: 16px; color: var(--muted); font-size: 0.92rem; }
 
-/* -------------------------------------------------------- features */
-.groups { display: grid; gap: 44px; }
-.group { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 24px; }
-.group > h3 { color: var(--gold); padding-top: 4px; }
-.features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px 36px; }
-.feature { display: grid; gap: 6px; align-content: start; }
-.feature h4 { margin: 0; font: 700 1.08rem/1.3 var(--body); }
-.feature p { color: var(--muted); }
-.feature.wide { grid-column: 1 / -1; }
-.feature.wide p { max-width: 70ch; }
-
-.ladder { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; padding: 0; list-style: none; }
-.ladder li {
-  display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px;
-  border: 1px solid var(--line); font-size: 0.85rem;
+.stage { position: relative; padding: 4% 0 10% 0; }
+.stage::before {
+  content: ""; position: absolute; inset: -8% -6% 0 4%; z-index: 0;
+  background: radial-gradient(closest-side, rgba(232, 176, 90, 0.28), transparent);
+  filter: blur(8px);
 }
-.ladder li::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--q); }
-.ladder li.cap { border-color: var(--gold); }
-.ladder li.off { opacity: 0.5; }
+.stage-window {
+  position: relative; z-index: 1; width: 92%; margin-left: auto;
+  border-radius: 12px; border: 1px solid #8c6a2c;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  transform: perspective(1600px) rotateY(-9deg) rotateX(3deg);
+}
+.stage-bar {
+  position: absolute; z-index: 2; left: 0; bottom: 0; width: 42%;
+  border-radius: 12px; border: 1px solid #8c6a2c;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+  transform: rotate(-3deg);
+}
 
-/* ------------------------------------------------------ behaviour */
-.traits { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px 32px; margin: 0; padding: 0; list-style: none; }
-.traits li { display: grid; gap: 4px; }
-.traits b { font-size: 1.05rem; }
-.traits span { color: var(--muted); }
+/* Trust strip under the hero */
+.trust { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-top: 64px; padding-top: 28px; border-top: 1px solid var(--line); }
+.trust div { display: flex; gap: 12px; align-items: flex-start; }
+.trust .ic { color: var(--gold); margin-top: 3px; }
+.trust b { display: block; font-size: 1rem; }
+.trust span { color: var(--muted); font-size: 0.92rem; }
+
+/* -------------------------------------------------------------- steps */
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; counter-reset: step; }
+.step { position: relative; padding: 28px 26px; border-radius: var(--radius); background: var(--card); border: 1px solid var(--line); }
+.step::before {
+  counter-increment: step; content: counter(step);
+  display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 18px; border-radius: 50%;
+  font: 1.35rem var(--display); color: var(--on-gold); background: linear-gradient(180deg, #f2d386, #d6a54a);
+}
+.step h3 { font-size: 1.45rem; margin-bottom: 8px; }
+.step p { color: var(--muted); }
+
+/* ----------------------------------------------------------- features */
+.group + .group { margin-top: 56px; }
+.group-title { display: flex; align-items: baseline; gap: 16px; margin-bottom: 20px; }
+.group-title h3 { font-size: 1.6rem; }
+.group-title p { color: var(--muted); }
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.cards.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.card {
+  display: grid; gap: 10px; align-content: start; padding: 22px; border-radius: var(--radius);
+  background: linear-gradient(180deg, var(--card-2), var(--card)); border: 1px solid var(--line);
+}
+.card .icon {
+  display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px;
+  color: var(--gold); background: rgba(232, 196, 108, 0.1); border: 1px solid rgba(232, 196, 108, 0.25);
+}
+.card h4 { margin: 4px 0 0; font: 700 1.12rem/1.3 var(--body); }
+.card p { color: var(--muted); font-size: 1rem; line-height: 1.55; }
+.card.new h4::after {
+  content: "New in 2.0"; margin-left: 8px; padding: 2px 7px; border-radius: 6px; vertical-align: 2px;
+  font: 700 0.68rem/1.4 var(--body); letter-spacing: 0.04em; color: var(--on-gold); background: var(--gold);
+}
+
+/* --------------------------------------------------------- spotlights */
+.spot { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 64px; align-items: center; }
+.spot + .spot { margin-top: 110px; }
+.spot.flip .spot-text { order: 2; }
+.spot-text { display: grid; gap: 16px; }
+.spot-text h2 { font-size: clamp(1.9rem, 3.6vw, 2.6rem); }
+.spot-text > p { color: #ddcca8; font-size: 1.1rem; }
+.ticks { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 10px; }
+.ticks li { position: relative; padding-left: 30px; color: var(--muted); }
+.ticks li::before {
+  content: ""; position: absolute; left: 0; top: 0.55em; width: 16px; height: 9px;
+  border-left: 2px solid var(--gold); border-bottom: 2px solid var(--gold); transform: rotate(-45deg) translateY(-50%);
+}
+.ticks b { color: var(--text); }
+.shot { border-radius: 12px; border: 1px solid #7d5f2a; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55); }
+.spot-media { position: relative; display: grid; gap: 14px; }
+.spot-media.center { justify-items: center; }
+.caption { color: var(--muted); font-size: 0.88rem; }
+.bar-strip { overflow-x: auto; border-radius: 10px; }
+.bar-strip img { min-width: 860px; }
 
 .log {
-  margin: 0; padding: 16px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
-  font: 0.84rem/1.7 var(--mono); overflow-x: auto; white-space: pre;
+  margin: 0; padding: 18px 20px; border-radius: 12px; background: #0c0805; border: 1px solid var(--line);
+  font: 0.8rem/1.75 var(--mono); color: #e7d7b3; overflow-x: auto; white-space: pre;
 }
-.log .t { color: var(--muted); }
-.log .w { color: var(--gold); }
+.log .t { color: #8f7c5c; }
+.log .win { color: #9ad77d; }
+.log .loss { color: #f08a72; }
 
-/* -------------------------------------------------------- in game */
-.ingame { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 40px; align-items: start; }
-.ingame-text { display: grid; gap: 14px; }
-.ingame-text ul { margin: 0; padding-left: 1.1em; display: grid; gap: 8px; }
-.bar-shot { grid-column: 1 / -1; overflow-x: auto; }
-.bar-shot .shot { min-width: 900px; box-shadow: none; }
+/* ------------------------------------------------------------ careful */
+.careful { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.careful div { padding: 22px; border-radius: var(--radius); border: 1px solid var(--line); background: rgba(31, 21, 14, 0.6); }
+.careful b { display: flex; align-items: center; gap: 10px; font-size: 1.08rem; margin-bottom: 6px; }
+.careful b .ic { color: var(--gold); }
+.careful span { color: var(--muted); }
+.warning {
+  display: flex; gap: 16px; align-items: flex-start; margin-top: 28px; padding: 20px 22px; border-radius: var(--radius);
+  background: linear-gradient(90deg, rgba(214, 90, 64, 0.16), rgba(214, 90, 64, 0.04)); border: 1px solid rgba(214, 90, 64, 0.45);
+}
+.warning .ic { color: var(--ember); margin-top: 3px; }
+.warning strong { color: #ffb4a3; }
 
-/* ---------------------------------------------------------- install */
-.install { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
-.browser { display: grid; gap: 14px; align-content: start; padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-.browser ol { margin: 0; padding-left: 1.3em; display: grid; gap: 10px; }
-.browser li::marker { font-family: var(--display); color: var(--gold); }
-.browser .note { color: var(--muted); font-size: 0.95rem; }
+/* ------------------------------------------------------------ install */
+.install { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.browser { display: grid; gap: 18px; align-content: start; padding: 30px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); }
+.browser h3 { font-size: 1.6rem; }
+.browser ol { margin: 0; padding: 0; list-style: none; counter-reset: li; display: grid; gap: 14px; }
+.browser li { position: relative; padding-left: 42px; color: #e2d2ae; }
+.browser li::before {
+  counter-increment: li; content: counter(li); position: absolute; left: 0; top: 0;
+  display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+  border: 1px solid var(--gold-2); color: var(--gold); font: 0.95rem var(--display);
+}
+.browser .note { color: var(--muted); font-size: 0.95rem; padding-top: 14px; border-top: 1px solid var(--line); }
 .copy {
-  margin-left: 4px; padding: 1px 8px; border: 1px solid var(--line); border-radius: 5px;
-  background: transparent; color: var(--muted); font: 0.75rem/1.6 var(--body); cursor: pointer;
+  margin-left: 6px; padding: 1px 9px; border-radius: 6px; border: 1px solid var(--line-2);
+  background: transparent; color: var(--muted); font: 0.78rem/1.6 var(--body); cursor: pointer; vertical-align: 1px;
 }
-.copy:hover { color: var(--ink); border-color: var(--gold); }
+.copy:hover { color: var(--text); border-color: var(--gold); }
 
-/* ------------------------------------------------------------ status */
-.status { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; }
-.status dl { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 18px; }
+/* ---------------------------------------------------------------- faq */
+.faq-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 56px; align-items: start; }
+.faq { display: grid; gap: 10px; }
+.faq details { border-radius: 12px; background: var(--card); border: 1px solid var(--line); }
+.faq details[open] { border-color: var(--line-2); }
+.faq summary { list-style: none; cursor: pointer; padding: 16px 20px; font-weight: 700; display: flex; justify-content: space-between; gap: 16px; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; color: var(--gold); font: 1.3rem/1 var(--display); }
+.faq details[open] summary::after { content: "−"; }
+.faq details p { padding: 0 20px 18px; color: var(--muted); }
+.status { display: grid; gap: 14px; padding: 26px; border-radius: var(--radius); border: 1px dashed var(--line-2); }
+.status h3 { font-size: 1.4rem; }
+.status p { color: var(--muted); }
+.status dl { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 16px; font-size: 0.98rem; }
 .status dt { color: var(--muted); }
 .status dd { margin: 0; }
-.faq { display: grid; gap: 10px; }
-.faq details { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
-.faq summary { cursor: pointer; padding: 12px 16px; font-weight: 700; }
-.faq details p { padding: 0 16px 14px; color: var(--muted); }
 
-footer { padding-block: 32px 48px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; }
+/* ---------------------------------------------------------------- end */
+.final { text-align: center; padding-block: 104px; }
+.final h2 { font-size: clamp(2.2rem, 5vw, 3.4rem); }
+.final p { color: var(--muted); margin-top: 14px; }
+.final .cta-row { justify-content: center; }
+footer { border-top: 1px solid var(--line); padding-block: 30px 44px; color: var(--muted); font-size: 0.9rem; }
+footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px 28px; }
 
-@media (max-width: 860px) {
-  .hero, .ingame, .status, .install { grid-template-columns: minmax(0, 1fr); }
-  .group { grid-template-columns: minmax(0, 1fr); gap: 14px; }
-  .traits { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .ingame-shot { max-width: 320px; }
-}
-@media (max-width: 560px) {
-  body { font-size: 17px; }
-  .features, .traits { grid-template-columns: minmax(0, 1fr); }
-  section { padding-block: 48px; }
-  .masthead .tag { display: none; }
-}
 @media (prefers-reduced-motion: no-preference) {
-  .btn, .copy { transition: filter 0.15s, border-color 0.15s, color 0.15s; }
+  .btn, .card, .copy, .nav a { transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease, color 0.18s ease; }
+  .btn:hover { transform: translateY(-1px); }
+  .card:hover { transform: translateY(-3px); border-color: var(--line-2); }
+}
+
+@media (max-width: 980px) {
+  .hero-grid, .spot, .faq-grid { grid-template-columns: minmax(0, 1fr); gap: 40px; }
+  .spot.flip .spot-text { order: 0; }
+  .trust, .cards.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cards, .careful { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .nav { display: none; }
+  .top .btn { margin-left: auto; }
+}
+@media (max-width: 640px) {
+  body { font-size: 17px; }
+  .wrap { padding-inline: 18px; }
+  section { padding-block: 64px; }
+  .hero { padding-block: 44px 60px; }
+  .steps, .cards, .cards.four, .careful, .install, .trust { grid-template-columns: minmax(0, 1fr); }
+  .group-title { display: grid; gap: 4px; }
+  .stage-bar { width: 52%; }
+  .browser { padding: 22px; }
+  .btn { width: 100%; justify-content: center; }
+  .top .btn { width: auto; }
 }
 </style>
 </head>
 <body>
-<div class="wrap">
 
-  <header class="masthead">
-    <img src="img/icon.png" alt="" width="34" height="34">
-    <span>GBot</span>
-    <span class="tag">Early access</span>
-  </header>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="img/icon.png" alt="" width="30" height="30">GBot</a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#install">Install</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <a class="btn btn-gold" href="#install">Download</a>
+  </div>
+</header>
 
+<main id="top">
   <div class="hero">
-    <div>
-      <p class="eyebrow">A browser extension for Gladiatus</p>
-      <h1>Gladiatus on <em>autopilot</em></h1>
-      <p class="thesis">Expeditions, dungeons, the arena, healing, repairs and quests, handled from a bar inside the game.</p>
-      <p class="lede">GBot runs in your own logged-in game tab and clicks through the game the way you would: it waits for each cooldown, eats when your health runs low and takes breaks when you tell it to.</p>
+    <div class="wrap hero-grid">
+      <div>
+        <span class="badge"><i></i>Version {{VERSION}} · early access</span>
+        <h1>Let GBot play <span>Gladiatus</span> for you</h1>
+        <p class="lead">Expeditions, dungeons, the arena, healing, repairs and loot, handled automatically in your own browser tab. Pick what it does, press Start, and check the log when you're back.</p>
+        <div class="cta-row">
+          <a class="btn btn-gold" href="downloads/gbot-chrome.zip">{{ICON:profile}}<span>Download for Chrome<small>Also Edge, Brave and Opera · {{CHROME_SIZE}}</small></span></a>
+          <a class="btn btn-line" href="downloads/gbot-firefox.zip">{{ICON:profile}}<span>Download for Firefox<small>Firefox 121 or newer · {{FIREFOX_SIZE}}</small></span></a>
+        </div>
+        <p class="fine">Free and open source. <a href="#install">How to install it</a></p>
+      </div>
+      <div class="stage">
+        <img class="stage-window" src="img/settings-window.png" alt="The GBot settings window, with a tab for every activity" width="864" height="624">
+        <img class="stage-bar" src="img/control-bar.png" alt="The GBot control bar with a Start button and a tile for each activity" width="320" height="305">
+      </div>
     </div>
 
-    <aside class="get" id="download" aria-labelledby="get-title">
-      <h2 id="get-title">Download</h2>
-      <a class="btn" href="downloads/gbot-chrome.zip">
-        <span>Chrome, Edge, Brave, Opera</span><small>{{CHROME_SIZE}}</small>
-      </a>
-      <a class="btn secondary" href="downloads/gbot-firefox.zip">
-        <span>Firefox 121+</span><small>{{FIREFOX_SIZE}}</small>
-      </a>
-      <p class="build">Version <span class="mono">{{VERSION}}</span>, development build <span class="mono">{{COMMIT}}</span> from {{DATE}}. <a href="#install">How to install</a></p>
-      <p class="warning"><strong>Use at your own risk.</strong> Gameforge's terms of service forbid bots, and accounts that use them can be suspended or banned.</p>
-    </aside>
-
-    <figure class="hero-shot" style="margin:0">
-      <img class="shot" src="img/settings-window.png" alt="The GBot settings window open on the Repair tab, with a list of tabs for every feature on the left" width="864" height="624">
-      <figcaption class="caption">The settings window opens inside the game, with a tab for every activity.</figcaption>
-    </figure>
+    <div class="wrap">
+      <div class="trust">
+        <div>{{ICON:interface}}<p><b>Chrome and Firefox</b><span>Also Edge, Brave and Opera</span></p></div>
+        <div>{{ICON:safety}}<p><b>Never spends rubies</b><span>Only gold, and only where you allow it</span></p></div>
+        <div>{{ICON:schedule}}<p><b>Plays like a person</b><span>Random pauses, set hours, breaks</span></p></div>
+        <div>{{ICON:notifications}}<p><b>Nothing leaves your browser</b><span>No account, no tracking</span></p></div>
+      </div>
+    </div>
   </div>
 
-  <section id="features" aria-labelledby="features-title">
-    <div class="section-head">
-      <p class="eyebrow">What it does</p>
-      <h2 id="features-title">Everything you would click through yourself</h2>
-      <p class="lede">Switch each activity on or off from the in-game bar and fine-tune it in the settings window.</p>
+  <section id="how" class="alt">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">How it works</span>
+        <h2>Up and running in three steps</h2>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <h3>Install it</h3>
+          <p>Download the zip for your browser and load it. It takes about a minute.</p>
+        </div>
+        <div class="step">
+          <h3>Pick what it does</h3>
+          <p>A GBot bar appears on every game page. Turn activities on with one click and fine-tune them in the settings.</p>
+        </div>
+        <div class="step">
+          <h3>Press Start</h3>
+          <p>GBot plays at a human pace, waits out the cooldowns and writes down everything it does.</p>
+        </div>
+      </div>
     </div>
+  </section>
 
-    <div class="groups">
+  <section id="features">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Features</span>
+        <h2>Everything it can do</h2>
+        <p>Every feature has its own switch, so you only automate the parts you want.</p>
+      </div>
+
       <div class="group">
-        <h3>Fights</h3>
-        <div class="features">
-          <div class="feature">
+        <div class="group-title"><h3>In battle</h3></div>
+        <div class="cards">
+          <article class="card">
+            <div class="icon">{{ICON:expedition}}</div>
             <h4>Expeditions</h4>
-            <p>Attacks the enemy you pick at your last visited location or any location from the game's list, every time the cooldown ends. It can keep some points in reserve.</p>
-          </div>
-          <div class="feature">
+            <p>Fights the enemy you choose every time the cooldown ends, at your last location or any one you pick. You can keep some points in reserve.</p>
+          </article>
+          <article class="card">
+            <div class="icon">{{ICON:stats}}</div>
             <h4>Bonuses before the boss</h4>
-            <p>With the boss selected, it first fights the other three enemies until their bonuses are learned, so the boss gets them too. Each win has a chance to teach one (25–34% on our test server).</p>
-          </div>
-          <div class="feature">
+            <p>With the boss selected, GBot first beats the other three enemies until their bonuses are learned, so the boss gets them too.</p>
+          </article>
+          <article class="card">
+            <div class="icon">{{ICON:dungeon}}</div>
             <h4>Dungeons</h4>
-            <p>Starts a Normal or Advanced dungeon when none is running and fights through it enemy by enemy. It never presses <i>Cancel dungeon</i>.</p>
-          </div>
-          <div class="feature">
+            <p>Starts a Normal or Advanced dungeon and fights through it. If you'd rather not face the boss, it skips it and starts a fresh dungeon.</p>
+          </article>
+          <article class="card">
+            <div class="icon">{{ICON:arena}}</div>
             <h4>Arena and Circus Turma</h4>
-            <p>Picks the lowest, highest or a random opponent in Provinciarum, stays within a level range you set, and skips players on your never-attack list or who beat you in the last 24 hours.</p>
-          </div>
-          <div class="feature">
+            <p>Picks opponents by level, skips anyone on your never-attack list, avoids players who just beat you, and can go for easy wins first.</p>
+          </article>
+          <article class="card new">
+            <div class="icon">{{ICON:underworld}}</div>
+            <h4>Underworld</h4>
+            <p>From level 100, fights the newest enemy with the Underworld's own points, and can even enter it for you.</p>
+          </article>
+          <article class="card">
+            <div class="icon">{{ICON:profile}}</div>
             <h4>Enemy nests</h4>
-            <p>When a win offers to search the enemy's nest, it does a quick search, a thorough search or returns to safety, as you choose.</p>
-          </div>
-          <div class="feature">
-            <h4>Fight results</h4>
-            <p>Reads every combat report and keeps score: wins, losses, gold, experience, honour and fame, with win rates per activity.</p>
-          </div>
+            <p>When a win lets you search the enemy's nest, GBot does a quick or a thorough search for extra loot.</p>
+          </article>
         </div>
       </div>
 
       <div class="group">
-        <h3>Upkeep</h3>
-        <div class="features">
-          <div class="feature">
+        <div class="group-title"><h3>Keeping your gladiator strong</h3></div>
+        <div class="cards four">
+          <article class="card">
+            <div class="icon">{{ICON:heal}}</div>
             <h4>Healing</h4>
-            <p>Eats food when your health drops below one threshold and stops fighting below another. It looks through every bag and picks the food that best fills the missing health.</p>
-          </div>
-          <div class="feature">
+            <p>Eats the food that best fills your missing health, from your bags or your packages, and stops fighting before health gets low.</p>
+          </article>
+          <article class="card">
+            <div class="icon">{{ICON:repair}}</div>
+            <h4>Repairs</h4>
+            <p>Takes worn gear off, repairs it at the workbench with Horreum materials and puts it back on. Mercenaries included.</p>
+          </article>
+          <article class="card">
+            <div class="icon">{{ICON:training}}</div>
             <h4>Training</h4>
-            <p>Spends gold above a reserve you set on stat points, always on the cheapest of the stats you pick. Gold you spend can't be stolen in the arena.</p>
-          </div>
-          <div class="feature wide">
-            <h4>Workbench repair</h4>
-            <p>Takes worn gear off, repairs it at the workbench with materials from your Horreum and puts it back on. Rent is paid in gold, and fights wait until the item is back. A <i>Repair all</i> button sits under your character.</p>
-            <ul class="ladder" aria-label="Material qualities, used lowest first; by default up to Neptun">
-              <li style="--q:#e8e2d4">Standard</li>
-              <li style="--q:#5fd04a">Ceres</li>
-              <li class="cap" style="--q:#5a78ff">Neptun</li>
-              <li class="off" style="--q:#b653e6">Mars</li>
-              <li class="off" style="--q:#f08c1f">Jupiter</li>
-              <li class="off" style="--q:#e8413a">Olymp</li>
-            </ul>
-          </div>
+            <p>Spends spare gold on the cheapest of the stats you pick, so they grow evenly and arena raiders can't take it.</p>
+          </article>
+          <article class="card new">
+            <div class="icon">{{ICON:auction}}</div>
+            <h4>Auction house</h4>
+            <p>Bids on good-value food near the end of each round, within the budget you set.</p>
+          </article>
         </div>
       </div>
 
       <div class="group">
-        <h3>Chores</h3>
-        <div class="features">
-          <div class="feature">
+        <div class="group-title"><h3>Loot and packages</h3></div>
+        <div class="cards">
+          <article class="card new">
+            <div class="icon">{{ICON:packages}}</div>
+            <h4>Resources to the Horreum</h4>
+            <p>One button on the packages page moves every resource from all your packages into the Horreum.</p>
+          </article>
+          <article class="card new">
+            <div class="icon">{{ICON:general}}</div>
+            <h4>Tidy packages</h4>
+            <p>Every half hour it cashes in gold packages, stores resources, sells gear you don't want and saves packages that are about to expire.</p>
+          </article>
+          <article class="card new">
+            <div class="icon">{{ICON:smelting}}</div>
+            <h4>Smelting</h4>
+            <p>Tick items on the packages page or set rules, and GBot keeps the smelter busy and stores what comes out.</p>
+          </article>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group-title"><h3>Daily chores</h3></div>
+        <div class="cards four">
+          <article class="card">
+            <div class="icon">{{ICON:quests}}</div>
             <h4>Pantheon quests</h4>
-            <p>Collects finished quests and accepts the best-paying new one of the types you allow. It skips quests for places you don't fight at and for activities that are switched off.</p>
-          </div>
-          <div class="feature">
+            <p>Hands in finished quests and takes the best-paying new one that fits what you're doing.</p>
+          </article>
+          <article class="card">
+            <div class="icon">{{ICON:work}}</div>
             <h4>Stable work</h4>
-            <p>Takes the job you choose for the hours you choose once your expedition and dungeon points run out.</p>
-          </div>
-          <div class="feature wide">
-            <h4>Daily bonus and pop-ups</h4>
-            <p>Collects the daily login bonus and closes notification windows so they don't get in the way.</p>
-          </div>
+            <p>Takes a job when your expedition and dungeon points run out.</p>
+          </article>
+          <article class="card new">
+            <div class="icon">{{ICON:refresh}}</div>
+            <h4>Point refills</h4>
+            <p>Uses Gate Keys and Mobilisations you already own when points run out, up to a daily limit.</p>
+          </article>
+          <article class="card">
+            <div class="icon">{{ICON:notifications}}</div>
+            <h4>Daily bonus</h4>
+            <p>Collects the login bonus and closes pop-ups so nothing gets in the way.</p>
+          </article>
         </div>
       </div>
     </div>
   </section>
 
-  <section id="behaviour" aria-labelledby="behaviour-title">
-    <div class="section-head">
-      <p class="eyebrow">How it plays</p>
-      <h2 id="behaviour-title">Paced like a person</h2>
-    </div>
-    <ul class="traits">
-      <li><b>Human timing</b><span>A random pause before every click, 1.2 to 3.5 seconds by default.</span></li>
-      <li><b>No constant refreshing</b><span>It sleeps until the next cooldown ends, then looks again.</span></li>
-      <li><b>Hours and breaks</b><span>Play only between set hours, and take breaks of about 15 minutes every 2 hours, varied by ±30%.</span></li>
-      <li><b>Never spends rubies</b><span>Rent, bonuses and everything else are paid with gold or earned by fighting.</span></li>
-      <li><b>Stops when stuck</b><span>An activity that keeps failing is paused for a while, and the log says what went wrong.</span></li>
-      <li><b>One tab per server</b><span>Only one game tab runs the bot, and a tab that hangs is reloaded.</span></li>
-    </ul>
-    <pre class="log" aria-label="Example lines from the GBot log"><span class="t">14:02:09</span> Expedition: Skeleton Berserker has 4 bonuses left to learn (25% per win), fighting it before the boss
-<span class="t">14:02:13</span> Expedition: won, +1,513 gold, +7 XP, +15 honour
-<span class="t">14:06:40</span> Arena vs Virgl: won, +780 gold, +3 XP, +53 honour
-<span class="t">14:21:05</span> Arena vs Maximus: lost
-<span class="t">14:21:05</span> <span class="w">Arena: avoiding Maximus for 24h after a loss</span>
-<span class="t">14:25:31</span> Repair: Leather Sandals is on the workbench (5:00, 650 gold)
-<span class="t">14:30:36</span> Repaired Leather Sandals: 41% -&gt; 100%</pre>
-    <p class="caption">Example log. Every fight, repair and decision is written down, and the Statistics tab adds it all up.</p>
-  </section>
-
-  <section id="ingame" aria-labelledby="ingame-title">
-    <div class="section-head">
-      <p class="eyebrow">In the game</p>
-      <h2 id="ingame-title">A control bar on every game page</h2>
-    </div>
-    <div class="ingame">
-      <img class="shot ingame-shot" src="img/control-bar.png" alt="The floating GBot control bar with Start/Stop, the next action and a tile per activity" width="320" height="317">
-      <div class="ingame-text">
-        <ul>
-          <li><b>Start and Stop</b> in one click, plus a button to check the game right away.</li>
-          <li><b>A tile per activity.</b> Click to switch it on or off. Each tile shows a live countdown, <i>ready</i>, <i>no points</i> or <i>low HP</i>.</li>
-          <li><b>What comes next</b>, with your health, expedition and dungeon points and gold at a glance.</li>
-          <li><b>Drag it anywhere</b>, minimise it, or dock it along the top of the page.</li>
-          <li><b>Settings everywhere.</b> The same settings are in the toolbar popup and on a full options page, and you can export them to a file for another browser.</li>
-        </ul>
+  <section class="alt">
+    <div class="wrap">
+      <div class="spot">
+        <div class="spot-text">
+          <span class="eyebrow">In the game</span>
+          <h2>Control it without leaving the game</h2>
+          <p>A small bar sits on every game page. Start and stop the bot, switch activities on and off with one click, and see what's coming next.</p>
+          <ul class="ticks">
+            <li><b>Live status.</b> Each tile shows a countdown, ready, no points or low HP.</li>
+            <li><b>Your layout.</b> Drag it anywhere, minimise it, or dock it along the top of the page.</li>
+            <li><b>From the toolbar too.</b> The browser button opens the same controls and settings.</li>
+          </ul>
+        </div>
+        <div class="spot-media center">
+          <img class="shot" src="img/control-bar.png" alt="The GBot control bar: status, next action, health and points, and a tile for each activity" width="320" height="305" style="width:min(100%, 380px)">
+        </div>
       </div>
-      <figure class="bar-shot" style="margin:0">
-        <img class="shot" src="img/docked-bar.png" alt="The control bar docked along the top of the game page" width="1280" height="44">
-        <figcaption class="caption">Docked along the top, the bar pushes the game down instead of covering it.</figcaption>
-      </figure>
-    </div>
-  </section>
 
-  <section id="install" aria-labelledby="install-title">
-    <div class="section-head">
-      <p class="eyebrow">Setup</p>
-      <h2 id="install-title">Install in about a minute</h2>
-      <p class="lede">GBot isn't in the browser stores yet, so it installs as a developer extension.</p>
-    </div>
-    <div class="install">
-      <div class="browser">
-        <h3>Chrome, Edge, Brave, Opera</h3>
-        <ol>
-          <li><a href="downloads/gbot-chrome.zip">Download the Chrome zip</a> and unzip it into a folder you'll keep, such as <code>Documents/GBot</code>.</li>
-          <li>Open <code>chrome://extensions</code><button class="copy" type="button" data-copy="chrome://extensions">Copy</button> (in Edge, <code>edge://extensions</code>) and turn on <b>Developer mode</b>.</li>
-          <li>Click <b>Load unpacked</b> and choose the folder.</li>
-          <li>Open Gladiatus. The GBot bar appears on the game page. Switch on what you want and press <b>Start</b>.</li>
-        </ol>
-        <p class="note">To update, unzip the new version over the same folder and click the reload arrow on the GBot card. Your settings are kept.</p>
+      <div class="spot flip">
+        <div class="spot-text">
+          <span class="eyebrow">Settings</span>
+          <h2>Set it up the way you play</h2>
+          <p>Every activity has its own settings: which enemy to fight, who to leave alone, how much gold to keep, when to take a break.</p>
+          <ul class="ticks">
+            <li><b>A setup per server.</b> Two characters on two servers never get mixed up.</li>
+            <li><b>Your priorities.</b> Choose what goes first when several things are ready at once.</li>
+            <li><b>Take it with you.</b> Export your settings and import them in another browser.</li>
+          </ul>
+        </div>
+        <div class="spot-media">
+          <img class="shot" src="img/settings-window.png" alt="The GBot settings window open on the Repair tab" width="864" height="624">
+        </div>
       </div>
-      <div class="browser">
-        <h3>Firefox</h3>
-        <ol>
-          <li><a href="downloads/gbot-firefox.zip">Download the Firefox zip</a>. Keep it zipped.</li>
-          <li>Open <code>about:debugging#/runtime/this-firefox</code><button class="copy" type="button" data-copy="about:debugging#/runtime/this-firefox">Copy</button>.</li>
-          <li>Click <b>Load Temporary Add-on…</b> and choose the zip file.</li>
-          <li>Open Gladiatus. If the GBot button in the toolbar shows <b>Grant access</b>, click it.</li>
-        </ol>
-        <p class="note">Firefox removes temporary add-ons when it closes. Until there is a signed version, load it again after each restart.</p>
+
+      <div class="spot">
+        <div class="spot-text">
+          <span class="eyebrow">Statistics</span>
+          <h2>See what happened while you were away</h2>
+          <p>Every fight, repair and sale goes into the log, and the statistics add it all up: wins and losses, gold, experience, honour and fame.</p>
+<pre class="log" aria-label="Example log lines"><span class="t">14:02</span> Expedition: <span class="win">won</span>, +1,513 gold, +7 XP, +15 honour
+<span class="t">14:06</span> Arena vs Virgl: <span class="win">won</span>, +780 gold, +3 XP, +53 honour
+<span class="t">14:21</span> Arena vs Maximus: <span class="loss">lost</span>
+<span class="t">14:21</span> Arena: avoiding Maximus for 24h after a loss
+<span class="t">14:30</span> Repaired Leather Sandals: 41% -&gt; 100%</pre>
+        </div>
+        <div class="spot-media">
+          <img class="shot" src="img/statistics.png" alt="The Statistics tab: fights per activity with win rates, gold looted, experience, honour and fame" width="1002" height="651">
+          <p class="caption">Example statistics after a day on one server.</p>
+        </div>
       </div>
     </div>
   </section>
 
-  <section id="status" aria-labelledby="status-title">
-    <div class="section-head">
-      <p class="eyebrow">Still in development</p>
-      <h2 id="status-title">Where things stand</h2>
+  <section id="safety">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Built to be careful</span>
+        <h2>It plays it safe</h2>
+        <p>GBot is made to behave like a steady player, not a machine hammering the server.</p>
+      </div>
+      <div class="careful">
+        <div><b>{{ICON:safety}}Never spends rubies</b><span>Rent is paid in gold, bonuses are won in fights, and buttons that cost rubies are never pressed.</span></div>
+        <div><b>{{ICON:play}}A human pace</b><span>A short random pause before every click, and no constant page reloading.</span></div>
+        <div><b>{{ICON:schedule}}Your hours</b><span>Play only between set times, with random breaks if you like.</span></div>
+        <div><b>{{ICON:log}}Stops when something's off</b><span>If an action keeps failing, GBot pauses it and explains why in the log.</span></div>
+        <div><b>{{ICON:interface}}One tab per server</b><span>Only one game tab runs the bot, and a frozen tab gets reloaded.</span></div>
+        <div><b>{{ICON:notifications}}Private</b><span>Settings, statistics and logs stay in your browser. Nothing is sent anywhere else.</span></div>
+      </div>
+      <div class="warning">
+        {{ICON:safety}}
+        <p><strong>Please read this first.</strong> Bots are against Gladiatus' rules, and Gameforge can suspend or ban accounts that use them. Only use GBot if you accept that risk.</p>
+      </div>
     </div>
-    <div class="status">
-      <dl>
-        <dt>Version</dt><dd><span class="mono">{{VERSION}}</span>, build <span class="mono">{{COMMIT}}</span> ({{DATE}})</dd>
-        <dt>Tested on</dt><dd>English server 60 (s60-en), September 2026. Other servers and languages should work but haven't been checked.</dd>
-        <dt>Not automated yet</dt><dd>Events, the Underworld, the auction house and market, and guild activities.</dd>
-        <dt>If it breaks</dt><dd>Gameforge sometimes changes the game. GBot then pauses the activity it can't do and writes what it couldn't find in its log. Include that line when you report a problem.</dd>
-      </dl>
+  </section>
+
+  <section id="install" class="alt">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Install</span>
+        <h2>Install it in about a minute</h2>
+        <p>GBot isn't in the browser stores yet, so you add it by hand. It only takes a few clicks.</p>
+      </div>
+      <div class="install">
+        <div class="browser">
+          <h3>Chrome, Edge, Brave, Opera</h3>
+          <a class="btn btn-gold" href="downloads/gbot-chrome.zip">{{ICON:profile}}<span>Download for Chrome<small>Version {{VERSION}} · {{CHROME_SIZE}}</small></span></a>
+          <ol>
+            <li>Unzip the download into a folder you'll keep, for example <code>Documents/GBot</code>.</li>
+            <li>Open <code>chrome://extensions</code><button class="copy" type="button" data-copy="chrome://extensions">Copy</button> (in Edge: <code>edge://extensions</code>) and switch on <b>Developer mode</b>.</li>
+            <li>Click <b>Load unpacked</b> and choose the folder.</li>
+            <li>Open Gladiatus and press <b>Start</b> in the GBot bar.</li>
+          </ol>
+          <p class="note">Updating? Unzip the new version into the same folder and click the reload button on the GBot card. Your settings stay as they are.</p>
+        </div>
+        <div class="browser">
+          <h3>Firefox</h3>
+          <a class="btn btn-line" href="downloads/gbot-firefox.zip">{{ICON:profile}}<span>Download for Firefox<small>Version {{VERSION}} · {{FIREFOX_SIZE}}</small></span></a>
+          <ol>
+            <li>Keep the download as it is. There's no need to unzip it.</li>
+            <li>Open <code>about:debugging#/runtime/this-firefox</code><button class="copy" type="button" data-copy="about:debugging#/runtime/this-firefox">Copy</button>.</li>
+            <li>Click <b>Load Temporary Add-on…</b> and choose the zip file.</li>
+            <li>Open Gladiatus. If GBot asks for access to the site, allow it.</li>
+          </ol>
+          <p class="note">Firefox removes temporary add-ons when it closes, so load it again after a restart until there's a signed version.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="wrap faq-grid">
+      <div>
+        <div class="head">
+          <span class="eyebrow">Questions</span>
+          <h2>Good to know</h2>
+        </div>
+        <div class="status">
+          <h3>Still in development</h3>
+          <p>GBot is new and changes often. If something stops working after a game update, it pauses that activity and notes the reason in its log.</p>
+          <dl>
+            <dt>Version</dt><dd>{{VERSION}} ({{DATE}})</dd>
+            <dt>Tested on</dt><dd>English servers 60 and 303, September 2026</dd>
+            <dt>Not yet</dt><dd>Events, the market and guild activities</dd>
+          </dl>
+        </div>
+      </div>
       <div class="faq">
-        <details>
+        <details open>
           <summary>Can my account get banned?</summary>
-          <p>Yes. Gameforge's terms of service forbid bots. GBot plays at a human pace, but there is no guarantee. Use it at your own risk.</p>
+          <p>Yes, it's possible. Bots break Gladiatus' rules, and GBot can't promise it will never be noticed. Only use it if you accept that risk.</p>
         </details>
         <details>
           <summary>Does it need my password?</summary>
-          <p>No. It works in the game tab you're already logged into and never logs in for you. If your session expires, log in again and it carries on.</p>
+          <p>No. GBot works in the game tab you're already logged into and never logs in for you. If your session runs out, log in again and it carries on.</p>
         </details>
         <details>
-          <summary>What does it send anywhere?</summary>
-          <p>Nothing. It only talks to the Gladiatus game servers, and your settings, statistics and log stay in your browser. There are no accounts and no analytics.</p>
+          <summary>Will it spend my rubies?</summary>
+          <p>Never. Everything it pays for, like workbench rent or auction bids, is paid in gold.</p>
+        </details>
+        <details>
+          <summary>Does it send my data anywhere?</summary>
+          <p>No. It only talks to the Gladiatus game servers. Your settings, statistics and log stay in your browser, and there's no account or tracking.</p>
+        </details>
+        <details>
+          <summary>Can I use it on more than one server?</summary>
+          <p>Yes. Each server keeps its own settings, statistics and log. Open one game tab per server.</p>
         </details>
         <details>
           <summary>Does the game tab have to stay open?</summary>
-          <p>Yes, but it can be in the background. The bot runs in that tab, one tab per server.</p>
+          <p>Yes, but it can sit in the background while you do other things.</p>
         </details>
         <details>
-          <summary>Will it spend rubies?</summary>
-          <p>Never. Workbench rent is paid in gold, and expedition bonuses are only learned by winning fights.</p>
+          <summary>What happens when the game changes?</summary>
+          <p>GBot pauses anything it can't do anymore and writes the reason in its log. Include that line when you report a problem, and it can usually be fixed quickly.</p>
         </details>
       </div>
     </div>
   </section>
 
-  <footer>
-    <span>GBot is free software under the GPL-3.0 licence.</span>
+  <section class="final alt">
+    <div class="wrap">
+      <h2>Ready to let GBot fight for you?</h2>
+      <p>Free for Chrome, Edge, Brave, Opera and Firefox.</p>
+      <div class="cta-row">
+        <a class="btn btn-gold" href="downloads/gbot-chrome.zip">{{ICON:profile}}<span>Download for Chrome<small>{{CHROME_SIZE}}</small></span></a>
+        <a class="btn btn-line" href="downloads/gbot-firefox.zip">{{ICON:profile}}<span>Download for Firefox<small>{{FIREFOX_SIZE}}</small></span></a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>GBot {{VERSION}} is free software under the GPL-3.0 licence.</span>
     <span>Not affiliated with or endorsed by Gameforge. Gladiatus is a trademark of Gameforge.</span>
-  </footer>
-</div>
+  </div>
+</footer>
 
 <script>
-  // Copy buttons for browser-internal addresses, which web pages can't link to.
+  // Copy buttons for browser addresses, which web pages can't link to.
   document.querySelectorAll('.copy').forEach(function (button) {
     button.addEventListener('click', function () {
       var text = button.getAttribute('data-copy');
-      var done = function (label) {
+      var show = function (label) {
         button.textContent = label;
         setTimeout(function () { button.textContent = 'Copy'; }, 1600);
       };
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(function () { done('Copied'); }, function () { done('Select and copy'); });
+        navigator.clipboard.writeText(text).then(function () { show('Copied'); }, function () { show('Select and copy'); });
       } else {
-        done('Select and copy');
+        show('Select and copy');
       }
     });
   });

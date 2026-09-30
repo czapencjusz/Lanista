@@ -7,6 +7,7 @@
 //   dist/site/fonts/            self-hosted fonts (no third-party requests)
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { zip } from './zip.mjs';
@@ -21,9 +22,11 @@ mkdirSync(join(out, 'downloads'), { recursive: true });
 mkdirSync(join(out, 'img'), { recursive: true });
 
 cpSync(join(root, 'site', 'fonts'), join(out, 'fonts'), { recursive: true });
-for (const name of ['settings-window.png', 'control-bar.png', 'docked-bar.png']) {
+// Screenshots shared with the README, plus images made for the page only.
+for (const name of ['settings-window.png', 'control-bar.png', 'docked-bar.png', 'popup.png']) {
   cpSync(join(root, 'docs', name), join(out, 'img', name));
 }
+cpSync(join(root, 'site', 'img'), join(out, 'img'), { recursive: true });
 cpSync(join(root, 'icons', 'icon128.png'), join(out, 'img', 'icon.png'));
 for (const name of ['gbot-chrome.zip', 'gbot-firefox.zip']) {
   cpSync(join(root, 'dist', name), join(out, 'downloads', name));
@@ -45,8 +48,23 @@ const values = {
   FIREFOX_SIZE: size(join(out, 'downloads', 'gbot-firefox.zip')),
 };
 
+// {{ICON:name}} becomes the extension's own SVG icon (src/ui/dom.js), so the
+// page and the extension always show the same icons.
+const require = createRequire(import.meta.url);
+require(join(root, 'src', 'ui', 'dom.js'));
+const ICONS = globalThis.GBot.ui.ICONS;
+const escapeAttr = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+function svgIcon(name) {
+  if (!ICONS[name]) throw new Error(`site/index.html: unknown icon ${name}`);
+  const shapes = ICONS[name]
+    .map(([tag, attrs]) => `<${tag} ${Object.entries(attrs).map(([k, v]) => `${k}="${escapeAttr(v)}"`).join(' ')}/>`)
+    .join('');
+  return `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${shapes}</svg>`;
+}
+
 let html = readFileSync(join(root, 'site', 'index.html'), 'utf8');
-html = html.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+html = html.replace(/\{\{(\w+)(?::(\w+))?\}\}/g, (match, key, arg) => {
+  if (key === 'ICON') return svgIcon(arg);
   if (!(key in values)) throw new Error(`site/index.html: unknown placeholder ${match}`);
   return values[key];
 });

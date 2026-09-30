@@ -14,13 +14,16 @@ This builds the extension zips and puts everything the page needs into `dist/sit
 ```
 dist/site/index.html        the page, with the version, build and file sizes filled in
 dist/site/downloads/        gbot-chrome.zip and gbot-firefox.zip
-dist/site/img/              screenshots (from docs/) and the icon
+dist/site/img/              screenshots from docs/, images made for the page (site/img/) and the icon
 dist/site/fonts/            Marcellus and Alegreya Sans (SIL Open Font License)
 ```
 
 It also writes `dist/gbot-site.zip`, the same files in one archive.
 
-The page loads nothing from other websites: no web fonts service, no analytics.
+The page loads nothing from other websites: no web fonts service, no analytics. Its icons are
+the extension's own (`{{ICON:name}}` in `site/index.html` is replaced with the SVG from
+`src/ui/dom.js`), and `site/img/statistics.png` is the extension's Statistics tab with example
+numbers.
 
 ## Publish
 
