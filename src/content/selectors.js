@@ -103,26 +103,6 @@
       avatar: '#avatar',
     },
 
-    // Packages page: one .packageItem per package; resources (forging
-    // goods) are item class 18, i.e. data-basis "18-<type>".
-    packages: {
-      item: '.packageItem [data-content-type]',
-      resource: '.packageItem [data-basis^="18-"]',
-      // The "Send resources to the Horreum" button goes at the top of this.
-      container: '#content',
-    },
-
-    // Horreum (forge storage): the game's own "Store resources" form. Its
-    // overflow choice is two radios, sell first and delete second.
-    horreum: {
-      fromPackages: '#from-packages',
-      fromInventory: '#from-inventory',
-      excess: 'input[name="sell-excess"]',
-      store: '#store',
-      stock: '#resource-list',
-      dialog: '#blackoutDialog, #blackoutDialogbod',
-    },
-
     // Training ground: one button and one cost per stat, in stat order.
     training: {
       buttons: '#training_box .training_button',
@@ -171,7 +151,6 @@
     circus: () => ({ mod: 'arena', submod: 'serverArena', aType: 3 }),
     work: () => ({ mod: 'work' }),
     training: () => ({ mod: 'training' }),
-    horreum: () => ({ mod: 'forge', submod: 'storage' }),
     quests: () => ({ mod: 'quests' }),
   };
 

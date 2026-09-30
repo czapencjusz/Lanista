@@ -33,16 +33,6 @@ function defaultState() {
     questFinished: false,
     expeditionDisabled: false,
     acceptedQuests: [],
-    // Packages: resources are item class 18 ("18-<type>").
-    packages: [
-      { basis: '18-24', name: 'Iron', amount: 12 },
-      { basis: '18-5', name: 'Linen', amount: 3 },
-      { basis: '2-3', name: 'Short sword', amount: 1 },
-    ],
-    horreumStock: {},
-    // 'ajax' updates the Horreum page in place, 'reload' reloads it,
-    // 'broken' serves a Horreum page without the store form.
-    horreumMode: 'ajax',
     events: [],
   };
 }
@@ -254,56 +244,6 @@ class MockGame {
     return this.render('questsPage', finished + open);
   }
 
-  packagesPage() {
-    const items = this.state.packages
-      .map(
-        (p, i) => `<div class="packageItem"><input type="hidden" name="packages[]" value="${i}">
-          <div data-container-number="-${100 + i}"><div data-content-type="${p.basis.startsWith('18-') ? 4096 : 2}" data-basis="${p.basis}"
-            data-amount="${p.amount}" data-tooltip='[[["${p.name}","white"]]]'></div></div><span>${p.name}</span></div>`
-      )
-      .join('');
-    return this.render('packagesPage', `<form id="packages_filter"><input type="text" name="qry"></form><div id="packages">${items}</div>`);
-  }
-
-  // Imitation of the Horreum's "Store resources" form (element ids as on the
-  // live game; the request behind the button is this mock's own).
-  horreumPage() {
-    const stock = Object.entries(this.state.horreumStock)
-      .map(([name, n]) => `<tr><td>${name}</td><td>${n}</td></tr>`)
-      .join('');
-    const table = `<table id="resource-list"><tr><th>Resource</th><th>Amount</th></tr>${stock}</table>`;
-    if (this.state.horreumMode === 'broken') return this.render('forgePage', `<h2>Horreum</h2>${table}`);
-    return this.render(
-      'forgePage',
-      `<h2>Horreum</h2>
-       <fieldset>
-         <label><input type="checkbox" id="from-inventory" checked> From inventory</label>
-         <label><input type="checkbox" id="from-packages"> From packages</label>
-         <label><input type="radio" name="sell-excess" value="1"> Sell</label>
-         <label><input type="radio" name="sell-excess" value="0" checked> Delete</label>
-         <button id="store" disabled>Go</button>
-       </fieldset>${table}`,
-      `var mode = '${this.state.horreumMode}';
-       function sync() { document.getElementById('store').disabled = !($('#from-inventory').prop('checked') || $('#from-packages').prop('checked')); }
-       $(function () {
-         sync();
-         $('#from-inventory, #from-packages').on('change', sync);
-         $('#store').on('click', function () {
-           $.post('ajax.php?mod=forge&submod=storeResources', {
-             inventory: $('#from-inventory').prop('checked') ? 1 : 0,
-             packages: $('#from-packages').prop('checked') ? 1 : 0,
-             sellExcess: $('input[name="sell-excess"]:checked').val(),
-             sh: secureHash
-           }, function (r) {
-             if (mode === 'reload') { location.reload(); return; }
-             $('#resource-list').html('<tr><th>Resource</th><th>Amount</th></tr>' +
-               Object.keys(r.stock).map(function (k) { return '<tr><td>' + k + '</td><td>' + r.stock[k] + '</td></tr>'; }).join(''));
-           }, 'json');
-         });
-       });`
-    );
-  }
-
   // ---------------------------------------------------------------- routing
 
   async handle(route) {
@@ -335,17 +275,6 @@ class MockGame {
         const kind = q.aType === '3' ? 'circus' : 'arena';
         const levels = kind === 'arena' ? s.arenaLevels : s.circusLevels;
         return json(this.fight(kind, { opponent: q.opponentId, level: levels[Number(q.opponentId) - 100] }));
-      }
-      if (q.mod === 'forge' && q.submod === 'storeResources') {
-        const body = new URLSearchParams(request.postData() || '');
-        this.record('horreumStore', { inventory: body.get('inventory'), packages: body.get('packages'), sellExcess: body.get('sellExcess') });
-        if (body.get('packages') === '1') {
-          for (const p of s.packages.filter((x) => x.basis.startsWith('18-'))) {
-            s.horreumStock[p.name] = (s.horreumStock[p.name] || 0) + p.amount;
-          }
-          s.packages = s.packages.filter((x) => !x.basis.startsWith('18-'));
-        }
-        return json({ stock: s.horreumStock });
       }
       if (q.mod === 'inventory' && q.submod === 'loadBag') {
         return route.fulfill({ contentType: 'text/html', body: this.bagItems(Number(q.bag)) });
@@ -387,11 +316,7 @@ class MockGame {
       this.record('questAccept', { questType: q.type });
     }
 
-    if (q.mod === 'forge' && q.submod === 'storage') return page(this.horreumPage());
-
     switch (q.mod || 'overview') {
-      case 'packages':
-        return page(this.packagesPage());
       case 'location':
         return page(this.locationPage(q.loc));
       case 'dungeon':

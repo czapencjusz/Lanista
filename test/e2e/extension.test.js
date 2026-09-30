@@ -322,46 +322,4 @@ test.describe('GBot extension against a mock Gladiatus server', { skip: !executa
     await waitUntil(async () => (await storageGet('settings')).expedition.enemy === 1, 5000, 'reset');
     await options.close();
   });
-  test('packages page: sends resources to the Horreum (packages only, excess sold)', { timeout: 60000 }, async () => {
-    await configure({ enabled: false });
-    game.reset({});
-    await worker.evaluate(async (host) => chrome.storage.local.remove(`memory:${host}`), HOST);
-    await page.goto(`${GAME}index.php?mod=packages&sh=${SH}`);
-    const box = page.locator('#gbot-horreum');
-    await box.waitFor();
-    assert.equal(await box.locator('.gbot-horreum-status').textContent(), '2 resource packages on this page');
-
-    await box.locator('button').click();
-    const [store] = await waitUntil(() => game.events('horreumStore').length && game.events('horreumStore'), 30000, 'store request');
-    assert.equal(store.packages, '1', 'takes the packages');
-    assert.equal(store.inventory, '0', 'leaves the bags alone');
-    assert.equal(store.sellExcess, '1', 'sells what does not fit, never deletes');
-    assert.deepEqual(game.state.horreumStock, { Iron: 12, Linen: 3 });
-    assert.deepEqual(game.state.packages.map((p) => p.name), ['Short sword'], 'other packages stay');
-
-    // The page reloads and shows what is left.
-    await page.waitForFunction(() => /No resources on this page/.test((document.querySelector('.gbot-horreum-status') || {}).textContent || ''), null, { timeout: 15000 });
-    const memory = await storageGet(`memory:${HOST}`);
-    assert.ok(memory.log.some((l) => l.message === 'Packages: resources sent to the Horreum'));
-    assert.equal(await page.evaluate(() => document.querySelectorAll('iframe').length), 0, 'the hidden frame is removed');
-  });
-
-  test('packages page: also works when the Horreum page reloads after storing', { timeout: 60000 }, async () => {
-    game.reset({ horreumMode: 'reload' });
-    await page.goto(`${GAME}index.php?mod=packages&sh=${SH}`);
-    await page.locator('#gbot-horreum button').click();
-    await waitUntil(() => game.events('horreumStore').length, 30000, 'store request');
-    await page.waitForFunction(() => /No resources on this page/.test((document.querySelector('.gbot-horreum-status') || {}).textContent || ''), null, { timeout: 15000 });
-  });
-
-  test('packages page: explains when the Horreum page looks different', { timeout: 60000 }, async () => {
-    game.reset({ horreumMode: 'broken' });
-    await page.goto(`${GAME}index.php?mod=packages&sh=${SH}`);
-    const box = page.locator('#gbot-horreum');
-    await box.locator('button').click();
-    await page.waitForFunction(() => /looks different/.test(document.querySelector('.gbot-horreum-status').textContent), null, { timeout: 30000 });
-    assert.equal(await box.locator('button').isDisabled(), false, 'the button can be used again');
-    assert.equal(game.events('horreumStore').length, 0);
-    assert.equal(game.state.packages.length, 3, 'nothing moved');
-  });
 });

@@ -21,7 +21,6 @@ through the game the way a player would.
 | **Healing** | Eats food below one HP threshold and stops fighting below another. It searches every bag and picks the food that best fills the missing HP. |
 | **Training** | Optional. Spends gold above a reserve you set on stat points, always on the cheapest of the stats you pick, which keeps them balanced. Gold you spend cannot be stolen in the arena. |
 | **Repair** | Optional. When an item you wear drops below a conditioning threshold, the bot takes it off, repairs it at the workbench with materials from the Horreum, and puts it back on (see below). |
-| **Resources to the Horreum** | A button at the top of the packages page sends the resources from all your packages to the Horreum, through the Horreum's own *Store resources* function. Anything that does not fit is sold, never deleted, and resources in your bags stay where they are. |
 | **Stable work** | Optional. Once you are out of expedition and dungeon points, it starts the job and number of hours you chose. |
 | **Pantheon quests** | Optional. Collects finished quests and accepts the best-paying new one of the types you pick. It skips quests for places you do not fight at and for activities that are switched off, and stops when all quest slots are taken. |
 | **Pop-ups** | Collects the daily login bonus and closes notification dialogs. |
