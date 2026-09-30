@@ -123,3 +123,33 @@ test('log and statistics tabs render memory', () => {
   view.showTab('log');
   assert.match($('.gb-log-line.warn').textContent, /attack refused/);
 });
+
+test('Premium tab shows the free tier and refuses a bad key', async () => {
+  const T = GBot.tier;
+  const now = Date.now();
+  const tier = await T.status({ usage: { day: T.dayOf(now), ms: 30 * 60000 } }, now);
+  const { view, $ } = mount({}, { tier });
+  view.showTab('premium');
+  assert.equal($('.gb-plan-name').textContent, 'Free');
+  assert.match($('.gb-plan-text').textContent, new RegExp(T.allowanceText()));
+  assert.match($('.gb-plan-usage').textContent, /Used today: 30 min/);
+  const input = $('textarea[aria-label="Premium key"]');
+  input.value = 'not a key';
+  [...view.element.querySelectorAll('.gb-btn')].find((b) => b.textContent === 'Activate').click();
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match($('.gb-import-status').textContent, /not a Lanista Premium key/);
+  assert.equal($('.gb-import-status').classList.contains('error'), true);
+
+  view.update({ tier: { ...tier, usedMs: tier.limitMs, leftMs: 0, exhausted: true } });
+  assert.match($('.gb-plan-usage').textContent, /Used up for today/);
+  assert.equal($('.gb-plan').classList.contains('out'), true);
+});
+
+test('Premium tab shows who the key belongs to', () => {
+  const tier = { premium: true, license: { id: 'a', to: 'Marcus', issued: 0, expires: null }, keyError: null, usedMs: 3 * 3600000, limitMs: null, leftMs: null, exhausted: false, resetsAt: 0 };
+  const { view, $ } = mount({}, { tier });
+  view.showTab('premium');
+  assert.equal($('.gb-plan-name').textContent, 'Premium');
+  assert.match($('.gb-plan-text').textContent, /Licensed to Marcus\. Never expires\./);
+  assert.equal($('textarea[aria-label="Premium key"]').closest('div').hidden, true);
+});

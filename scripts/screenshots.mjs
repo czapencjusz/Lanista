@@ -19,6 +19,7 @@ const require = createRequire(import.meta.url);
 const { chromium } = require('playwright-core');
 const { MockGame, ORIGIN, GAME, SH } = require(join(root, 'test', 'e2e', 'mock-game.js'));
 const { sanitizeSettings } = require(join(root, 'src', 'shared', 'settings.js'));
+const tier = require(join(root, 'src', 'shared', 'tier.js'));
 require(join(root, 'src', 'content', 'util.js'));
 const brain = require(join(root, 'src', 'content', 'brain.js'));
 
@@ -78,6 +79,8 @@ try {
   const store = (key, value) => worker.evaluate(async ([k, v]) => chrome.storage.local.set({ [k]: v }), [key, value]);
   const extensionId = new URL(worker.url()).host;
   await store(`settings:${HOST}`, SHOWN);
+  // Free tier, 45 minutes into today's bot time.
+  await store(tier.USAGE_KEY, { day: tier.dayOf(Date.now()), ms: 45 * 60000 });
 
   const page = context.pages()[0] || (await context.newPage());
   await page.goto(`${GAME}index.php?mod=overview&sh=${SH}`);

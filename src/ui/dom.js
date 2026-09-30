@@ -109,6 +109,7 @@
     stats: [['path', { d: 'M4 20h16M7 20v-6M12 20V6M17 20v-9' }]],
     log: [['path', { d: 'M8 6h12M8 12h12M8 18h12' }], ['circle', { cx: 4.5, cy: 6, r: 1 }], ['circle', { cx: 4.5, cy: 12, r: 1 }], ['circle', { cx: 4.5, cy: 18, r: 1 }]],
     profile: [['path', { d: 'M12 3.5v11M7.5 10l4.5 4.5 4.5-4.5M4.5 16v3.5h15V16' }]],
+    premium: [['path', { d: 'M4.5 17L3 7.5l5 4 4-6.5 4 6.5 5-4L19.5 17z' }], ['path', { d: 'M4.5 20.5h15' }]],
     up: [['path', { d: 'M6 15l6-6 6 6' }]],
     down: [['path', { d: 'M6 9l6 6 6-6' }]],
     grip: [['path', { d: 'M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01', 'stroke-width': 3 }]],

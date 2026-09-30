@@ -1,6 +1,7 @@
 // The in-game control bar: a start/stop button, one tile per activity (click
 // to switch it on/off, gear to open its settings), the current status with a
-// live countdown, and a settings window with every option. Lives in a shadow
+// live countdown, the free tier's time left, and a settings window with every
+// option. Lives in a shadow
 // root so the game's CSS cannot affect it (and vice versa).
 (function (root) {
   'use strict';
@@ -46,6 +47,7 @@
 
     let settings = null;
     let memory = null;
+    let tier = null;
     let decision = null;
     let status = {};
     let modal = null;
@@ -55,10 +57,11 @@
     const playIcon = h('span', { class: 'gb-play-icon' }, icon('play', 14));
     const play = h('button', { type: 'button', class: 'gb-play', title: 'Start / stop the bot', onclick: () => handlers.onToggleBot() }, playIcon, playLabel);
     const minimize = h('button', { type: 'button', class: 'gb-icon-btn', title: 'Minimise', onclick: () => setMinimized(!panel.classList.contains('min')) }, icon('minimize', 16));
+    const badge = h('span', { class: 'gb-badge', hidden: true }, 'Premium');
     const head = h(
       'div',
       { class: 'gb-panel-head' },
-      h('span', { class: 'gb-brand' }, icon('arena', 16), 'Lanista'),
+      h('span', { class: 'gb-brand' }, icon('arena', 16), 'Lanista', badge),
       play,
       h('button', { type: 'button', class: 'gb-icon-btn', title: 'Check now', dataset: { action: 'run' }, onclick: () => handlers.onRunNow() }, icon('refresh', 16)),
       h('button', { type: 'button', class: 'gb-icon-btn', title: 'Settings', dataset: { action: 'settings' }, onclick: () => openSettings() }, icon('gear', 16)),
@@ -99,6 +102,19 @@
       )
     );
     const lastLog = h('div', { class: 'gb-last-log' });
+    // Free tier: bot time left today. Opens the Premium tab.
+    // Long text for the floating window, short for the docked bar.
+    const tierLong = h('span', { class: 'gb-tier-long' });
+    const tierShort = h('span', { class: 'gb-tier-short' });
+    const tierText = h('span', { class: 'gb-tier-text' }, tierLong, tierShort);
+    const tierFill = h('span', { class: 'gb-tier-fill' });
+    const tierEl = h(
+      'button',
+      { type: 'button', class: 'gb-tier', hidden: true, dataset: { action: 'premium' }, onclick: () => openSettings('premium') },
+      tierText,
+      h('span', { class: 'gb-tier-more' }, 'Premium ›'),
+      h('span', { class: 'gb-tier-meter' }, tierFill)
+    );
     const statsLine = h('span', { class: 'gb-stats-line' });
     const foot = h(
       'div',
@@ -107,7 +123,7 @@
       h('button', { type: 'button', class: 'gb-icon-btn', title: 'Statistics', onclick: () => openSettings('stats') }, icon('stats', 15)),
       h('button', { type: 'button', class: 'gb-icon-btn', title: 'Log', onclick: () => openSettings('log') }, icon('log', 15))
     );
-    const body = h('div', { class: 'gb-body' }, h('div', { class: 'gb-summary' }, statusEl, nextEl), vitalsEl, tileGrid, lastLog, foot);
+    const body = h('div', { class: 'gb-body' }, h('div', { class: 'gb-summary' }, statusEl, nextEl), vitalsEl, tileGrid, lastLog, tierEl, foot);
     const panel = h('div', { class: 'gb-panel', role: 'region', 'aria-label': 'Lanista control bar' }, head, body);
     wrap.appendChild(panel);
     document.documentElement.appendChild(host);
@@ -205,6 +221,8 @@
       nextEl.textContent = '';
       if (decision.type === 'wait' && decision.next) {
         nextEl.append('Next: ', h('b', {}, decision.next.label), ` in ${countdown(decision.until)}`);
+      } else if (decision.outOfTime) {
+        nextEl.textContent = 'Carries on at midnight. Premium has no limit.';
       } else if (decision.type === 'idle') {
         nextEl.textContent = settings && settings.enabled ? '' : 'Press Start to play.';
       } else {
@@ -218,6 +236,19 @@
       const parts = [`HP ${state.hp.percent ?? '?'}%`, `Exp ${pts(state.expedition)}`, `Dung ${pts(state.dungeon)}`];
       if (state.gold !== null) parts.push(`${state.gold.toLocaleString()} gold`);
       vitalsEl.textContent = parts.join(' · ');
+    }
+
+    function renderTier() {
+      const T = GBot.tier;
+      badge.hidden = !(tier && tier.premium);
+      tierEl.hidden = !tier || tier.premium;
+      if (!tier || tier.premium) return;
+      tierEl.classList.toggle('out', tier.exhausted);
+      const left = T.formatDuration(tier.leftMs, Math.ceil);
+      tierLong.textContent = `Free: ${left} of bot time left today`;
+      tierShort.textContent = tier.exhausted ? 'Free time used up' : `${left} left`;
+      tierFill.style.width = `${Math.min(100, (100 * tier.usedMs) / tier.limitMs)}%`;
+      tierEl.title = `Free: every feature, for ${T.allowanceText()} of bot time a day (${T.formatDuration(tier.usedMs, Math.floor)} used today). It starts again at midnight. Premium has no time limit.`;
     }
 
     function renderStats() {
@@ -257,13 +288,15 @@
         updatePageOffset();
       }
       if (next.memory) memory = next.memory;
+      if (next.tier) tier = next.tier;
       if (next.decision) decision = next.decision;
       if (next.status) status = next.status;
       if (next.state) renderVitals(next.state);
       renderTiles();
       renderStatus();
       renderStats();
-      if (modal) modal.view.update({ settings: next.settings, memory: next.memory });
+      renderTier();
+      if (modal) modal.view.update({ settings: next.settings, memory: next.memory, tier: next.tier });
     }
 
     // ---------------------------------------------------- settings window
@@ -275,10 +308,12 @@
       const view = ui.createSettingsUI({
         settings,
         memory,
+        tier,
         initialTab: tab,
         onChange: (s) => handlers.onSaveSettings(s),
         onResetStats: () => handlers.onResetStats(),
         onClearLog: () => handlers.onClearLog(),
+        premium: handlers.premium,
         host: handlers.host,
         listServers: handlers.listServers,
         loadServerSettings: handlers.loadServerSettings,

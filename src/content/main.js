@@ -8,6 +8,7 @@
   const ext = root.browser || root.chrome;
   const { brain, actions, util } = GBot;
   const S = GBot.settings;
+  const T = GBot.tier;
   const { PAGES, buildUrl } = GBot.selectors;
 
   // Memory and settings are kept per game server.
@@ -19,9 +20,11 @@
 
   let settings = null;
   let memory = null;
+  let tier = null;
   let lastState = null;
   let unloading = false;
   let running = false;
+  let recheck = false;
   let timer = null;
   let lastAlertAt = 0;
 
@@ -302,6 +305,37 @@
     }
   }
 
+  // Free tier: once today's bot time is used up the bot plays as if stopped
+  // (a repair under way still finishes) and waits for midnight.
+  const playing = () => !!(settings && settings.enabled && !(tier && tier.exhausted));
+
+  function decideNow(state, now) {
+    const decision = brain.decide(state, playing() ? settings : { ...settings, enabled: false }, memory, now);
+    if (settings.enabled && !playing() && decision.type === 'idle') {
+      const retryMs = tier.resetsAt - now + util.randomBetween(30000, 120000);
+      return { type: 'idle', reason: 'Free bot time used up for today', retryMs, outOfTime: true };
+    }
+    return decision;
+  }
+
+  // Free or Premium, from the background script: it checks the key in the
+  // extension's own context rather than in the game page.
+  async function loadTier() {
+    const answer = await send({ type: 'tier' });
+    return answer && typeof answer.exhausted === 'boolean' ? answer : T.load();
+  }
+
+  // Bot time counted, or a Premium key activated or removed.
+  async function refreshTier() {
+    const was = tier;
+    tier = await loadTier();
+    panel.update({ tier });
+    if (!was || was.exhausted === tier.exhausted || !settings || !settings.enabled) return;
+    // Out of time, or unlimited again: decide again.
+    if (running) recheck = true;
+    else schedule(tick, 1000);
+  }
+
   const statusFor = (state) => (state && settings && memory ? brain.activityStatus(state, settings, memory, Date.now()) : {});
 
   // Fills in the control bar as soon as the page is parsed, from storage and
@@ -309,14 +343,15 @@
   // executed or saved, so the first tick (which may act) keeps its delay.
   async function paintNow() {
     const now = Date.now();
-    const [loadedSettings, loadedMemory] = await Promise.all([S.loadSettings(HOST), loadMemory()]);
+    const [loadedSettings, loadedMemory, loadedTier] = await Promise.all([S.loadSettings(HOST), loadMemory(), loadTier()]);
     if (running) return; // the first tick got here first
     settings = loadedSettings;
     memory = loadedMemory;
+    tier = loadedTier;
     const state = GBot.state.readState(document, location, now);
     lastState = state;
-    const decision = brain.decide(state, settings, memory, now);
-    panel.update({ settings, memory, decision, state, status: statusFor(state) });
+    const decision = decideNow(state, now);
+    panel.update({ settings, memory, tier, decision, state, status: statusFor(state) });
     renderPageButtons(state);
   }
 
@@ -329,6 +364,7 @@
       const now = Date.now();
       settings = await S.loadSettings(HOST);
       memory = await loadMemory();
+      tier = await loadTier();
       state = GBot.state.readState(document, location, now);
       lastState = state;
 
@@ -341,16 +377,16 @@
         log('info', `Back from the Underworld${used.length ? ` (used ${used.join(' and ')})` : ''}`);
       }
       for (const event of brain.resolvePending(state, memory, now)) log(event.level, event.message);
-      if (settings.enabled) brain.updateBreaks(settings.schedule, memory, now);
+      if (playing()) brain.updateBreaks(settings.schedule, memory, now);
 
-      let decision = brain.decide(state, settings, memory, now);
+      let decision = decideNow(state, now);
       // A repair also runs while paused; it must not run in two tabs at once.
-      if ((settings.enabled || repairRunning()) && state.inGame) {
+      if ((playing() || repairRunning()) && state.inGame) {
         const claim = await send({ type: 'claim', host: location.host });
         if (claim && claim.ok === false) decision = { type: 'idle', reason: 'Lanista is running in another tab', retryMs: 60000 };
       }
 
-      panel.update({ settings, memory, decision, state, status: statusFor(state) });
+      panel.update({ settings, memory, tier, decision, state, status: statusFor(state) });
       renderPageButtons(state);
       await persist();
       await execute(decision, state);
@@ -360,6 +396,10 @@
       if (settings && settings.enabled) schedule(() => navigate(overviewUrl(state), 'overview (recovering)'), 20000);
     } finally {
       running = false;
+      if (recheck) {
+        recheck = false;
+        schedule(tick, 1000);
+      }
     }
   }
 
@@ -371,7 +411,7 @@
       await send({ type: 'heartbeat', host: location.host, nextAt: null, enabled: false });
       // Another tab owns the bot: check again later in case it gets closed.
       if (decision.retryMs) schedule(tick, decision.retryMs);
-      if (settings.enabled && !state.inGame && now - lastAlertAt > 30 * 60 * 1000) {
+      if (playing() && !state.inGame && now - lastAlertAt > 30 * 60 * 1000) {
         lastAlertAt = now;
         notify('loggedOut', 'Lanista is enabled but this is not an in-game page. Are you logged out?');
       }
@@ -448,6 +488,11 @@
       await S.saveSettings(S.setPath(current, path, !S.getPath(current, path)), HOST);
     },
     onSaveSettings: (next) => S.saveSettings(next, HOST),
+    premium: {
+      load: loadTier,
+      activate: (key) => send({ type: 'activate', key }),
+      deactivate: () => send({ type: 'deactivate' }),
+    },
     host: HOST,
     listServers: S.listServers,
     loadServerSettings: S.loadSettings,
@@ -475,6 +520,7 @@
       renderPageButtons(lastState);
     }
     // This server's settings, or the shared ones while it has none of its own.
+    if (changes[T.USAGE_KEY] || changes[T.LICENSE_KEY]) refreshTier().catch(() => {});
     if (changes[SETTINGS_KEY] && changes[SETTINGS_KEY].newValue) applySettings(S.normalize(changes[SETTINGS_KEY].newValue));
     else if (changes[SETTINGS_KEY] || changes[S.STORAGE_KEY]) S.loadSettings(HOST).then(applySettings, () => {});
   });

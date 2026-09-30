@@ -40,17 +40,20 @@ const git = (...args) => {
   }
 };
 const size = (file) => `${Math.max(1, Math.round(statSync(file).size / 1024))} KB`;
+const require = createRequire(import.meta.url);
+const tier = require(join(root, 'src', 'shared', 'tier.js'));
 const values = {
   VERSION: JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8')).version,
   COMMIT: git('rev-parse', '--short', 'HEAD') || 'local',
   DATE: git('log', '-1', '--format=%cs') || new Date().toISOString().slice(0, 10),
   CHROME_SIZE: size(join(out, 'downloads', 'lanista-chrome.zip')),
   FIREFOX_SIZE: size(join(out, 'downloads', 'lanista-firefox.zip')),
+  FREE_ALLOWANCE: tier.allowanceText(),
+  PREMIUM_URL: tier.PREMIUM_URL,
 };
 
 // {{ICON:name}} becomes the extension's own SVG icon (src/ui/dom.js), so the
 // page and the extension always show the same icons.
-const require = createRequire(import.meta.url);
 require(join(root, 'src', 'ui', 'dom.js'));
 const ICONS = globalThis.GBot.ui.ICONS;
 const escapeAttr = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
@@ -63,6 +66,11 @@ function svgIcon(name) {
 }
 
 let html = readFileSync(join(root, 'site', 'index.html'), 'utf8');
+// <!-- if NAME -->shown when NAME is set<!-- else -->otherwise<!-- end -->
+html = html.replace(/<!-- if (\w+) -->([\s\S]*?)(?:<!-- else -->([\s\S]*?))?<!-- end -->/g, (match, key, yes, no = '') => {
+  if (!(key in values)) throw new Error(`site/index.html: unknown condition ${key}`);
+  return values[key] ? yes : no;
+});
 html = html.replace(/\{\{(\w+)(?::(\w+))?\}\}/g, (match, key, arg) => {
   if (key === 'ICON') return svgIcon(arg);
   if (!(key in values)) throw new Error(`site/index.html: unknown placeholder ${match}`);
