@@ -801,6 +801,16 @@
     });
   }
 
+  const FIRST_BAG = 512;
+
+  // Inventory bags (512-519, tabs I-VIII) the bot may eat from; none ticked
+  // means all of them.
+  function foodBags(settings) {
+    const all = [1, 2, 3, 4, 5, 6, 7, 8];
+    const chosen = all.filter((n) => settings.heal.bags[`b${n}`]);
+    return (chosen.length ? chosen : all).map((n) => FIRST_BAG + n - 1);
+  }
+
   // Choose the food whose heal amount best fills the missing HP: the largest
   // item that does not overheal, otherwise the smallest one.
   function pickFood(foods, missingHp) {
@@ -893,6 +903,7 @@
     filterOpponents,
     parseNameList,
     pickFood,
+    foodBags,
     hpRegenEta,
   };
 

@@ -233,6 +233,21 @@
           unit: '%',
           help: 'Expeditions, dungeons and the arena wait for HP to regenerate below this value. The circus does not use your HP.',
         },
+        {
+          path: 'heal.bags',
+          type: 'checks',
+          label: 'Eat food from bags',
+          dependsOn: 'heal.enabled',
+          help: 'Inventory tabs I-VIII. Keep usables you want to save in the others. When these bags hold no food, food is taken from the packages into one of them. None ticked = all bags.',
+          items: ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'].map((label, i) => ({ path: `heal.bags.b${i + 1}`, label })),
+        },
+        {
+          path: 'heal.plainOnly',
+          type: 'toggle',
+          label: 'Only plain food',
+          dependsOn: 'heal.enabled',
+          help: 'Skip food that does something besides healing: eggs that give rubies, points or cooldown skips, Cervisia that activates Centurio, and the like. The auction house does not bid on those either.',
+        },
       ],
     },
     {

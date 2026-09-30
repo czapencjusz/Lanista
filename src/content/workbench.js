@@ -133,8 +133,9 @@
     return JSON.parse(literal).map((bag) => new DOMParser().parseFromString(bag.join(''), 'text/html'));
   }
 
-  // Every item element in the bags.
-  const readBagItems = (html) => bagDocs(html).flatMap((doc) => Array.from(doc.querySelectorAll('[data-content-type]')));
+  // Every item element in the bags, or only in `bags` (numbers).
+  const readBagItems = (html, bags = null) =>
+    bagDocs(html).flatMap((doc, i) => (!bags || bags.includes(FIRST_BAG + i) ? Array.from(doc.querySelectorAll('[data-content-type]')) : []));
 
   function readBags(html) {
     return bagDocs(html).map((doc, i) => {
@@ -166,10 +167,11 @@
 
   // ---------------------------------------------------------------- steps
 
-  async function freeBagSpot(sh, w, h) {
+  // A free spot for a w x h item, in any bag or only in `bags` (numbers).
+  async function freeBagSpot(sh, w, h, bags = null) {
     const { html } = await getDoc(sh, { mod: 'overview' });
-    const spot = brain.freeSpot(readBags(html), w, h);
-    if (!spot) throw new ActionError(`No room in the bags for a ${w}x${h} item`);
+    const spot = brain.freeSpot(readBags(html).filter((b) => !bags || bags.includes(b.bag)), w, h);
+    if (!spot) throw new ActionError(`No room in the ${bags ? 'food ' : ''}bags for a ${w}x${h} item`);
     return spot;
   }
 

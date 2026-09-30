@@ -103,6 +103,12 @@
       eatBelowPercent: 30,
       // Expeditions, dungeons and the arena are skipped below this HP.
       minHpPercent: 20,
+      // Inventory bags (tabs I-VIII) the bot eats from; food taken out of
+      // the packages goes into one of them. None ticked = all bags.
+      bags: { b1: true, b2: true, b3: true, b4: true, b5: true, b6: true, b7: true, b8: true },
+      // Only food that just heals: not eggs, Cervisia and the like that also
+      // give rubies, points, cooldown skips or Centurio.
+      plainOnly: true,
     },
 
     work: {

@@ -18,6 +18,7 @@
   const RETRY_MS = 10 * 60 * 1000;
 
   const healOf = (el) => GBot.actions._internal.foodHealAmount(el);
+  const edible = (el, settings) => GBot.actions._internal.edible(el, settings);
 
   // Auction round state from its localised label ("Remaining time of
   // auction: Long"): 1 = very short ... 5 = very long, null when unknown.
@@ -39,6 +40,7 @@
           name: lines[0] || '',
           type: item ? Number(item.dataset.contentType) : null,
           heal: item && Number(item.dataset.contentType) === FOOD_TYPE ? healOf(item) : 0,
+          plain: item ? GBot.actions._internal.isPlainFood(item) : false,
           minBid: bid ? parseNumber(bid.value) : null,
           form,
         };
@@ -58,15 +60,14 @@
     return body.toString();
   }
 
-  // Healing items the character owns: food in the bags and in the packages.
-  async function countFood(sh) {
+  // Food the bot may eat: in the food bags (Settings > Health) and in the
+  // packages. Eggs and other usables the user keeps do not count.
+  async function countFood(sh, settings) {
     const { html } = await GBot.forge.getDoc(sh, { mod: 'overview' });
-    const bags = GBot.forge.readBagItems(html).filter((el) => Number(el.dataset.contentType) === FOOD_TYPE && healOf(el) > 0);
+    const inBags = GBot.forge.readBagItems(html, brain.foodBags(settings)).filter((el) => edible(el, settings));
     const { doc } = await GBot.forge.getDoc(sh, { mod: 'packages', f: USABLES, fq: -1, qry: '' });
-    const packaged = Array.from(doc.querySelectorAll('.packageItem [data-content-type]')).filter(
-      (el) => Number(el.dataset.contentType) === FOOD_TYPE && healOf(el) > 0
-    );
-    return bags.length + packaged.length;
+    const packaged = Array.from(doc.querySelectorAll('.packageItem [data-content-type]')).filter((el) => edible(el, settings));
+    return inBags.length + packaged.length;
   }
 
   async function auction(ctx) {
@@ -94,14 +95,16 @@
         note(`time:${rank}`, `Auction: the round time is "${label || '?'}", waiting to bid until it is later`);
         return { retick: true };
       }
-      const owned = await countFood(sh);
+      const owned = await countFood(sh, ctx.settings);
       if (owned >= cfg.maxFood) {
         note('food', `Auction: you own ${owned} healing items (limit ${cfg.maxFood}), not bidding`);
         return { retick: true };
       }
 
       let gold = ctx.state.gold;
-      const plan = brain.planAuctionBids(lots, cfg, { gold, spent: round.spent, bids: round.bids, owned });
+      // Food the bot would not eat (eggs and the like) is not bid on either.
+      const wanted = ctx.settings.heal.plainOnly ? lots.filter((l) => l.plain) : lots;
+      const plan = brain.planAuctionBids(wanted, cfg, { gold, spent: round.spent, bids: round.bids, owned });
       if (!plan.length) {
         note('none', `Auction: no new lot heals at least ${cfg.minHpPerGold} HP per gold within your gold limits`);
         return { retick: true };
@@ -134,19 +137,20 @@
     return { retick: true };
   }
 
-  // When the bags hold no food: move the best-fitting healing item from the
-  // packages into a free bag spot. Returns its name, or null if none.
+  // When the food bags hold no food: move the best-fitting food the bot may
+  // eat from the packages into a free spot in a food bag. Returns its name,
+  // or null if none.
   async function takeFoodFromPackages(ctx, missingHp) {
     const sh = ctx.state.sh;
     const { doc } = await GBot.forge.getDoc(sh, { mod: 'packages', f: USABLES, fq: -1, qry: '' });
     const foods = Array.from(doc.querySelectorAll('.packageItem [data-content-type]'))
-      .filter((el) => Number(el.dataset.contentType) === FOOD_TYPE)
-      .map((el) => ({ el, heal: healOf(el) }))
-      .filter((f) => f.heal > 0);
+      .filter((el) => edible(el, ctx.settings))
+      .map((el) => ({ el, heal: healOf(el) }));
     const food = brain.pickFood(foods, missingHp);
     if (!food) return null;
     const el = food.el;
-    const spot = await GBot.forge.freeBagSpot(sh, Number(el.dataset.measurementX) || 1, Number(el.dataset.measurementY) || 1);
+    const size = [Number(el.dataset.measurementX) || 1, Number(el.dataset.measurementY) || 1];
+    const spot = await GBot.forge.freeBagSpot(sh, ...size, brain.foodBags(ctx.settings));
     const from = parseNumber(el.parentElement.getAttribute('data-container-number'));
     await GBot.forge.moveItem(sh, { from, fromX: 1, fromY: 1, to: spot.bag, toX: spot.x, toY: spot.y, amount: 1 });
     return GBot.forge.tooltipLines(el)[0] || 'food';

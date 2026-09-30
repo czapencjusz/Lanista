@@ -20,7 +20,7 @@ through the game the way a player would.
 | **Points refills** | Optional. Uses Gate Keys and Mobilisations you own (never bought) when dungeon or expedition points run out, up to a number per day. |
 | **Circus Turma Provinciarum** | Same options as the arena. |
 | **Enemy nests** | After some wins the game offers to search the enemy's nest for extra loot. The bot does a quick search, a thorough search, or returns to safety, as you choose. |
-| **Healing** | Eats food below one HP threshold and stops fighting below another. It searches every bag and picks the food that best fills the missing HP; when the bags are empty it takes food from the packages. |
+| **Healing** | Eats food below one HP threshold and stops fighting below another. It picks the food that best fills the missing HP from the bags you choose for food, so usables you keep in other bags are safe; when those bags are empty it takes food from the packages into one of them. By default only plain food is eaten: eggs that give rubies, points or cooldown skips, Cervisia that activates Centurio and the like are left alone. |
 | **Training** | Optional. Spends gold above a reserve you set on stat points, always on the cheapest of the stats you pick, which keeps them balanced. Gold you spend cannot be stolen in the arena. |
 | **Repair** | Optional. When an item you wear drops below a conditioning threshold, the bot takes it off, repairs it at the workbench with materials from the Horreum, and puts it back on (see below). |
 | **Stable work** | Optional. Once you are out of expedition and dungeon points, it starts the job and number of hours you chose. |
@@ -165,7 +165,7 @@ what is enabled. Changes save as you make them and take effect immediately.
 | Dungeon | Location, Normal/Advanced, points to keep in reserve, never fight the boss, start a new dungeon after lost fights, Gate Keys to use per day |
 | Underworld | Fighting on/off, minimum HP to fight, enter automatically (off, Normal, Middle, Hard), Mobilisations and 100% Healing Potions to use per visit |
 | Arena / Circus Turma | Lowest / highest / random opponent, level range around yours, never-attack list, how long to skip opponents who beat you, prefer opponents you have beaten |
-| Health | Eat food on/off, eat below X% HP, stop fighting below Y% HP |
+| Health | Eat food on/off, eat below X% HP, stop fighting below Y% HP, bags to eat from (I-VIII), only plain food |
 | Stable work | Job number, hours |
 | Training | Gold to always keep, stats to train |
 | Repair | Repair below X% conditioning, cutoff for the *Repair all* button, best material quality to use, whose gear to look after (character, tab X, mercenaries I-IV) |

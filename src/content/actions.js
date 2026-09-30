@@ -401,22 +401,51 @@
 
   // ------------------------------------------------------------------- heal
 
-  // Heal amount from the item tooltip. The tooltip is a JSON array of lines;
-  // the heal value sits on the line before the first "+N" bonus line.
-  function foodHealAmount(el) {
+  const tooltipOf = (el) => {
     try {
-      const lines = JSON.parse(el.getAttribute('data-tooltip'))[0].map((l) => String(Array.isArray(l) ? l[0] : l));
-      for (let i = 1; i + 1 < lines.length; i++) {
-        if (/\+\d+/.test(lines[i + 1])) {
-          const m = lines[i].match(/(\d[\d.]*)/);
-          if (m) return parseNumber(m[1]);
-        }
-      }
+      return JSON.parse(el.getAttribute('data-tooltip'))[0].map((l) => String(Array.isArray(l) ? l[0] : l));
     } catch (e) {
-      // Unknown tooltip format; treat the heal amount as unknown.
+      return []; // Unknown tooltip format.
     }
-    return 0;
+  };
+
+  // Index of the heal line in an item tooltip ("Using: Heals 3960 of
+  // life"): a line with a number but no "+N" of its own, followed by the
+  // "+N" bonus line ("From intelligence: +2325 vitality point(s)"). Stat
+  // lines of scrolls ("Damage +5") and buffs ("Using: +1624 Health") are
+  // not heal lines. -1 if none.
+  function healLine(lines) {
+    for (let i = 1; i + 1 < lines.length; i++) {
+      if (/\+\d+/.test(lines[i + 1]) && /\d/.test(lines[i]) && !/\+\d/.test(lines[i])) return i;
+    }
+    return -1;
   }
+
+  // Heal amount from the item tooltip, 0 when it does not heal.
+  function foodHealAmount(el) {
+    const lines = tooltipOf(el);
+    const i = healLine(lines);
+    const m = i >= 0 ? lines[i].match(/(\d[\d.]*)/) : null;
+    return m ? parseNumber(m[1]) : 0;
+  }
+
+  // Food that only heals. Eggs, Cervisia and the like have a second line
+  // with the heal line's label ("Using: You will receive 1 Ruby", "Using:
+  // Centurio will be activated"...): those are kept.
+  function isPlainFood(el) {
+    const lines = tooltipOf(el);
+    const i = healLine(lines);
+    if (i < 0) return false;
+    const colon = lines[i].indexOf(':');
+    if (colon <= 0) return true;
+    const label = lines[i].slice(0, colon + 1);
+    return lines.filter((l) => l.startsWith(label)).length === 1;
+  }
+
+  // Food the bot may eat: it heals, and (with heal.plainOnly) does nothing
+  // else.
+  const edible = (el, settings) =>
+    Number(el.dataset.contentType) === 64 && foodHealAmount(el) > 0 && (!settings.heal.plainOnly || isPlainFood(el));
 
   function center(el) {
     const r = el.getBoundingClientRect();
@@ -490,7 +519,7 @@
   };
 
   async function heal(ctx) {
-    const { state } = ctx;
+    const { state, settings } = ctx;
     if (state.page.mod !== 'overview' || (state.page.doll && state.page.doll !== '1')) {
       return ctx.navigate(ctx.url(PAGES.overview()), 'character overview');
     }
@@ -498,12 +527,16 @@
     const avatar = $(SEL.inventory.avatar);
     if (!avatar) throw new ActionError('Character avatar (food drop target) not found');
 
+    // Only the food bags chosen under Settings > Health are looked at, and
+    // only food the bot may eat.
+    const bags = brain.foodBags(settings);
+    const isFoodBag = (tab) => bags.includes(parseNumber(tab.getAttribute('data-bag-number')));
     const tried = new Set();
     for (;;) {
       const current = $(SEL.inventory.currentBagTab);
       if (current) tried.add(current.getAttribute('data-bag-number'));
 
-      const foods = $$(SEL.inventory.food).map((el) => ({ el, heal: foodHealAmount(el) }));
+      const foods = !current || isFoodBag(current) ? $$(SEL.inventory.food).filter((el) => edible(el, settings)).map((el) => ({ el, heal: foodHealAmount(el) })) : [];
       if (foods.length) {
         const hp = GBot.state.readHp(document);
         const missing = hp.max && hp.value !== null ? hp.max - hp.value : null;
@@ -523,7 +556,7 @@
         return { refresh: true };
       }
 
-      const next = $$(SEL.inventory.bagTabs).find((tab) => !tried.has(tab.getAttribute('data-bag-number')));
+      const next = $$(SEL.inventory.bagTabs).find((tab) => isFoodBag(tab) && !tried.has(tab.getAttribute('data-bag-number')));
       if (!next) break;
       tried.add(next.getAttribute('data-bag-number'));
       await click(ctx, next, `open inventory bag ${next.textContent.trim()}`);
@@ -546,7 +579,7 @@
     }
 
     brain.markNoFood(ctx.memory, ctx.now());
-    ctx.log('warn', 'No food in the bags or packages; waiting for HP to regenerate (retrying food in 30 min)');
+    ctx.log('warn', 'No food in the food bags or the packages; waiting for HP to regenerate (retrying food in 30 min)');
     if (ctx.notify) ctx.notify('noFood', `GBot: HP is ${state.hp.percent}% and there is no food left in your bags.`);
     return { retick: true };
   }
@@ -736,6 +769,6 @@
     work,
     quests,
     // Exposed for tests.
-    _internal: { foodHealAmount, dragAndDrop, readOpponents },
+    _internal: { foodHealAmount, isPlainFood, edible, dragAndDrop, readOpponents },
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
