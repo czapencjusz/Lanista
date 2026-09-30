@@ -107,6 +107,10 @@ class MockGame {
 
   overviewPage() {
     const bag = 512;
+    // Like the real page: all eight bags as an escaped JSON literal handed
+    // to the game's BagLoader (a stub here).
+    const bags = Array.from({ length: 8 }, (_, i) => [this.bagItems(512 + i)]);
+    const literal = JSON.stringify(bags).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     return this.render(
       'overviewPage',
       `<div id="char" style="display:flex;gap:20px">
@@ -120,6 +124,8 @@ class MockGame {
          </div>
        </div>`,
       `
+      function BagLoader() {}
+      new BagLoader(jQuery('#inv'), jQuery('#inventory_nav'), JSON.parse('${literal}'));
       var currentBag = ${bag};
       function initItems() {
         $('#inv [data-content-type]').draggable({ revert: 'invalid', zIndex: 1000 });

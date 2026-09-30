@@ -302,6 +302,18 @@
     }
   }
 
+  // Food the bot may eat in a food bag, as the bags came with this page
+  // (every page that shows the inventory embeds all eight).
+  function foodInBags() {
+    const script = Array.from(document.scripts).find((s) => s.textContent.includes('new BagLoader'));
+    if (!script || !settings) return false;
+    try {
+      return GBot.forge.readBagItems(script.textContent, brain.foodBags(settings)).some((el) => GBot.actions._internal.edible(el, settings));
+    } catch (e) {
+      return false;
+    }
+  }
+
   const statusFor = (state) => (state && settings && memory ? brain.activityStatus(state, settings, memory, Date.now()) : {});
 
   // Fills in the control bar as soon as the page is parsed, from storage and
@@ -341,6 +353,12 @@
         log('info', `Back from the Underworld${used.length ? ` (used ${used.join(' and ')})` : ''}`);
       }
       for (const event of brain.resolvePending(state, memory, now)) log(event.level, event.message);
+      // Out of food, and food has turned up in the bags since (put there by
+      // hand, or bought): no need to wait out the 30 minutes.
+      if ((memory.noFoodUntil || 0) > now && state.inGame && foodInBags()) {
+        memory.noFoodUntil = 0;
+        log('info', 'Found food in the food bags again');
+      }
       if (settings.enabled) brain.updateBreaks(settings.schedule, memory, now);
 
       let decision = brain.decide(state, settings, memory, now);
@@ -453,6 +471,17 @@
     loadServerSettings: S.loadSettings,
     onRunNow: () => {
       cancel();
+      // "Check now" also ends a wait for food: the user may just have put
+      // some in a bag.
+      if (memory && (memory.noFoodUntil || 0) > Date.now()) {
+        editMemory((m) => {
+          m.noFoodUntil = 0;
+        }).then(() => {
+          log('info', 'Checking the bags for food again');
+          tick();
+        });
+        return;
+      }
       tick();
     },
     onResetStats: () =>

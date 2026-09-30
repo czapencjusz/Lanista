@@ -579,8 +579,8 @@
     }
 
     brain.markNoFood(ctx.memory, ctx.now());
-    ctx.log('warn', 'No food in the food bags or the packages; waiting for HP to regenerate (retrying food in 30 min)');
-    if (ctx.notify) ctx.notify('noFood', `Lanista: HP is ${state.hp.percent}% and there is no food left in your bags.`);
+    ctx.log('warn', 'No food in the food bags or the packages; waiting for HP to regenerate (looking again in 30 min, or as soon as food shows up in a food bag or you press Check now)');
+    if (ctx.notify) ctx.notify('noFood', `Lanista: HP is ${state.hp.percent}% and there is no food left in your food bags. Put some in and press Check now.`);
     return { retick: true };
   }
 

@@ -78,7 +78,7 @@ async function scenario(gameState, settings) {
   await configure({ ...settings, enabled: true });
 }
 
-test.describe('GBot extension against a mock Gladiatus server', { skip: !executablePath && 'no Chromium binary found' }, () => {
+test.describe('Lanista against a mock Gladiatus server', { skip: !executablePath && 'no Chromium binary found' }, () => {
   test.before(async () => {
     const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'lanista-e2e-'));
     context = await chromium.launchPersistentContext(profile, {
@@ -147,6 +147,25 @@ test.describe('GBot extension against a mock Gladiatus server', { skip: !executa
     assert.equal(heal.source, 'drag', 'healed through jQuery UI drag & drop, not the fallback request');
     assert.equal(heal.heal, 300);
     assert.equal(game.state.hp, 400);
+  });
+
+  test('out of food: food put in a bag later ends the 30-minute wait', { timeout: 90000 }, async () => {
+    await scenario(
+      { hp: 100, expPoints: 5, dunPoints: 0, bags: { 512: [], 513: [] } },
+      { expedition: { enabled: true }, heal: { enabled: true, eatBelowPercent: 50, minHpPercent: 25 } }
+    );
+    await waitUntil(async () => {
+      const m = await storageGet(`memory:${HOST}`);
+      return m && m.noFoodUntil > Date.now();
+    }, 45000, 'the no-food wait');
+    assert.equal(game.events('heal').length, 0);
+
+    // The player drops some food into bag II; the next page shows it.
+    game.state.bags[513] = [{ x: 1, y: 1, heal: 300 }];
+    await page.goto(`${GAME}index.php?mod=overview&sh=${SH}`);
+    await waitUntil(() => game.events('heal').length, 30000, 'eating the new food');
+    const memory = await storageGet(`memory:${HOST}`);
+    assert.ok(memory.log.some((l) => /Found food in the food bags again/.test(l.message)));
   });
 
   test('attacks the lowest arena opponent and the highest circus opponent', { timeout: 90000 }, async () => {
