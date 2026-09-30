@@ -223,7 +223,17 @@
       circus: readCooldown(doc, loc, SEL.cooldowns.circus),
       dialogs: readDialogs(doc),
       locations: readLocations(doc, loc),
+      travel: readTravel(doc),
+      underworld: !!doc.querySelector(SEL.underworld.marker),
     };
+  }
+
+  // On the way to the Underworld: { remainingMs }, or null.
+  function readTravel(doc) {
+    const ticker = doc.querySelector(SEL.travel);
+    if (!ticker) return null;
+    const ms = parseNumber(ticker.getAttribute('data-ticker-time-left'));
+    return { remainingMs: ms !== null ? ms : parseDuration(ticker.textContent) };
   }
 
   GBot.state = { readState, readHp, readCooldown, readPoints, readSessionHash, readLocations, readCombatReport, readDungeonName, readExpeditionEnemies };

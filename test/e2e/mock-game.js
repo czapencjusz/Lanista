@@ -24,6 +24,7 @@ function defaultState() {
     cooldownUntil: { expedition: 0, dungeon: 0, arena: 0, circus: 0 },
     cooldownMs: { expedition: 60000, dungeon: 60000, arena: 60000, circus: 60000 },
     dungeonEnemies: null, // null = no dungeon running
+    dungeonBoss: null, // enemy id shown with the "Boss" map label
     arenaLevels: [40, 22, 31, 35, 28],
     circusLevels: [19, 27, 45, 33, 30],
     // bag number -> [{ x, y, heal }]
@@ -177,7 +178,7 @@ class MockGame {
   }
 
   dungeonPage() {
-    const content = this.state.dungeonEnemies ? html.dungeonMapContent(this.state.dungeonEnemies) : html.dungeonStartContent(SH);
+    const content = this.state.dungeonEnemies ? html.dungeonMapContent(this.state.dungeonEnemies, this.state.dungeonBoss, SH) : html.dungeonStartContent(SH);
     return this.render(
       'dungeonPage',
       content,
@@ -296,7 +297,10 @@ class MockGame {
       s.loginBonus = false;
       this.record('loginBonus');
     }
-    if (q.mod === 'dungeon' && request.method() === 'POST') {
+    if (q.mod === 'dungeon' && request.method() === 'POST' && q.action === 'cancelDungeon') {
+      s.dungeonEnemies = null;
+      this.record('dungeonCancel');
+    } else if (q.mod === 'dungeon' && request.method() === 'POST') {
       const body = request.postData() || '';
       s.dungeonEnemies = ['11', '12', '13'];
       this.record('dungeonStart', { difficulty: body.includes('dif2') ? 'advanced' : 'normal' });

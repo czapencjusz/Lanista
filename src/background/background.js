@@ -6,18 +6,25 @@
 //  - shows desktop notifications for problems that need the user
 'use strict';
 
+// Firefox loads settings.js from the manifest's background scripts.
+if (typeof importScripts === 'function' && !(globalThis.GBot && globalThis.GBot.settings)) importScripts('../shared/settings.js');
+
 const ext = globalThis.browser || globalThis.chrome;
+const S = globalThis.GBot.settings;
 
 const WATCHDOG_ALARM = 'gbot-watchdog';
 const STALE_MS = 4 * 60 * 1000;
 
-async function isEnabled() {
-  const { settings } = await ext.storage.local.get('settings');
-  return !!(settings && settings.enabled);
+// True while the bot is switched on for any server.
+async function anyEnabled() {
+  const all = await ext.storage.local.get(null);
+  return S.serversIn(all).some((host) => S.pickSettings(all, host).enabled);
 }
 
+const hostEnabled = async (host) => (await S.loadSettings(host)).enabled;
+
 async function updateBadge() {
-  const enabled = await isEnabled();
+  const enabled = await anyEnabled();
   await ext.action.setBadgeText({ text: enabled ? 'ON' : '' });
   await ext.action.setBadgeBackgroundColor({ color: enabled ? '#2e7d32' : '#777777' });
 }
@@ -88,21 +95,25 @@ async function notify(message) {
   }
 }
 
-// Notification requested by a content script; respects the user's choice.
-async function alert(kind, message) {
-  const { settings } = await ext.storage.local.get('settings');
-  const prefs = (settings && settings.notifications) || {};
-  if (kind && prefs[kind] === false) return;
+// Notification requested by a content script; respects the user's choice
+// for that server.
+async function alert(kind, message, host) {
+  const settings = await S.loadSettings(host);
+  if (kind && settings.notifications[kind] === false) return;
   await notify(message);
 }
 
 async function watchdog() {
-  if (!(await isEnabled())) return;
   const owners = await getOwners();
   const now = Date.now();
   let changed = false;
   for (const [host, owner] of Object.entries(owners)) {
     if (ownerAlive(owner, now)) continue;
+    if (!(await hostEnabled(host))) {
+      delete owners[host];
+      changed = true;
+      continue;
+    }
     if (!(await tabExists(owner.tabId))) {
       delete owners[host];
       changed = true;
@@ -112,7 +123,7 @@ async function watchdog() {
       // Reloading would not help (logged out, or the user browsed away).
       delete owners[host];
       changed = true;
-      await alert('loggedOut', `The ${host} tab left the game (logged out?). GBot is waiting until you log back in.`);
+      await alert('loggedOut', `The ${host} tab left the game (logged out?). GBot is waiting until you log back in.`, host);
       continue;
     }
     console.warn(`[GBot] tab ${owner.tabId} (${host}) stopped reporting, reloading it`);
@@ -133,7 +144,7 @@ ext.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'claim' && tabId !== undefined) work = claim(message.host, tabId);
   else if (message.type === 'heartbeat' && tabId !== undefined) {
     work = heartbeat(message.host, tabId, message.nextAt, message.enabled).then(() => ({ ok: true }));
-  } else if (message.type === 'alert') work = alert(message.kind, message.message).then(() => ({ ok: true }));
+  } else if (message.type === 'alert') work = alert(message.kind, message.message, message.host).then(() => ({ ok: true }));
   else return false;
   work.then(sendResponse, (e) => sendResponse({ ok: true, error: String(e) }));
   return true; // async response
@@ -152,17 +163,21 @@ ext.tabs.onRemoved.addListener(async (tabId) => {
 });
 
 ext.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes.settings) updateBadge();
+  if (area === 'local' && Object.keys(changes).some((k) => k === S.STORAGE_KEY || k.startsWith(S.SERVER_PREFIX))) updateBadge();
 });
 
 ext.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === WATCHDOG_ALARM) watchdog();
 });
 
+let splitting = null;
+
 async function init() {
   // Only create the alarm once: re-creating it on every wake-up would restart
   // its period and it might never fire.
   if (!(await ext.alarms.get(WATCHDOG_ALARM))) ext.alarms.create(WATCHDOG_ALARM, { periodInMinutes: 1 });
+  splitting = splitting || S.splitSettings().catch((e) => console.warn('[GBot] could not split the settings per server', e));
+  await splitting;
   await updateBadge();
 }
 

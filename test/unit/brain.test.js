@@ -354,6 +354,23 @@ test('combat reports are counted and losing opponents avoided', () => {
   assert.deepEqual(brain.filterOpponents(opponents, makeSettings().arena, 64, ['kaczuszek']).map((o) => o.name), ['Orbyte']);
 });
 
+test('opponents beaten before can go first, most wins first, for two weeks', () => {
+  const m = memory();
+  const win = (name, at) => {
+    m.pending = { type: 'circus', at, attempts: 1, opponent: name, avoidHours: 24 };
+    brain.resolvePending(makeState({ report: { win: true, gold: 0, xp: 1, renown: 10 } }), m, at + 1000);
+  };
+  win('Orbyte', NOW);
+  win('Borbo', NOW);
+  win('Borbo', NOW + 5000);
+  assert.deepEqual(m.beaten.circus.borbo, { wins: 2, at: NOW + 6000 });
+
+  const list = [{ name: 'Alba', level: 10 }, { name: 'Orbyte', level: 20 }, { name: 'Borbo', level: 30 }];
+  assert.deepEqual(brain.preferBeaten(list, m.beaten.circus, NOW + 10000).map((o) => o.name), ['Borbo', 'Orbyte', 'Alba']);
+  assert.deepEqual(brain.preferBeaten(list, m.beaten.circus, NOW + 15 * 24 * 3600 * 1000).map((o) => o.name), ['Alba', 'Orbyte', 'Borbo'], 'forgotten after two weeks');
+  assert.deepEqual(m.beaten.circus, {});
+});
+
 test('enemy nest dialog is handled per the setting', () => {
   const st = makeState({ dialogs: { loginBonus: false, notification: false, nest: true } });
   const s = makeSettings();

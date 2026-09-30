@@ -37,6 +37,28 @@
       // "Repair all" run started from the overview button:
       // { done: [doll slots], skipped: [names], repaired, failures }.
       repairAll: null,
+      // Items ticked for smelting on the packages page ({ cn, name, basis,
+      // w, h }), when to look at the smelter next (0 = nothing to do), and
+      // failures of the item at the head of the queue.
+      smeltQueue: [],
+      smeltNext: 0,
+      smeltFailures: 0,
+      smeltFailingCn: null,
+      // When to go through the packages again (gold, rules, expiry).
+      nextPackagesCheck: 0,
+      // Dungeon fights lost in a row (for dungeon.restartAfterLosses).
+      dungeonLosses: 0,
+      // When to look at the Hermit again for entering the Underworld.
+      nextUnderworldCheck: 0,
+      // Premium items used during the current Underworld visit:
+      // { since, mobilisations, potions }; null outside.
+      underworldRun: null,
+      // ... and outside it, per local day: { day, mobilisations, gateKeys }.
+      itemsToday: null,
+      // Auction house: when to look again, and this round's bids
+      // ({ rank, spent, bids: { lotId: amount } }).
+      nextAuctionCheck: 0,
+      auctionRound: null,
       questSteps: { since: 0, count: 0 },
       breakUntil: 0,
       nextBreakAt: 0,
@@ -54,6 +76,11 @@
         nest: 0,
         training: 0,
         repairs: 0,
+        smelted: 0,
+        sold: 0,
+        soldGold: 0,
+        goldCollected: 0,
+        auctionBids: 0,
         goldSpent: 0,
         goldStart: null,
         goldNow: null,
@@ -63,6 +90,8 @@
       },
       // Arena / circus opponents that beat us: type -> { name: until }.
       avoid: { arena: {}, circus: {} },
+      // ... and that we beat: type -> { name: { wins, at } }.
+      beaten: { arena: {}, circus: {} },
       log: [],
     };
   }
@@ -84,7 +113,9 @@
         loot: { ...base.stats.loot, ...((memory.stats && memory.stats.loot) || {}) },
       },
       avoid: { arena: { ...((memory.avoid && memory.avoid.arena) || {}) }, circus: { ...((memory.avoid && memory.avoid.circus) || {}) } },
+      beaten: { arena: { ...((memory.beaten && memory.beaten.arena) || {}) }, circus: { ...((memory.beaten && memory.beaten.circus) || {}) } },
       repairSkip: { ...(memory.repairSkip || {}) },
+      smeltQueue: Array.isArray(memory.smeltQueue) ? memory.smeltQueue : [],
       log: Array.isArray(memory.log) ? memory.log : [],
     };
   }
@@ -152,7 +183,83 @@
     }
   }
 
-  const outOfPoints = (cd, cfg) => cd.points !== null && cd.points !== undefined && cd.points <= cfg.keepPoints;
+  // strict: unknown points count as none (in the Underworld an attack without
+  // points costs rubies).
+  const outOfPoints = (cd, cfg, strict) => (cd.points === null || cd.points === undefined ? !!strict : cd.points <= cfg.keepPoints);
+
+  const UNDERWORLD_COST = 8000;
+  const UNDERWORLD_LEVEL = 100;
+
+  // The settings as they apply inside the Underworld: expeditions follow
+  // Settings > Underworld, there are no dungeons, food cannot be eaten, and
+  // fights wait for more HP (at 0 HP the game only offers to leave, and
+  // re-entry takes days).
+  function underworldSettings(settings) {
+    const u = settings.underworld;
+    return {
+      ...settings,
+      expedition: { ...settings.expedition, enabled: u.enabled, keepPoints: 0, bonusesFirst: false },
+      dungeon: { ...settings.dungeon, enabled: false },
+      heal: { ...settings.heal, enabled: false, minHpPercent: Math.max(settings.heal.minHpPercent, u.minHpPercent) },
+    };
+  }
+
+  // Keeps memory.underworldRun: started on the first page inside the
+  // Underworld, dropped once the character is back (and not travelling).
+  function trackUnderworld(state, memory, now) {
+    if (!state.inGame || state.travel) return;
+    if (state.underworld && !memory.underworldRun) memory.underworldRun = { since: now, mobilisations: 0, potions: 0 };
+    if (!state.underworld) memory.underworldRun = null;
+  }
+
+  // Owned premium items: the count kept for each, and its limit.
+  const ITEM_KEYS = { mobilisation: 'mobilisations', healingPotion: 'potions', gateKey: 'gateKeys' };
+  const dayOf = (now) => new Date(now).toDateString();
+
+  // Items used so far: per visit inside the Underworld, per local day
+  // outside it.
+  function itemsUsed(state, memory, now) {
+    if (state.underworld) return memory.underworldRun || { since: now, mobilisations: 0, potions: 0 };
+    const today = memory.itemsToday;
+    return today && today.day === dayOf(now) ? today : { day: dayOf(now), mobilisations: 0, gateKeys: 0 };
+  }
+
+  function itemLimit(item, settings, underworld) {
+    if (underworld) return settings.underworld[ITEM_KEYS[item]] || 0;
+    if (item === 'mobilisation') return settings.expedition.mobilisationsPerDay;
+    if (item === 'gateKey') return settings.dungeon.gateKeysPerDay;
+    return 0;
+  }
+
+  // Owned premium items to use, within their limits. In the Underworld: a
+  // 100% Healing Potion when HP is very low, a Mobilisation when the points
+  // are gone (the next attack would cost rubies otherwise). Outside: a Gate
+  // Key or a Mobilisation once dungeon or expedition points run out.
+  function premiumDecision(state, settings, memory, now) {
+    const used = itemsUsed(state, memory, now);
+    const left = (item) => (used[ITEM_KEYS[item]] || 0) < itemLimit(item, settings, state.underworld);
+    if (state.underworld) {
+      const u = settings.underworld;
+      const hp = state.hp || {};
+      if (left('healingPotion') && hpKnown(hp) && hp.percent < u.potionBelowPercent) {
+        return { type: 'premium', item: 'healingPotion', reason: `HP ${hp.percent}% is below ${u.potionBelowPercent}%: use a 100% Healing Potion` };
+      }
+      if (u.enabled && left('mobilisation') && state.expedition && state.expedition.points === 0) {
+        return { type: 'premium', item: 'mobilisation', reason: 'Out of Underworld points: use a Mobilisation' };
+      }
+      return null;
+    }
+    const empty = (type) => settings[type].enabled && state[type] && state[type].available && outOfPoints(state[type], settings[type]);
+    if (left('gateKey') && empty('dungeon')) return { type: 'premium', item: 'gateKey', reason: 'Out of dungeon points: use a Gate Key' };
+    if (left('mobilisation') && empty('expedition')) return { type: 'premium', item: 'mobilisation', reason: 'Out of expedition points: use a Mobilisation' };
+    return null;
+  }
+
+  function wantsUnderworldEntry(state, settings, memory, now) {
+    if (settings.underworld.enter === 'off' || state.underworld || (memory.nextUnderworldCheck || 0) > now) return false;
+    if (state.level !== null && state.level !== undefined && state.level < UNDERWORLD_LEVEL) return false;
+    return state.gold === null || state.gold === undefined || state.gold >= UNDERWORLD_COST;
+  }
 
   function decide(state, settings, memory, now) {
     if (!settings.enabled) {
@@ -162,6 +269,13 @@
       return repairing || { type: 'idle', reason: 'Paused' };
     }
     if (!state.inGame) return { type: 'idle', reason: 'Not on an in-game page' };
+
+    // On the way to the Underworld nothing can be done: wait for the journey.
+    if (state.travel) {
+      const until = now + Math.max(state.travel.remainingMs || 0, MIN_WAIT_MS) + 3000;
+      return { type: 'wait', until, reason: 'Travelling to the Underworld', next: { label: 'Journey ends', at: until } };
+    }
+    if (state.underworld) settings = underworldSettings(settings);
 
     const hours = scheduleWindow(settings.schedule, now);
     if (!hours.active) {
@@ -196,8 +310,29 @@
       }
     }
 
+    const item = !isBlocked(memory, 'premium', now) && premiumDecision(state, settings, memory, now);
+    if (item) return item;
+
     const repairing = repairDecision(settings, memory, now);
     if (repairing) return repairing;
+
+    if (settings.auction.enabled && (memory.nextAuctionCheck || 0) <= now && !isBlocked(memory, 'auction', now)) {
+      return { type: 'auction', reason: 'Check the auction house' };
+    }
+
+    // Smelting only sends requests (no page change) and never touches the
+    // character, so it goes before the fights.
+    if (settings.smelting.enabled && memory.smeltNext && memory.smeltNext <= now && !isBlocked(memory, 'smelt', now)) {
+      return { type: 'smelt', reason: 'Smelting' };
+    }
+
+    if (wantsPackages(settings) && (memory.nextPackagesCheck || 0) <= now && !isBlocked(memory, 'packages', now)) {
+      return { type: 'packages', reason: 'Go through the packages' };
+    }
+
+    if (wantsUnderworldEntry(state, settings, memory, now)) {
+      return { type: 'underworld', reason: `Enter the Underworld (${settings.underworld.enter})` };
+    }
 
     if (wantsTraining(state, settings, memory, now)) {
       return { type: 'training', reason: 'Train a stat with spare gold' };
@@ -222,14 +357,19 @@
         if (eta !== null) wake.push({ label: `HP ${minHp}%`, at: now + eta });
         continue;
       }
-      if (USES_POINTS[type] && outOfPoints(cd, cfg)) continue;
-      if (cd.ready) return { type, reason: `${LABELS[type]} is ready` };
+      if (USES_POINTS[type] && outOfPoints(cd, cfg, state.underworld)) continue;
+      if (cd.ready) return { type, reason: `${state.underworld && type === 'expedition' ? 'Underworld expedition' : LABELS[type]} is ready` };
       if (cd.remainingMs !== null && cd.remainingMs !== undefined) wake.push({ label: LABELS[type], at: now + cd.remainingMs });
     }
 
     if (settings.work.enabled && !isBlocked(memory, 'work', now) && shouldWork(state, settings)) {
       return { type: 'work', reason: 'Out of expedition/dungeon points' };
     }
+
+    if (settings.smelting.enabled && memory.smeltNext > now) wake.push({ label: 'Smelting', at: memory.smeltNext });
+    if (settings.auction.enabled && memory.nextAuctionCheck > now) wake.push({ label: 'Auction house', at: memory.nextAuctionCheck });
+    if (wantsPackages(settings) && memory.nextPackagesCheck > now) wake.push({ label: 'Packages', at: memory.nextPackagesCheck });
+    if (settings.underworld.enter !== 'off' && !state.underworld && memory.nextUnderworldCheck > now) wake.push({ label: 'Underworld', at: memory.nextUnderworldCheck });
 
     const maxIdleMs = settings.timing.maxIdle * 1000;
     let next = { label: 'Re-check', at: now + maxIdleMs };
@@ -283,10 +423,116 @@
     return pending >= 0 ? pending : chosen;
   }
 
+  // Which dungeon enemy to fight. targets = [{ position, boss }] in page
+  // order. Returns { position }, or { cancel: reason } to cancel the dungeon
+  // and start a new one, or null when there is nothing to fight.
+  function dungeonChoice(targets, cfg, memory) {
+    if (!targets.length) return null;
+    const losses = memory.dungeonLosses || 0;
+    if (cfg.restartAfterLosses > 0 && losses >= cfg.restartAfterLosses) return { cancel: `${losses} lost fights in a row` };
+    if (!cfg.skipBoss) return { position: targets[0].position };
+    const others = targets.filter((t) => !t.boss);
+    return others.length ? { position: others[0].position } : { cancel: 'only the boss is left' };
+  }
+
+  // When to look at the smelter again, from its slots (as in slotsData):
+  // now when a smelt is done, or a queued item can go into a free slot;
+  // otherwise when the first running smelt ends; 0 when there is nothing to do.
+  function nextSmeltCheck(slots, queued, now) {
+    const stateOf = (s) => s && s['forge_slots.state'];
+    if (slots.some((s) => stateOf(s) === 'finished-succeeded')) return now;
+    if (queued > 0 && slots.some((s) => stateOf(s) === 'closed')) return now + 60 * 1000;
+    const ends = slots.filter((s) => stateOf(s) === 'crafting').map((s) => now + Math.max(0, Number(s['forge_slots.finishedIn']) || 0) * 1000);
+    return ends.length ? Math.min(...ends) + 5000 : 0;
+  }
+
+  // ---------------------------------------------------------- packages
+
+  // Gear kinds by item content type (one bit per equipment slot, as the
+  // smelter's accepted types): helmet 1, weapon 2, shield 4, armour 8,
+  // rings 16/32, gloves 256, shoes 512, amulet 1024.
+  const GEAR_KINDS = { weapons: 2, armour: 1 | 4 | 8 | 256 | 512, jewellery: 16 | 32 | 1024 };
+
+  function gearKind(type) {
+    for (const [kind, mask] of Object.entries(GEAR_KINDS)) if (type & mask) return kind;
+    return null;
+  }
+
+  const wantsPackages = (settings) => settings.packages.enabled || (settings.smelting.enabled && settings.smelting.auto);
+
+  // What to do with one package ({ type, quality, expiresInMs, queued }):
+  // 'smelt' | 'sell' | 'bag' | null (leave it). Smelting rules go first, then
+  // selling, then rescuing packages about to expire. Items ticked for
+  // smelting (queued) are the smelter's.
+  function packageAction(item, settings) {
+    if (item.queued) return null;
+    const kind = gearKind(item.type);
+    const s = settings.smelting;
+    if (kind && s.enabled && s.auto && s.autoTypes[kind] && item.quality <= s.autoUpTo) return 'smelt';
+    const p = settings.packages;
+    if (!p.enabled) return null;
+    if (kind && p.sell && p.sellTypes[kind] && item.quality <= p.sellUpTo) return 'sell';
+    const expiring = item.expiresInMs !== null && item.expiresInMs !== undefined && item.expiresInMs <= p.expiringHours * 3600000;
+    if (p.expiring !== 'off' && expiring) return p.expiring;
+    return null;
+  }
+
+  // ----------------------------------------------------------- auction
+
+  // May the bot bid at this point of the auction round? rank: 1 = very
+  // short ... 5 = very long (null = not understood). Late bids are safer:
+  // a losing bid keeps the gold.
+  function auctionTimeOk(rank, bidWhen) {
+    if (bidWhen === 'any') return true;
+    if (rank === null || rank === undefined) return false;
+    return rank <= (bidWhen === 'medium' ? 3 : 2);
+  }
+
+  // How long until the next look at the auction house, by round state.
+  function auctionRecheckMs(rank) {
+    const minutes = { 1: 2, 2: 4, 3: 10, 4: 30, 5: 60 }[rank] || 30;
+    return minutes * 60 * 1000;
+  }
+
+  // Which lots to bid on ([{ id, heal, minBid }]): the best HP per gold
+  // first, only at or above minHpPerGold, one bid per lot per round, within
+  // the gold above the reserve, this round's budget and the food limit.
+  function planAuctionBids(lots, cfg, { gold, spent, bids, owned }) {
+    const ratio = (l) => l.heal / l.minBid;
+    const good = lots
+      .filter((l) => l.heal > 0 && l.minBid > 0 && !(l.id in bids) && ratio(l) >= cfg.minHpPerGold)
+      .sort((a, b) => ratio(b) - ratio(a));
+    const plan = [];
+    let free = gold - cfg.keepGold;
+    let budget = cfg.maxPerRound - spent;
+    let count = owned + Object.keys(bids).length;
+    for (const lot of good) {
+      if (count >= cfg.maxFood) break;
+      if (lot.minBid > free || lot.minBid > budget) continue;
+      plan.push(lot);
+      free -= lot.minBid;
+      budget -= lot.minBid;
+      count += 1;
+    }
+    return plan;
+  }
+
   // Does the "Repair all" button take this item? (at or below the cutoff)
   const inRepairAll = (item, settings) => !!item.condition && item.condition.percent <= settings.repair.allUpToPercent;
 
   // The worn item most in need of repair: [{ id, condition, ... }] -> item.
+  // Overview tabs ("dolls"): 1 your character, 2 tab X, 3-6 mercenaries.
+  const DOLL_LABELS = { 1: 'your character', 2: 'tab X', 3: 'mercenary I', 4: 'mercenary II', 5: 'mercenary III', 6: 'mercenary IV' };
+
+  // Dolls the automatic repair looks after (settings.repair.dolls).
+  const repairDolls = (settings) => [1, 2, 3, 4, 5, 6].filter((d) => settings.repair.dolls[`d${d}`]);
+
+  // An item's place for "Repair all" runs: doll and slot.
+  const repairKey = (item) => `${item.doll || 1}:${item.slot}`;
+
+  // " (mercenary II)" for log lines about other dolls than the character.
+  const dollSuffix = (doll) => (doll && doll !== 1 ? ` (${DOLL_LABELS[doll] || `doll ${doll}`})` : '');
+
   function pickRepair(items, belowPercent, skip, now) {
     const due = items.filter((i) => i.condition && i.condition.percent < belowPercent && !((skip || {})[i.id] > now));
     return due.length ? due.reduce((a, b) => (b.condition.percent < a.condition.percent ? b : a)) : null;
@@ -344,6 +590,7 @@
   // Per-activity summary for the control bar tiles.
   //   { enabled, text, until?, ready?, warn?, points? }
   function activityStatus(state, settings, memory, now) {
+    if (state.underworld) settings = underworldSettings(settings);
     const out = {};
     const hp = state.hp || {};
     const hpLow = hpKnown(hp) && hp.percent < settings.heal.minHpPercent;
@@ -357,7 +604,7 @@
       if (!cfg.enabled) s.text = 'off';
       else if (!cd || !cd.available) s.text = 'n/a';
       else if (isBlocked(memory, type, now)) Object.assign(s, { text: 'paused', until: memory.blockedUntil[type], warn: true });
-      else if (USES_POINTS[type] && outOfPoints(cd, cfg)) s.text = 'no points';
+      else if (USES_POINTS[type] && outOfPoints(cd, cfg, state.underworld)) s.text = 'no points';
       else if (NEEDS_HP[type] && hpLow) Object.assign(s, { text: 'low HP', warn: true });
       else if (cd.ready) Object.assign(s, { text: 'ready', ready: true });
       else if (cd.remainingMs) Object.assign(s, { text: 'cooldown', until: now + cd.remainingMs });
@@ -422,6 +669,11 @@
       if (state.report) {
         success = true;
         message = recordFight(memory, type, state.report, pending.opponent, now);
+        if (state.report.win && pending.opponent && memory.beaten && memory.beaten[type]) {
+          const key = pending.opponent.toLowerCase();
+          const prev = memory.beaten[type][key];
+          memory.beaten[type][key] = { wins: ((prev && prev.wins) || 0) + 1, at: now };
+        }
         if (!state.report.win && pending.opponent && memory.avoid[type] && pending.avoidHours > 0) {
           memory.avoid[type][pending.opponent.toLowerCase()] = now + pending.avoidHours * 3600 * 1000;
           events.push({ level: 'info', message: `${LABELS[type]}: avoiding ${pending.opponent} for ${pending.avoidHours}h after a loss` });
@@ -477,6 +729,7 @@
     const renownKind = type === 'dungeon' || type === 'circus' ? 'fame' : 'honour';
     loot[renownKind] = (loot[renownKind] || 0) + (report.renown || 0);
     memory.lastFight = { type, at: now, ...report };
+    if (type === 'dungeon') memory.dungeonLosses = report.win ? 0 : (memory.dungeonLosses || 0) + 1;
     const gains = [];
     if (report.gold) gains.push(`+${fmt(report.gold)} gold`);
     if (report.xp) gains.push(`+${fmt(report.xp)} XP`);
@@ -517,6 +770,17 @@
       }
     } else list.sort((a, b) => a.level - b.level);
     return list.concat(rest);
+  }
+
+  const BEATEN_KEEP_MS = 14 * 24 * 3600 * 1000;
+
+  // Moves opponents beaten in the last two weeks to the front (most wins
+  // first), keeping the rest in the order given. Drops older entries.
+  function preferBeaten(opponents, beaten, now) {
+    for (const [name, b] of Object.entries(beaten || {})) if (!b || now - b.at > BEATEN_KEEP_MS) delete beaten[name];
+    const wins = (o) => (o.name && beaten && beaten[o.name.trim().toLowerCase()] ? beaten[o.name.trim().toLowerCase()].wins : 0);
+    const known = opponents.filter((o) => wins(o) > 0).sort((a, b) => wins(b) - wins(a));
+    return known.concat(opponents.filter((o) => !known.includes(o)));
   }
 
   // Splits a user-entered list ("a, b\nc") into lower-case names.
@@ -587,8 +851,27 @@
     wantsTraining,
     conditionOf,
     pickRepair,
+    repairDolls,
+    repairKey,
+    dollSuffix,
+    DOLL_LABELS,
     inRepairAll,
     expeditionTarget,
+    nextSmeltCheck,
+    dungeonChoice,
+    underworldSettings,
+    trackUnderworld,
+    premiumDecision,
+    itemsUsed,
+    itemLimit,
+    ITEM_KEYS,
+    UNDERWORLD_COST,
+    gearKind,
+    wantsPackages,
+    packageAction,
+    auctionTimeOk,
+    auctionRecheckMs,
+    planAuctionBids,
     freeSpot,
     materialsAvailable,
     recordFight,
@@ -606,6 +889,7 @@
     questStep,
     markNoFood,
     pickOpponents,
+    preferBeaten,
     filterOpponents,
     parseNameList,
     pickFood,

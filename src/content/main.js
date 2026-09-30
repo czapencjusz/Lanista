@@ -10,7 +10,10 @@
   const S = GBot.settings;
   const { PAGES, buildUrl } = GBot.selectors;
 
-  const MEMORY_KEY = `memory:${location.host}`;
+  // Memory and settings are kept per game server.
+  const HOST = location.host;
+  const MEMORY_KEY = `memory:${HOST}`;
+  const SETTINGS_KEY = S.settingsKey(HOST);
   const LOG_LIMIT = 150;
   const DEBUG_LOGS = false;
 
@@ -79,7 +82,7 @@
   // Desktop notification, if the user enabled this kind in the settings.
   function notify(kind, message) {
     if (settings && settings.notifications[kind] === false) return;
-    send({ type: 'alert', kind, message });
+    send({ type: 'alert', kind, message, host: HOST });
   }
 
   function schedule(fn, delayMs) {
@@ -113,10 +116,12 @@
 
   const repairRunning = () => !!(memory && (memory.repair || memory.repairAll));
 
-  // "Repair all" button under the character on the overview page.
+  // "Repair all" button under the character (or the mercenary shown) on the
+  // overview page.
   function renderRepairButton(state) {
     let box = document.getElementById('gbot-repair-all');
-    const onOverview = state && state.inGame && state.page.mod === 'overview' && (!state.page.doll || state.page.doll === '1');
+    const onOverview = state && state.inGame && state.page.mod === 'overview' && !state.page.submod;
+    const dollNumber = Math.min(6, Math.max(1, Number((state && state.page.doll) || 1) || 1));
     const doll = document.querySelector('#char');
     if (!onOverview || !doll) {
       if (box) box.remove();
@@ -131,11 +136,12 @@
       button.className = 'awesome-button';
       button.addEventListener('click', () => {
         if (button.disabled) return;
+        const which = Number(button.dataset.doll) || 1;
         editMemory((m) => {
-          m.repairAll = { done: [], skipped: [], repaired: 0, failures: 0, startedAt: Date.now() };
+          m.repairAll = { dolls: [which], done: [], skipped: [], repaired: 0, failures: 0, startedAt: Date.now() };
           m.nextRepairCheck = 0;
         }).then(() => {
-          log('info', 'Repair all: started');
+          log('info', `Repair all: started${brain.dollSuffix(which)}`);
           cancel();
           tick();
         });
@@ -147,9 +153,10 @@
       doll.insertAdjacentElement('afterend', box);
     }
     const button = box.querySelector('button');
+    button.dataset.doll = String(dollNumber);
     const status = box.querySelector('.gbot-repair-status');
     const cutoff = settings.repair.allUpToPercent;
-    const worn = GBot.workbench.readDoll(document).filter((i) => brain.inRepairAll(i, settings));
+    const worn = GBot.workbench.readDoll(document, dollNumber).filter((i) => brain.inRepairAll(i, settings));
     const quality = ['Standard', 'Ceres', 'Neptun', 'Mars', 'Jupiter', 'Olymp'][settings.repair.maxQuality + 1];
     if (repairRunning()) {
       button.disabled = true;
@@ -163,7 +170,123 @@
       const lowest = worn.reduce((a, b) => (!a || b.condition.percent < a.condition.percent ? b : a), null);
       status.textContent = lowest ? `Lowest: ${lowest.name} ${lowest.condition.percent}%` : '';
     }
-    button.title = `Repair every item on your character at or below ${cutoff}% conditioning at the workbench, with Horreum materials up to ${quality} (lowest quality first). Rent is paid in gold. Works even while the bot is stopped. Change the cutoff under Settings > Repair.`;
+    const whose = dollNumber === 1 ? 'your character' : brain.DOLL_LABELS[dollNumber];
+    button.title = `Repair every item on ${whose} at or below ${cutoff}% conditioning at the workbench, with Horreum materials up to ${quality} (lowest quality first). Rent is paid in gold for each item. Works even while the bot is stopped. Change the cutoff under Settings > Repair.`;
+  }
+
+  // "Store all resources in the Horreum" button on the packages page.
+  function renderPackagesButton(state) {
+    let box = document.getElementById('gbot-store-resources');
+    const list = document.querySelector(GBot.selectors.SEL.packages.list);
+    if (!(state && state.inGame && state.page.mod === 'packages') || !list) {
+      if (box) box.remove();
+      return;
+    }
+    if (box) {
+      renderSmeltTicks(box);
+      return;
+    }
+    box = document.createElement('div');
+    box.id = 'gbot-store-resources';
+    box.style.cssText = 'margin:6px 0;text-align:center;font:11px Arial,sans-serif;color:#4a2d0d';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'awesome-button';
+    button.textContent = 'Store all resources in the Horreum';
+    button.title = 'Move every resource from all your packages into the Horreum, like the Horreum\'s own "Store resources" with only "Packages" ticked. Surplus above 99,999 per type and quality is sold. Items and food stay in the packages.';
+    const status = document.createElement('div');
+    status.style.marginTop = '3px';
+    button.addEventListener('click', async () => {
+      if (button.disabled) return;
+      button.disabled = true;
+      status.textContent = 'Storing…';
+      try {
+        const stored = await GBot.workbench.storePackagedResources(state.sh);
+        const message = stored > 0 ? `Stored ${stored.toLocaleString('en-US')} resources from the packages in the Horreum` : 'There were no resources in the packages';
+        status.textContent = message;
+        log('info', message);
+        await persist();
+        if (stored > 0) setTimeout(() => location.reload(), 1500);
+        else button.disabled = false;
+      } catch (e) {
+        status.textContent = `Could not store the resources: ${e.message}`;
+        button.disabled = false;
+      }
+    });
+    const tickAll = document.createElement('button');
+    tickAll.type = 'button';
+    tickAll.className = 'awesome-button gbot-smelt-all';
+    tickAll.style.marginLeft = '6px';
+    tickAll.addEventListener('click', () => {
+      const items = smeltableOnPage();
+      const all = items.length && items.every((el) => smeltQueued(el));
+      setSmeltQueued(items, !all);
+    });
+    const queueLine = document.createElement('div');
+    queueLine.className = 'gbot-smelt-status';
+    queueLine.style.marginTop = '3px';
+    box.append(button, tickAll, status, queueLine);
+    // Above the packages' "Content" header, with or without add-ons
+    // restyling the page.
+    const section = list.parentElement;
+    const header = section.previousElementSibling;
+    const anchor = header && header.classList.contains('section-header') ? header : list;
+    anchor.parentNode.insertBefore(box, anchor);
+    renderSmeltTicks(box);
+  }
+
+  // ------------------------------------------------ smelting queue (packages)
+
+  const packageCn = (el) => util.parseNumber(el.parentElement.getAttribute('data-container-number'));
+  const smeltableOnPage = () =>
+    Array.from(document.querySelectorAll(`${GBot.selectors.SEL.packages.package} [data-content-type]`)).filter(GBot.smelter.isSmeltable);
+  const smeltQueued = (el) => !!(memory && memory.smeltQueue.some((q) => q.cn === packageCn(el)));
+
+  function setSmeltQueued(items, on) {
+    const entries = items.map(GBot.smelter.queueEntry);
+    editMemory((m) => {
+      for (const entry of entries) {
+        const i = m.smeltQueue.findIndex((q) => q.cn === entry.cn);
+        if (on && i < 0) m.smeltQueue.push(entry);
+        if (!on && i >= 0) m.smeltQueue.splice(i, 1);
+      }
+      // Let the bot look at the smelter soon.
+      if (on && m.smeltQueue.length) m.smeltNext = Math.min(m.smeltNext || Infinity, Date.now());
+    }).then(() => renderPackagesButton(lastState));
+  }
+
+  // One tickbox per smeltable item, the "tick all" label and the queue size.
+  function renderSmeltTicks(box) {
+    const items = smeltableOnPage();
+    for (const el of items) {
+      const pkg = el.closest('.packageItem');
+      let tick = pkg.querySelector('.gbot-smelt-tick');
+      if (!tick) {
+        if (getComputedStyle(pkg).position === 'static') pkg.style.position = 'relative';
+        tick = document.createElement('input');
+        tick.type = 'checkbox';
+        tick.className = 'gbot-smelt-tick';
+        tick.title = 'Smelt this item (GBot)';
+        tick.style.cssText = 'position:absolute;top:2px;right:2px;z-index:5;margin:0;width:15px;height:15px;cursor:pointer;accent-color:#b8382b';
+        tick.addEventListener('click', (e) => e.stopPropagation());
+        tick.addEventListener('change', () => setSmeltQueued([el], tick.checked));
+        pkg.appendChild(tick);
+      }
+      tick.checked = smeltQueued(el);
+    }
+    const tickAll = box.querySelector('.gbot-smelt-all');
+    const all = items.length && items.every((el) => smeltQueued(el));
+    tickAll.textContent = all ? 'Untick all on this page' : 'Tick all on this page for smelting';
+    tickAll.disabled = !items.length;
+    tickAll.title = 'Queue every weapon, armour and jewellery item on this page for smelting. Smelting destroys the item and gives resources.';
+    const queued = memory ? memory.smeltQueue.length : 0;
+    const note = !settings || !settings.smelting.enabled ? ' (smelting is off under Settings > Smelting)' : !settings.enabled ? ' (starts when the bot runs)' : '';
+    box.querySelector('.gbot-smelt-status').textContent = queued ? `${queued} item${queued === 1 ? '' : 's'} queued for smelting${note}` : '';
+  }
+
+  function renderPageButtons(state) {
+    renderRepairButton(state);
+    renderPackagesButton(state);
   }
 
   // Remember facts about the game for the settings UI and statistics.
@@ -186,7 +309,7 @@
   // executed or saved, so the first tick (which may act) keeps its delay.
   async function paintNow() {
     const now = Date.now();
-    const [loadedSettings, loadedMemory] = await Promise.all([S.loadSettings(), loadMemory()]);
+    const [loadedSettings, loadedMemory] = await Promise.all([S.loadSettings(HOST), loadMemory()]);
     if (running) return; // the first tick got here first
     settings = loadedSettings;
     memory = loadedMemory;
@@ -194,7 +317,7 @@
     lastState = state;
     const decision = brain.decide(state, settings, memory, now);
     panel.update({ settings, memory, decision, state, status: statusFor(state) });
-    renderRepairButton(state);
+    renderPageButtons(state);
   }
 
   async function tick() {
@@ -204,12 +327,19 @@
     let state = null;
     try {
       const now = Date.now();
-      settings = await S.loadSettings();
+      settings = await S.loadSettings(HOST);
       memory = await loadMemory();
       state = GBot.state.readState(document, location, now);
       lastState = state;
 
       recordGameInfo(state, now);
+      const visit = memory.underworldRun;
+      brain.trackUnderworld(state, memory, now);
+      // Beating Dīs Pater (or leaving) ends the visit without a report page.
+      if (visit && !memory.underworldRun) {
+        const used = [visit.mobilisations && `${visit.mobilisations} Mobilisation(s)`, visit.potions && `${visit.potions} healing potion(s)`].filter(Boolean);
+        log('info', `Back from the Underworld${used.length ? ` (used ${used.join(' and ')})` : ''}`);
+      }
       for (const event of brain.resolvePending(state, memory, now)) log(event.level, event.message);
       if (settings.enabled) brain.updateBreaks(settings.schedule, memory, now);
 
@@ -221,7 +351,7 @@
       }
 
       panel.update({ settings, memory, decision, state, status: statusFor(state) });
-      renderRepairButton(state);
+      renderPageButtons(state);
       await persist();
       await execute(decision, state);
     } catch (e) {
@@ -255,8 +385,9 @@
       return;
     }
 
-    // Quests and repairs are multi-step and keep their own failure counts.
-    if (decision.type !== 'quests' && decision.type !== 'repair') {
+    // Quests, repairs, smelting, the auction house and the packages are
+    // multi-step and keep their own failure handling.
+    if (!['quests', 'repair', 'smelt', 'auction', 'packages', 'underworld', 'premium'].includes(decision.type)) {
       const attempt = brain.beginAttempt(memory, decision.type, now, settings, state);
       if (!attempt.ok) {
         log('warn', attempt.message);
@@ -268,7 +399,7 @@
     }
     // Multi-step actions (navigate, then act) re-decide on every page; log
     // the reason once per run. Repairs log their own steps (workbench.js).
-    if (decision.type === 'repair') log('debug', decision.reason);
+    if (['repair', 'smelt', 'auction', 'packages'].includes(decision.type)) log('debug', decision.reason);
     else if (!memory.pending || memory.pending.attempts === 1) log('info', decision.reason);
     await persist();
     await send({ type: 'heartbeat', host: location.host, nextAt: now + 60000, enabled: true });
@@ -300,7 +431,7 @@
 
     await persist();
     panel.update({ memory, status: statusFor(state) });
-    renderRepairButton(state);
+    renderPageButtons(state);
     if (!result || result.navigated || unloading) return;
     if (result.refresh) schedule(() => navigate(overviewUrl(state), 'overview (refresh)', 'debug'), 1500);
     else if (result.retick) schedule(tick, result.delayMs || 1000);
@@ -308,15 +439,18 @@
 
   const panel = GBot.panel.create({
     onToggleBot: async () => {
-      const current = await S.loadSettings();
-      await S.saveSettings({ ...current, enabled: !current.enabled });
+      const current = await S.loadSettings(HOST);
+      await S.saveSettings({ ...current, enabled: !current.enabled }, HOST);
     },
     onToggleActivity: async (id) => {
-      const current = await S.loadSettings();
+      const current = await S.loadSettings(HOST);
       const path = GBot.ui.ACTIVITIES[id].path;
-      await S.saveSettings(S.setPath(current, path, !S.getPath(current, path)));
+      await S.saveSettings(S.setPath(current, path, !S.getPath(current, path)), HOST);
     },
-    onSaveSettings: (next) => S.saveSettings(next),
+    onSaveSettings: (next) => S.saveSettings(next, HOST),
+    host: HOST,
+    listServers: S.listServers,
+    loadServerSettings: S.loadSettings,
     onRunNow: () => {
       cancel();
       tick();
@@ -338,10 +472,24 @@
     if (changes[MEMORY_KEY] && !running && changes[MEMORY_KEY].newValue) {
       memory = brain.normalizeMemory(changes[MEMORY_KEY].newValue, Date.now());
       panel.update({ memory, status: statusFor(lastState) });
+      renderPageButtons(lastState);
     }
-    if (!changes[S.STORAGE_KEY]) return;
-    const next = S.normalize(changes[S.STORAGE_KEY].newValue);
+    // This server's settings, or the shared ones while it has none of its own.
+    if (changes[SETTINGS_KEY] && changes[SETTINGS_KEY].newValue) applySettings(S.normalize(changes[SETTINGS_KEY].newValue));
+    else if (changes[SETTINGS_KEY] || changes[S.STORAGE_KEY]) S.loadSettings(HOST).then(applySettings, () => {});
+  });
+
+  function applySettings(next) {
+    if (settings && JSON.stringify(next) === JSON.stringify(settings)) return;
     const wasEnabled = settings && settings.enabled;
+    // New auction settings (price, limits, timing): look again right away
+    // instead of at the next scheduled check.
+    if (settings && JSON.stringify(settings.auction) !== JSON.stringify(next.auction)) {
+      editMemory((m) => {
+        m.nextAuctionCheck = 0;
+        m.auctionNote = null;
+      }).catch(() => {});
+    }
     settings = next;
     panel.update({ settings, status: statusFor(lastState) });
     renderRepairButton(lastState);
@@ -355,7 +503,7 @@
       // Settings changed while running: re-evaluate soon.
       schedule(tick, 1500);
     }
-  });
+  }
 
   // Show the bar's state right away, but give the game's own scripts a moment
   // to initialise before the first tick, which may click or navigate.

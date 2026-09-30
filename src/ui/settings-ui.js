@@ -7,6 +7,9 @@
 //     settings, memory, compact, initialTab,
 //     onChange: async (settings) => savedSettings,  // persist
 //     onResetStats: async () => {}, onClearLog: async () => {},
+//     // optional, for "Copy from another server":
+//     host: 'sNN-xx...' or () => host, listServers: async () => [host],
+//     loadServerSettings: async (host) => settings,
 //   });
 //   container.appendChild(view.element);
 //   view.update({ settings, memory });  // push external changes in
@@ -56,6 +59,8 @@
     let savedTimer = null;
 
     const get = (path) => S.getPath(view.settings, path);
+    // The server whose settings are shown (the popup can switch servers).
+    const currentHost = () => (typeof opts.host === 'function' ? opts.host() : opts.host) || null;
 
     function flash(text, isError) {
       if (!savedLabel) return;
@@ -366,6 +371,9 @@
           ['nest', 'Nests searched'],
           ['training', 'Stats trained'],
           ['repairs', 'Items repaired'],
+          ['smelted', 'Items smelted'],
+          ['sold', 'Items sold'],
+          ['auctionBids', 'Auction bids'],
           ['quests', 'Quests finished'],
           ['work', 'Work shifts'],
         ]) {
@@ -380,6 +388,8 @@
           cards.appendChild(card('Honour', formatNumber(loot.honour || 0), rate(loot.honour || 0)));
           cards.appendChild(card('Fame', formatNumber(loot.fame || 0), rate(loot.fame || 0)));
         }
+        if (stats.soldGold) cards.appendChild(card('Gold from sales', formatNumber(stats.soldGold), rate(stats.soldGold)));
+        if (stats.goldCollected) cards.appendChild(card('Gold from packages', formatNumber(stats.goldCollected), rate(stats.goldCollected)));
         if (stats.goldStart !== null && stats.goldNow !== null) {
           const diff = stats.goldNow - stats.goldStart;
           cards.appendChild(card('Gold change', `${diff >= 0 ? '+' : ''}${formatNumber(diff)}`, `now ${formatNumber(stats.goldNow)}`));
@@ -480,6 +490,7 @@
       );
 
       return [
+        ...copyFromServer(status),
         h('h3', {}, 'Export'),
         h(
           'div',
@@ -500,6 +511,41 @@
         h('h3', {}, 'Reset'),
         h('div', { class: 'gb-actions' }, reset),
       ];
+    }
+
+    // Settings are kept per game server: take over another server's.
+    function copyFromServer(status) {
+      if (!opts.listServers || !opts.loadServerSettings) return [];
+      const host = currentHost();
+      const select = h('select', { class: 'gb-input gb-select', 'aria-label': 'Server to copy from' });
+      const note = h('p', { class: 'gb-help' }, 'Looking for your other servers…');
+      const actions = h('div', { class: 'gb-actions' });
+      const button = h(
+        'button',
+        {
+          type: 'button',
+          class: 'gb-btn',
+          onclick: () =>
+            confirmThen(button, 'Copy settings', async () => {
+              const from = select.value;
+              const copied = await opts.loadServerSettings(from);
+              // Copying never starts or stops the bot.
+              save({ ...copied, enabled: view.settings.enabled });
+              status.classList.remove('error');
+              status.textContent = `Settings copied from ${S.serverName(from)}.`;
+            }),
+        },
+        'Copy settings'
+      );
+      opts.listServers().then((hosts) => {
+        const others = hosts.filter((x) => x !== host);
+        for (const x of others) select.appendChild(h('option', { value: x }, S.serverName(x)));
+        if (others.length) actions.append(select, button);
+        note.textContent = others.length
+          ? `Replace the settings of ${host ? S.serverName(host) : 'this server'} with those of another server you play on.`
+          : 'GBot has only been used on this server so far.';
+      });
+      return [h('h3', {}, 'Copy from another server'), note, actions];
     }
 
     // Two-click confirmation (window.confirm() is unreliable in popups).

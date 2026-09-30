@@ -14,19 +14,50 @@ through the game the way a player would.
 | Activity | What the bot does |
 | --- | --- |
 | **Expeditions** | Attacks the enemy you choose (1-4) at a location you pick from the game's own list, or at your last visited one, whenever the cooldown is ready. It can keep some points in reserve. With the boss selected, it can first fight the location's other enemies until all their bonuses are learned, so the boss gets them too (see below). |
-| **Dungeons** | Starts a Normal or Advanced dungeon when none is running, then fights the enemies one by one. It never presses *Cancel dungeon*, and it tells you when a dungeon is not unlocked yet. |
-| **Arena Provinciarum** | Attacks the lowest-level, highest-level or a random opponent. It can stick to opponents near your level and skip names on a never-attack list. Opponents who beat you are skipped for a while (24 hours by default). If the game refuses a fight, it tries another opponent. |
+| **Dungeons** | Starts a Normal or Advanced dungeon when none is running (Normal where Advanced is not unlocked yet), then fights the enemies one by one. Optionally it never fights the boss: the other enemies go first, then the dungeon is cancelled and a new one started. It can also start over after a number of lost fights in a row. The ruby button that skips the cooldown is never used. |
+| **Underworld** | Optional. From level 100: fights the Underworld's enemies with its own expedition points, always the newest area and enemy, and waits for HP to regenerate since food cannot be eaten there. It can also enter the Underworld for you (Normal, Middle or Hard) whenever it is allowed again. It never leaves, never turns back or shortens the journey, and never attacks without points (that would cost rubies). |
+| **Arena Provinciarum** | Attacks the lowest-level, highest-level or a random opponent. It can stick to opponents near your level and skip names on a never-attack list. Opponents who beat you are skipped for a while (24 hours by default), and optionally those you have beaten go first. If the game refuses a fight, it tries another opponent. |
+| **Points refills** | Optional. Uses Gate Keys and Mobilisations you own (never bought) when dungeon or expedition points run out, up to a number per day. |
 | **Circus Turma Provinciarum** | Same options as the arena. |
 | **Enemy nests** | After some wins the game offers to search the enemy's nest for extra loot. The bot does a quick search, a thorough search, or returns to safety, as you choose. |
-| **Healing** | Eats food below one HP threshold and stops fighting below another. It searches every bag and picks the food that best fills the missing HP. |
+| **Healing** | Eats food below one HP threshold and stops fighting below another. It searches every bag and picks the food that best fills the missing HP; when the bags are empty it takes food from the packages. |
 | **Training** | Optional. Spends gold above a reserve you set on stat points, always on the cheapest of the stats you pick, which keeps them balanced. Gold you spend cannot be stolen in the arena. |
 | **Repair** | Optional. When an item you wear drops below a conditioning threshold, the bot takes it off, repairs it at the workbench with materials from the Horreum, and puts it back on (see below). |
 | **Stable work** | Optional. Once you are out of expedition and dungeon points, it starts the job and number of hours you chose. |
 | **Pantheon quests** | Optional. Collects finished quests and accepts the best-paying new one of the types you pick. It skips quests for places you do not fight at and for activities that are switched off, and stops when all quest slots are taken. |
 | **Pop-ups** | Collects the daily login bonus and closes notification dialogs. |
+| **Packages** | A **Store all resources in the Horreum** button on the packages page moves every resource from all your packages into the Horreum in one go. Optionally, every 30 minutes the bot also tidies the packages: it takes the gold out of gold packages, stores resources in the Horreum, sells weapons, armour and jewellery up to a quality you choose to a merchant, and moves packages that are about to expire into your bags (or sells them). |
+| **Smelting** | Tick weapons, armour and jewellery on the packages page (one by one, or **Tick all on this page**) to queue them for smelting, or let rules pick them by quality and kind. While running, the bot fills free smelter slots from the queue, pays the rent in gold and puts the resources of finished smelts in the Horreum (or in a package). |
+| **Auction house** | Optional. Bids on food and healing potions that heal at least the HP per gold you set, late in the auction round, once per lot, within a gold reserve, a budget per round and a limit on how much food you hold. Won items arrive as packages. |
 
-**The bot never spends rubies.** Workbench rent is paid in gold, and expedition bonuses are only
-learned by fighting, never bought.
+**The bot never spends rubies.** Workbench and smelter rent is paid in gold, expedition bonuses are
+only learned by fighting, auction Buyout (which costs rubies) is never used, and neither are the
+buttons that skip a dungeon cooldown, shorten the journey to the Underworld, or attack there without
+expedition points.
+
+### The Underworld
+
+The Hermit sends characters of level 100 and above to the Underworld for 8,000 gold: four areas of
+three enemies and a boss each, ending with Dīs Pater. Inside, the Underworld has its own 18
+expedition points, there are no dungeons, and food cannot be eaten.
+
+With *Underworld* switched on, the bot fights there whenever the expedition cooldown is ready: the
+newest unlocked area and its newest open enemy, with the stakes slider left at its default. It
+waits for HP to regenerate above your limit (60% by default), because falling to 0 HP only offers to
+leave, and leaving locks the Underworld for days. For the same reason it never follows *Leave the
+Underworld*, and closes the game's dialogs there instead of answering them. When the points run
+out it stops: further attacks would cost rubies.
+
+*Enter automatically* takes the Hermit's offer on the difficulty you choose whenever it is allowed
+again. The journey (about 30 minutes, less on speed servers) is waited out.
+
+You can also let it use items you already own in the premium inventory, up to a number per visit:
+a **Mobilisation** (+3 Underworld points) when the points run out, and a **100% Healing Potion**
+when HP drops below a limit (20% by default). Both are off until you set a number; nothing is ever
+bought.
+
+**Careful with the auction house:** the game keeps your gold if someone outbids you. That is why the
+bot bids only when the round is ending (by default) and never twice on the same lot.
 
 ### Expedition bonuses before the boss
 
@@ -56,9 +87,27 @@ Fights wait while an item is off your character. If the Horreum has no suitable 
 goes straight back on and is tried again in 6 hours. If a step keeps failing, the bot puts the item
 back on, or logs where it is (on the workbench or in the packages).
 
+### Tidying the packages
+
+Under *Smelting* and *Packages* you set rules by quality (Standard, Ceres, Neptun, ...) and kind
+(weapons, armour, rings and amulets). Every 30 minutes while the bot runs, it goes through all your
+packages:
+
+1. gold packages are opened, so the gold goes to your character;
+2. resources go to the Horreum, if you want;
+3. gear matching a smelting rule joins the smelting queue, as if you had ticked it;
+4. gear matching a selling rule is sold to a merchant for its value, through a free spot in your
+   bags (like dragging it onto the merchant);
+5. packages about to expire (less than 24 hours left by default) are moved into your bags, or sold.
+
+Items you ticked for smelting are never sold. Smelting rules go before selling rules, and anything
+that matches no rule stays where it is. All of it is off until you switch it on.
+
 The overview page also gets a **Repair all** button under your character. It repairs every item at
 or below a cutoff (60% by default, changeable under *Repair*), worst first, one at a time. It works
-even while the bot is stopped.
+even while the bot is stopped. The button is also there on the other overview tabs (X and the four
+mercenaries) and repairs that tab's gear, and under *Repair* you can choose which tabs the automatic
+repair looks after (only your character by default).
 
 You can also tailor how the bot behaves:
 
@@ -75,7 +124,11 @@ You can also tailor how the bot behaves:
   HP is low and there is no food left. Each one can be turned off.
 * **One tab per server, with a watchdog.** Only one game tab runs the bot. If that tab hangs, it is
   reloaded.
-* **Backup.** Export your settings to a file, import them in another browser, or reset them.
+* **Settings per server.** Each server you play on has its own settings and its own Start/Stop,
+  so two accounts never overwrite each other's locations or budgets. A server GBot has not seen
+  before starts with a copy of the settings you saved last, with the bot stopped.
+* **Backup.** Copy the settings of another server, export them to a file, import them in another
+  browser, or reset them.
 
 ## The interface
 
@@ -108,28 +161,32 @@ what is enabled. Changes save as you make them and take effect immediately.
 | Tab | Options |
 | --- | --- |
 | General | Bot on/off, activity priority order, enemy nest search (quick / thorough / return to safety / leave it to me) |
-| Expedition | Location (last visited, one from the game's list, or any id), enemy 1-4, learn the other enemies' bonuses before the boss, points to keep in reserve |
-| Dungeon | Location, Normal/Advanced, points to keep in reserve |
-| Arena / Circus Turma | Lowest / highest / random opponent, level range around yours, never-attack list, how long to skip opponents who beat you |
+| Expedition | Location (last visited, one from the game's list, or any id), enemy 1-4, learn the other enemies' bonuses before the boss, points to keep in reserve, Mobilisations to use per day |
+| Dungeon | Location, Normal/Advanced, points to keep in reserve, never fight the boss, start a new dungeon after lost fights, Gate Keys to use per day |
+| Underworld | Fighting on/off, minimum HP to fight, enter automatically (off, Normal, Middle, Hard), Mobilisations and 100% Healing Potions to use per visit |
+| Arena / Circus Turma | Lowest / highest / random opponent, level range around yours, never-attack list, how long to skip opponents who beat you, prefer opponents you have beaten |
 | Health | Eat food on/off, eat below X% HP, stop fighting below Y% HP |
 | Stable work | Job number, hours |
 | Training | Gold to always keep, stats to train |
-| Repair | Repair below X% conditioning, cutoff for the *Repair all* button, best material quality to use |
+| Repair | Repair below X% conditioning, cutoff for the *Repair all* button, best material quality to use, whose gear to look after (character, tab X, mercenaries I-IV) |
+| Smelting | Smelting on/off, put the resources in the Horreum or in a package, smelt package items automatically by quality and kind |
+| Packages | Tidying on/off, take gold out of gold packages, store resources in the Horreum, sell gear by quality and kind, what to do with packages about to expire |
+| Auction house | Bidding on/off, minimum HP per gold, how late in the round to bid, gold per round, gold to keep, food limit |
 | Quests | Quest types to accept (combat, arena, circus, expedition, dungeon, items, work), only quests for my location and dungeon, only quests for activities that are on |
 | Schedule | Active hours, random breaks |
 | Timing & safety | Click delay range, longest idle time, failed attempts before pausing, pause length |
 | Notifications | Which desktop notifications to show |
 | Interface | Show the bar, floating or docked |
-| Statistics | Fights per activity with wins, losses and win rate; meals, nests, quests, work shifts, stats trained, items repaired; gold looted, experience, honour and fame; gold change; per-hour rates; reset |
+| Statistics | Fights per activity with wins, losses and win rate; meals, nests, quests, work shifts, stats trained, items repaired, items smelted, items sold, auction bids; gold looted, experience, honour and fame; gold from sales and gold packages; gold change; per-hour rates; reset |
 | Log | Recent activity, filter to warnings only, clear |
-| Backup | Export to a file or the clipboard, import, reset to defaults |
+| Backup | Copy from another server, export to a file or the clipboard, import, reset to defaults |
 
 ### Toolbar popup and options page
 
 The toolbar button opens a compact version of the same settings, with icon-only tabs, a Start/Stop
 button and the server's status. The *open in tab* button, or the browser's extension options,
-shows the full-size settings page. If you play on several servers, it also has a server selector
-for statistics and logs.
+shows the full-size settings page. If you play on several servers, it also has a server selector:
+the settings, Start/Stop, statistics and log shown are those of the selected server.
 
 <img src="docs/popup.png" alt="Popup" width="330">
 
@@ -165,7 +222,8 @@ npm run build        # -> dist/gbot-chrome.zip and dist/gbot-firefox.zip
 3. Press **Start**.
 
 Keep the game tab open (it can be in the background). The bot never logs in for you: if the session
-expires, log in again and it carries on. Settings saved by version 1.0 are migrated automatically.
+expires, log in again and it carries on. Settings from older versions are migrated automatically:
+version 1 kept one set for all servers, and 2.0 gives each server you played on its own copy.
 
 ## How it works
 
@@ -177,8 +235,11 @@ src/content/state.js          reads HP, points, cooldowns, locations, dialogs, c
                               and expedition bonuses from the DOM
 src/content/brain.js          pure decision engine: priority, schedule, retries, tile status,
                               quest choice, training, repair planning
-src/content/actions.js        performs decisions: navigate, click, drag food, fill forms
+src/content/actions.js        performs decisions: navigate, click, drag food, fill forms; dungeon
+                              choices and the Underworld
 src/content/workbench.js      gear repair through the game's own AJAX requests
+src/content/smelter.js        smelting queue: packages → smelter → Horreum, the same way
+src/content/packages.js       package rules: gold, resources, smelting, selling, expiring
 src/content/main.js           runner: show the bar, then read state → decide → act, once per
                               page load; also the overview page's "Repair all" button
 src/content/panel.js          in-game control bar + settings window (shadow DOM)
@@ -198,7 +259,8 @@ again on every page load:
 4. Perform it.
 
 Anything that must survive a page load, such as attempt counters, work end time, a repair in
-progress, stats and the log, is kept per server in extension storage.
+progress, stats and the log, is kept per server in extension storage, next to that server's
+settings.
 
 The bar is filled in from storage and the page as soon as the page is parsed. The first action
 waits 0.8-2 seconds so the game's own scripts are ready, and every click waits the human-like

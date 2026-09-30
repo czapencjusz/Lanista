@@ -17,6 +17,17 @@
     { value: 'random', label: 'Random' },
   ];
 
+  // Item and material qualities, as the game's "Minimum quality" filter.
+  const QUALITIES = ['Standard (white)', 'Ceres (green)', 'Neptun (blue)', 'Mars (purple)', 'Jupiter (orange)', 'Olymp (red)'];
+  const qualityOptions = (lowest) => QUALITIES.map((q, i) => ({ value: i - 1, label: i === 0 ? lowest : `Up to ${q}` }));
+
+  const GEAR_KINDS = [
+    ['weapons', 'Weapons'],
+    ['armour', 'Armour'],
+    ['jewellery', 'Rings and amulets'],
+  ];
+  const KINDS_HELP = 'Armour means helmets, shields, chest armour, gloves and shoes.';
+
   const opponentFields = (type) => [
     { path: `${type}.target`, type: 'select', label: 'Opponent choice', options: TARGETS },
     {
@@ -39,6 +50,12 @@
       label: 'Skip opponents who beat me for',
       unit: 'h',
       help: 'After a lost fight that player is skipped for this long. 0 turns it off.',
+    },
+    {
+      path: `${type}.preferBeaten`,
+      type: 'toggle',
+      label: 'Prefer opponents I have beaten',
+      help: 'Opponents beaten in the last two weeks are tried first, most wins first, before the choice above.',
     },
   ];
 
@@ -96,6 +113,12 @@
           help: 'Only with the boss selected. Fights enemies 1-3 in turn until all their bonuses are learned (each win has a chance to learn one; the chance, shown in the bonus tooltip, depends on your character and the enemy). The boss then gets those bonuses automatically and the bot fights the boss. Bonuses are never bought with rubies.',
         },
         { path: 'expedition.keepPoints', type: 'number', label: 'Keep points in reserve', help: 'Stop when this many expedition points are left.' },
+        {
+          path: 'expedition.mobilisationsPerDay',
+          type: 'number',
+          label: 'Mobilisations to use per day',
+          help: 'From your premium inventory, one at a time once the points run out (+3 points each). Only ones you own; nothing is bought. 0 = never.',
+        },
       ],
     },
     {
@@ -103,7 +126,7 @@
       title: 'Dungeon',
       icon: 'dungeon',
       enable: 'dungeon.enabled',
-      description: 'Start a dungeon when none is running and fight its enemies one after another.',
+      description: 'Start a dungeon when none is running and fight its enemies one after another. The ruby button that skips the cooldown is never used.',
       fields: [
         { path: 'dungeon.location', type: 'location', label: 'Location' },
         {
@@ -114,8 +137,69 @@
             { value: 'normal', label: 'Normal' },
             { value: 'advanced', label: 'Advanced' },
           ],
+          help: 'Where Advanced is not unlocked yet, Normal is started instead.',
         },
         { path: 'dungeon.keepPoints', type: 'number', label: 'Keep points in reserve', help: 'Stop when this many dungeon points are left.' },
+        {
+          path: 'dungeon.skipBoss',
+          type: 'toggle',
+          label: 'Never fight the boss',
+          help: 'The other enemies go first; once only the boss is left, the dungeon is cancelled and a new one started. Its tasks and the boss loot are given up.',
+        },
+        {
+          path: 'dungeon.restartAfterLosses',
+          type: 'number',
+          label: 'Start a new dungeon after',
+          unit: 'lost fights in a row',
+          help: 'Cancels a dungeon that is too hard and starts a fresh one. 0 turns it off.',
+        },
+        {
+          path: 'dungeon.gateKeysPerDay',
+          type: 'number',
+          label: 'Gate Keys to use per day',
+          help: 'From your premium inventory, one at a time once the dungeon points run out (+3 points each). Only ones you own; nothing is bought. 0 = never.',
+        },
+      ],
+    },
+    {
+      id: 'underworld',
+      title: 'Underworld',
+      icon: 'underworld',
+      enable: 'underworld.enabled',
+      description: 'From level 100, the Hermit sends you to the Underworld: four areas of three enemies and a boss each, with their own 18 expedition points. The bot fights the newest area and enemy, never spends rubies (without points an attack would cost them), never shortens or turns back the journey, and never leaves: leaving, or falling to 0 HP, locks the Underworld for days.',
+      fields: [
+        {
+          path: 'underworld.minHpPercent',
+          type: 'number',
+          label: 'Only fight above',
+          unit: '% HP',
+          help: 'Food cannot be eaten in the Underworld, so the bot waits for HP to regenerate. Dungeons are not available there.',
+        },
+        {
+          path: 'underworld.enter',
+          type: 'select',
+          label: 'Enter automatically',
+          options: [
+            { value: 'off', label: 'No, I enter myself' },
+            { value: 'normal', label: 'Yes, on Normal' },
+            { value: 'medium', label: 'Yes, on Middle' },
+            { value: 'hard', label: 'Yes, on Hard' },
+          ],
+          help: 'Whenever the Underworld can be entered again. Costs 8,000 gold and about 30 minutes of travel (less on speed servers). On Hard, dying costs a skill point.',
+        },
+        {
+          path: 'underworld.mobilisations',
+          type: 'number',
+          label: 'Mobilisations to use per visit',
+          help: 'From your premium inventory, one at a time when the Underworld points run out (+3 points each). Only ones you own; nothing is bought. 0 = never.',
+        },
+        {
+          path: 'underworld.potions',
+          type: 'number',
+          label: '100% Healing Potions to use per visit',
+          help: 'From your premium inventory, when HP drops below the value below. 0 = never.',
+        },
+        { path: 'underworld.potionBelowPercent', type: 'number', label: 'Use a healing potion below', unit: '% HP' },
       ],
     },
     {
@@ -205,16 +289,123 @@
           path: 'repair.maxQuality',
           type: 'select',
           label: 'Best materials to use',
-          options: [
-            { value: -1, label: 'Standard (white) only' },
-            { value: 0, label: 'Up to Ceres (green)' },
-            { value: 1, label: 'Up to Neptun (blue)' },
-            { value: 2, label: 'Up to Mars (purple)' },
-            { value: 3, label: 'Up to Jupiter (orange)' },
-            { value: 4, label: 'Up to Olymp (red)' },
-          ],
+          options: qualityOptions('Standard (white) only'),
           help: 'The lowest quality in stock is used first. Fights wait while an item is off your character.',
         },
+        {
+          path: 'repair.dolls',
+          type: 'checks',
+          label: 'Look after the gear of',
+          help: 'The tabs on the overview page. Every repair costs workbench rent in gold and materials. The "Repair all" button works on whichever tab is open.',
+          items: [
+            { path: 'repair.dolls.d1', label: 'My character' },
+            { path: 'repair.dolls.d2', label: 'Tab X' },
+            { path: 'repair.dolls.d3', label: 'Mercenary I' },
+            { path: 'repair.dolls.d4', label: 'Mercenary II' },
+            { path: 'repair.dolls.d5', label: 'Mercenary III' },
+            { path: 'repair.dolls.d6', label: 'Mercenary IV' },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'smelting',
+      title: 'Smelting',
+      icon: 'smelting',
+      enable: 'smelting.enabled',
+      description: 'Tick items on the packages page to smelt them, or let the rules below pick them. While the bot runs it fills free smelter slots from that queue and collects finished smelts. Rent is paid in gold, never rubies.',
+      fields: [
+        {
+          path: 'smelting.storeIn',
+          type: 'select',
+          label: 'Put the resources',
+          options: [
+            { value: 'horreum', label: 'In the Horreum' },
+            { value: 'packages', label: 'In a package' },
+          ],
+        },
+        {
+          path: 'smelting.auto',
+          type: 'toggle',
+          label: 'Also smelt package items automatically',
+          help: 'Every 30 minutes the bot looks through your packages and queues the items that match the rules below, as if you had ticked them.',
+        },
+        { path: 'smelting.autoUpTo', type: 'select', label: 'Items of quality', options: qualityOptions('Standard (white) only'), dependsOn: 'smelting.auto' },
+        {
+          path: 'smelting.autoTypes',
+          type: 'checks',
+          label: 'Kinds',
+          dependsOn: 'smelting.auto',
+          help: KINDS_HELP,
+          items: GEAR_KINDS.map(([kind, label]) => ({ path: `smelting.autoTypes.${kind}`, label })),
+        },
+      ],
+    },
+    {
+      id: 'packages',
+      title: 'Packages',
+      icon: 'packages',
+      enable: 'packages.enabled',
+      description: 'Tidy the packages every 30 minutes while the bot runs: take out gold, store resources, sell gear you do not want, and save packages before they expire. Items ticked for smelting are left for the smelter.',
+      fields: [
+        { path: 'packages.collectGold', type: 'toggle', label: 'Take the gold out of gold packages' },
+        {
+          path: 'packages.storeResources',
+          type: 'toggle',
+          label: 'Store resources in the Horreum',
+          help: 'Like the "Store all resources in the Horreum" button on the packages page. Surplus above 99,999 per type and quality is sold.',
+        },
+        {
+          path: 'packages.sell',
+          type: 'toggle',
+          label: 'Sell gear to a merchant',
+          help: 'Weapons, armour and jewellery that match the rules below are sold for their value, one at a time through a free spot in your bags. Smelting rules go first.',
+        },
+        { path: 'packages.sellUpTo', type: 'select', label: 'Items of quality', options: qualityOptions('Standard (white) only'), dependsOn: 'packages.sell' },
+        {
+          path: 'packages.sellTypes',
+          type: 'checks',
+          label: 'Kinds',
+          dependsOn: 'packages.sell',
+          help: KINDS_HELP,
+          items: GEAR_KINDS.map(([kind, label]) => ({ path: `packages.sellTypes.${kind}`, label })),
+        },
+        {
+          path: 'packages.expiring',
+          type: 'select',
+          label: 'Packages about to expire',
+          options: [
+            { value: 'bag', label: 'Move them into my bags' },
+            { value: 'sell', label: 'Sell them' },
+            { value: 'off', label: 'Leave them' },
+          ],
+          help: 'Any package, not only gear. Moving needs free room in your bags.',
+        },
+        { path: 'packages.expiringHours', type: 'number', label: 'About to expire means less than', unit: 'h left' },
+      ],
+    },
+    {
+      id: 'auction',
+      title: 'Auction house',
+      icon: 'auction',
+      enable: 'auction.enabled',
+      description: 'Bid on healing items (food and potions) in the auction house. Careful: the game keeps your gold if someone outbids you, so the bot bids late, once per lot, and only at a price you accept. Buyout costs rubies and is never used. Won items arrive as packages; healing takes food from there when the bags are empty.',
+      fields: [
+        { path: 'auction.minHpPerGold', type: 'number', label: 'Only lots that heal at least', unit: 'HP per gold', step: 0.1, help: 'Heal amount divided by the bid. 4 means a 2,000 HP bread may cost up to 500 gold.' },
+        {
+          path: 'auction.bidWhen',
+          type: 'select',
+          label: 'Bid when the auction time is',
+          options: [
+            { value: 'short', label: 'Short or very short (safest)' },
+            { value: 'medium', label: 'Medium or shorter' },
+            { value: 'any', label: 'Any time' },
+          ],
+          help: 'The later the bid, the fewer players can still outbid you.',
+        },
+        { path: 'auction.maxPerRound', type: 'number', label: 'Spend at most', unit: 'gold per auction round', step: 1000 },
+        { path: 'auction.keepGold', type: 'number', label: 'Always keep', unit: 'gold', step: 10000 },
+        { path: 'auction.maxFood', type: 'number', label: 'Stop at', unit: 'healing items owned', help: 'Food and potions in your bags and packages.' },
       ],
     },
     {
@@ -311,7 +502,7 @@
     },
     { id: 'stats', title: 'Statistics', icon: 'stats', custom: 'stats', description: 'What the bot has done on this server.' },
     { id: 'log', title: 'Log', icon: 'log', custom: 'log', description: 'Recent bot activity on this server.' },
-    { id: 'profile', title: 'Backup', icon: 'profile', custom: 'profile', description: 'Export your settings to a file, import them on another browser, or reset them.' },
+    { id: 'profile', title: 'Backup', icon: 'profile', custom: 'profile', description: 'Every server keeps its own settings. Copy them from another server, export them to a file, import them on another browser, or reset them.' },
   ];
 
   // Labels/icons for the priority list and the control bar tiles.

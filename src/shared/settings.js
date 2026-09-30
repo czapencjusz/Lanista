@@ -27,6 +27,8 @@
     ignorePlayers: '',
     // Skip an opponent for this many hours after losing to them (0 = off).
     avoidLostHours: 24,
+    // Try opponents beaten in the last two weeks first (most wins first).
+    preferBeaten: false,
   });
 
   const DEFAULT_SETTINGS = {
@@ -52,17 +54,48 @@
       bonusesFirst: false,
       // Stop attacking when this many points are left (saved for later).
       keepPoints: 0,
+      // Owned Mobilisations (+3 points each) to use per day once the points
+      // run out. Never bought.
+      mobilisationsPerDay: 0,
     },
 
     dungeon: {
       enabled: true,
       location: 'auto',
-      difficulty: 'normal', // 'normal' | 'advanced'
+      // 'normal' | 'advanced' (Normal where Advanced is not unlocked yet).
+      difficulty: 'normal',
       keepPoints: 0,
+      // Never fight the boss: once only the boss is left, cancel the dungeon
+      // and start a new one.
+      skipBoss: false,
+      // Cancel and restart the dungeon after this many lost fights in a row
+      // (0 = never).
+      restartAfterLosses: 0,
+      // Owned Gate Keys (+3 dungeon points each) to use per day once the
+      // points run out. Never bought.
+      gateKeysPerDay: 0,
     },
 
     arena: opponentDefaults(),
     circus: opponentDefaults(),
+
+    underworld: {
+      // Fight the Underworld's enemies (with its own expedition points)
+      // while the character is there.
+      enabled: false,
+      // Food cannot be eaten there and falling to 0 HP offers only to leave
+      // (re-entry takes days), so fights wait for HP to regenerate to this.
+      minHpPercent: 60,
+      // Enter automatically when allowed: 'off' | 'normal' | 'medium' |
+      // 'hard'. Costs 8,000 gold; the travel is never shortened with rubies.
+      enter: 'off',
+      // Owned premium items to use per visit (never bought): Mobilisations
+      // (+3 Underworld points) once the points run out, and 100% Healing
+      // Potions once HP drops below potionBelowPercent.
+      mobilisations: 0,
+      potions: 0,
+      potionBelowPercent: 20,
+    },
 
     heal: {
       // Eat food from the inventory when HP drops below eatBelowPercent.
@@ -107,6 +140,55 @@
       // Best material quality to use: -1 Standard, 0 Ceres (green),
       // 1 Neptun (blue), 2 Mars, 3 Jupiter, 4 Olymp. Lower ones go first.
       maxQuality: 1,
+      // Whose gear the automatic repair looks after, by overview tab: d1 your
+      // character, d2 tab X, d3-d6 mercenaries I-IV. ("Repair all" works on
+      // the tab it is pressed on.)
+      dolls: { d1: true, d2: false, d3: false, d4: false, d5: false, d6: false },
+    },
+
+    smelting: {
+      // Smelt the items ticked on the packages page.
+      enabled: true,
+      // Where the resources go: 'horreum' | 'packages'.
+      storeIn: 'horreum',
+      // Also queue package items by quality and kind, without ticking them.
+      auto: false,
+      // Best quality smelted automatically: -1 Standard, 0 Ceres (green),
+      // 1 Neptun (blue), 2 Mars, 3 Jupiter, 4 Olymp.
+      autoUpTo: 0,
+      autoTypes: { weapons: true, armour: true, jewellery: false },
+    },
+
+    packages: {
+      // Tidy the packages while the bot runs.
+      enabled: false,
+      // Take the gold out of gold packages.
+      collectGold: true,
+      // Move resources into the Horreum.
+      storeResources: false,
+      // Sell gear to a merchant, up to this quality (as smelting.autoUpTo).
+      sell: false,
+      sellUpTo: -1,
+      sellTypes: { weapons: true, armour: true, jewellery: true },
+      // Packages about to expire: 'off' | 'bag' (move into the bags) | 'sell'.
+      expiring: 'bag',
+      expiringHours: 24,
+    },
+
+    auction: {
+      // Bid on healing items in the auction house.
+      enabled: false,
+      // Only lots that heal at least this many HP per gold of the bid.
+      minHpPerGold: 4,
+      // 'short' (short or very short) | 'medium' (medium or shorter) |
+      // 'any': how late in the round to bid. A losing bid keeps the gold.
+      bidWhen: 'short',
+      // Most gold to bid in one auction round.
+      maxPerRound: 10000,
+      // Never let gold drop below this.
+      keepGold: 100000,
+      // Stop bidding while the bags and packages hold this many healing items.
+      maxFood: 50,
     },
 
     quests: {
@@ -180,6 +262,14 @@
     'dungeon.location': { pattern: LOCATION },
     'dungeon.difficulty': { enum: ['normal', 'advanced'] },
     'dungeon.keepPoints': { int: true, min: 0, max: 500 },
+    'dungeon.restartAfterLosses': { int: true, min: 0, max: 20 },
+    'dungeon.gateKeysPerDay': { int: true, min: 0, max: 50 },
+    'expedition.mobilisationsPerDay': { int: true, min: 0, max: 50 },
+    'underworld.minHpPercent': { int: true, min: 10, max: 100 },
+    'underworld.enter': { enum: ['off', 'normal', 'medium', 'hard'] },
+    'underworld.mobilisations': { int: true, min: 0, max: 50 },
+    'underworld.potions': { int: true, min: 0, max: 50 },
+    'underworld.potionBelowPercent': { int: true, min: 1, max: 99 },
     'heal.eatBelowPercent': { int: true, min: 0, max: 100 },
     'heal.minHpPercent': { int: true, min: 0, max: 100 },
     'work.job': { int: true, min: 0, max: 19 },
@@ -187,6 +277,16 @@
     'training.keepGold': { int: true, min: 0, max: 2000000000 },
     'repair.belowPercent': { int: true, min: 1, max: 99 },
     'repair.allUpToPercent': { int: true, min: 1, max: 99 },
+    'smelting.storeIn': { enum: ['horreum', 'packages'] },
+    'smelting.autoUpTo': { int: true, min: -1, max: 4 },
+    'packages.sellUpTo': { int: true, min: -1, max: 4 },
+    'packages.expiring': { enum: ['off', 'bag', 'sell'] },
+    'packages.expiringHours': { int: true, min: 1, max: 168 },
+    'auction.minHpPerGold': { min: 0.1, max: 1000 },
+    'auction.bidWhen': { enum: ['short', 'medium', 'any'] },
+    'auction.maxPerRound': { int: true, min: 0, max: 2000000000 },
+    'auction.keepGold': { int: true, min: 0, max: 2000000000 },
+    'auction.maxFood': { int: true, min: 1, max: 500 },
     'repair.maxQuality': { int: true, min: -1, max: 4 },
     'schedule.start': { pattern: TIME },
     'schedule.end': { pattern: TIME },
@@ -288,25 +388,77 @@
 
   const normalize = (raw) => sanitizeSettings(migrateSettings(raw) || {});
 
+  // Every game server keeps its own settings under "settings:<host>". The
+  // plain "settings" key holds the settings saved last (with the bot stopped):
+  // a server the bot has not seen yet starts from those.
   const STORAGE_KEY = 'settings';
+  const SERVER_PREFIX = 'settings:';
+  const SPLIT_FLAG = 'settingsPerServer';
+  const settingsKey = (host) => (host ? SERVER_PREFIX + host : STORAGE_KEY);
 
   function storageArea() {
     const api = root.browser || root.chrome;
     return api && api.storage && api.storage.local;
   }
 
-  async function loadSettings() {
+  // Picks a server's settings out of a storage snapshot.
+  const pickSettings = (data, host) => normalize(data[settingsKey(host)] !== undefined ? data[settingsKey(host)] : data[STORAGE_KEY]);
+
+  async function loadSettings(host) {
     const area = storageArea();
     if (!area) return normalize({});
-    const data = await area.get(STORAGE_KEY);
-    return normalize(data[STORAGE_KEY]);
+    return pickSettings(await area.get([settingsKey(host), STORAGE_KEY]), host);
   }
 
-  async function saveSettings(settings) {
+  async function saveSettings(settings, host) {
     const clean = sanitizeSettings(settings);
-    await storageArea().set({ [STORAGE_KEY]: clean });
-    return clean;
+    const template = { ...clean, enabled: false };
+    await storageArea().set(host ? { [settingsKey(host)]: clean, [STORAGE_KEY]: template } : { [STORAGE_KEY]: template });
+    return host ? clean : template;
   }
+
+  // Older versions shared one settings object between all servers: give every
+  // server the bot has played on its own copy, once.
+  async function splitSettings() {
+    const area = storageArea();
+    const all = await area.get(null);
+    if (all[SPLIT_FLAG]) return false;
+    const writes = { [SPLIT_FLAG]: true };
+    const shared = all[STORAGE_KEY];
+    if (shared !== undefined) {
+      for (const host of serversIn(all)) {
+        if (all[settingsKey(host)] === undefined) writes[settingsKey(host)] = shared;
+      }
+      writes[STORAGE_KEY] = { ...shared, enabled: false };
+    }
+    await area.set(writes);
+    return true;
+  }
+
+  // Hosts with stored memory or settings, most recently played first.
+  function serversIn(all) {
+    const hosts = new Set();
+    for (const key of Object.keys(all)) {
+      if (key.startsWith('memory:')) hosts.add(key.slice(7));
+      else if (key.startsWith(SERVER_PREFIX)) hosts.add(key.slice(SERVER_PREFIX.length));
+    }
+    const playedAt = (host) => {
+      const m = all[`memory:${host}`];
+      return (m && m.gameInfo && m.gameInfo.updatedAt) || 0;
+    };
+    return Array.from(hosts).sort((a, b) => playedAt(b) - playedAt(a));
+  }
+
+  async function listServers() {
+    const area = storageArea();
+    return area ? serversIn(await area.get(null)) : [];
+  }
+
+  // "s303-en.gladiatus.gameforge.com" -> "Server 303 (EN)".
+  const serverName = (host) => {
+    const m = String(host).match(/^s(\d+)-(\w+)\./);
+    return m ? `Server ${m[1]} (${m[2].toUpperCase()})` : host;
+  };
 
   GBot.settings = {
     SETTINGS_VERSION,
@@ -316,6 +468,13 @@
     QUEST_TYPES,
     TRAINING_STATS,
     STORAGE_KEY,
+    SERVER_PREFIX,
+    settingsKey,
+    pickSettings,
+    splitSettings,
+    serversIn,
+    listServers,
+    serverName,
     getPath,
     setPath,
     mergeSettings,

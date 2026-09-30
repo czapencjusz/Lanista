@@ -40,6 +40,17 @@
   // ---------------------------------------------------------------- dialogs
 
   async function dialog(ctx, decision) {
+    if (ctx.state.underworld && decision.dialog === 'notification') {
+      // In the Underworld a dialog may offer to leave it (after falling to
+      // 0 HP): only ever close it.
+      const close = $(SEL.underworld.closeDialog);
+      if (!close || !isVisible(close)) {
+        ctx.notify('activityPaused', 'GBot: a dialog in the Underworld needs your answer; the bot will not choose for you.');
+        throw new ActionError('A dialog in the Underworld has no close button; leaving it to you');
+      }
+      await click(ctx, close, 'close the dialog');
+      return { retick: true, delayMs: 1500 };
+    }
     const selector = decision.dialog === 'loginBonus' ? SEL.dialogs.loginBonusButton : SEL.dialogs.notificationButton;
     const button = $$(selector).find(isVisible);
     if (!button) throw new ActionError(`No button found in the ${decision.dialog} dialog`);
@@ -66,6 +77,7 @@
 
   async function expedition(ctx) {
     const { state, settings } = ctx;
+    if (state.underworld) return underworldExpedition(ctx);
     const wanted = numericLocation(settings.expedition.location);
     const onPage = state.page.mod === 'location' && (wanted === null || numericLocation(state.page.loc) === wanted);
     if (!onPage) {
@@ -100,6 +112,120 @@
     throw new ActionError('Expedition attack did not open a combat report');
   }
 
+  // ------------------------------------------------------------- underworld
+
+  // The enemy whose turn it is in this Underworld area (1-based), or null.
+  function underworldEnemy() {
+    for (const script of document.querySelectorAll('script')) {
+      const m = SEL.underworld.nextEnemy.exec(script.textContent);
+      if (m) return Number(m[1]);
+    }
+    return null;
+  }
+
+  // The Underworld's areas and enemies unlock one after another: fight the
+  // newest area (last in the location menu) and the enemy whose turn it is.
+  // The stakes slider stays at its default, and an attack is only made while
+  // expedition points pay for it (without them it would cost rubies).
+  async function underworldExpedition(ctx) {
+    const { state } = ctx;
+    const target = lastLocationLink();
+    if (!target) throw new ActionError('Cannot find the Underworld area in the menu');
+    const wanted = numericLocation(new URL(target).searchParams.get('loc'));
+    const onPage = state.page.mod === 'location' && numericLocation(state.page.loc) === wanted && $(SEL.underworld.enemies);
+    if (!onPage) return ctx.navigate(target, 'Underworld area');
+
+    const buttons = $$(SEL.expedition.attackButtons, $(SEL.underworld.enemies));
+    const next = underworldEnemy();
+    const button = next ? buttons[next - 1] : null;
+    if (!button) throw new ActionError(`Cannot tell which Underworld enemy is next (${next === null ? 'not on the page' : `#${next} of ${buttons.length}`})`);
+    if (button.disabled || button.classList.contains(SEL.expedition.disabledClass)) {
+      throw new ActionError(`Underworld enemy #${next} cannot be attacked right now`);
+    }
+    const box = button.closest(SEL.expedition.box);
+    const paid = box && box.querySelector(SEL.underworld.pointsCost) && Number(box.dataset.points) >= Number(box.dataset.costs || 1);
+    if (!(state.expedition.points > 0) || !paid) {
+      throw new ActionError('Out of Underworld expedition points (attacks would cost rubies)');
+    }
+    const name = ((box.querySelector('.expedition_name') || {}).textContent || '').trim();
+    await click(ctx, button, `attack Underworld enemy ${name || `#${next}`}`);
+    if (await expectNavigation(ctx)) return { navigated: true };
+    throw new ActionError('Underworld attack did not open a combat report');
+  }
+
+  const ITEM_LABELS = { mobilisation: 'Mobilisation', gateKey: 'Gate Key', healingPotion: '100% Healing Potion' };
+
+  // Uses one owned premium item (Mobilisation, Gate Key or 100% Healing
+  // Potion) with its "Activate" button in the premium inventory. Nothing is
+  // ever bought: without an Activate button (none owned, or none usable
+  // right now) the bot stops asking until the next visit or day.
+  async function premium(ctx, decision) {
+    const { state, memory, settings } = ctx;
+    const page = PAGES.premiumInventory();
+    const label = ITEM_LABELS[decision.item];
+    const key = brain.ITEM_KEYS[decision.item];
+    if (state.page.mod !== page.mod || state.page.submod !== page.submod) return ctx.navigate(ctx.url(page), `the premium inventory (${label})`);
+
+    // The counts: per Underworld visit inside it, per day outside.
+    const used = brain.itemsUsed(state, memory, ctx.now());
+    if (state.underworld) memory.underworldRun = used;
+    else memory.itemsToday = used;
+    const where = state.underworld ? 'Underworld' : 'Items';
+    const feature = SEL.premium[decision.item];
+    const button = $$(SEL.premium.activate).find((b) => {
+      const m = SEL.premium.feature.exec(b.getAttribute('onclick') || b.getAttribute('href') || '');
+      return m && Number(m[1]) === feature;
+    });
+    if (!button) {
+      used[key] = Math.max(used[key] || 0, brain.itemLimit(decision.item, settings, state.underworld));
+      ctx.log('warn', `${where}: no ${label} to use (none owned, or none usable now)`);
+      return { refresh: true };
+    }
+    const holder = button.closest(SEL.premium.box);
+    const count = parseNumber(((holder && holder.parentElement.querySelector(SEL.premium.count)) || {}).textContent);
+    used[key] = (used[key] || 0) + 1;
+    ctx.log('info', `${where}: using a ${label}${count !== null ? ` (${count - 1} left)` : ''}`);
+    await ctx.persist();
+    await click(ctx, button, `activate ${label}`);
+    if (await expectNavigation(ctx)) return { navigated: true };
+    throw new ActionError(`Activating the ${label} did not reload the page`);
+  }
+
+  // Enters the Underworld at the chosen difficulty on the Hermit's page.
+  // The travel afterwards is waited out (never shortened with rubies, never
+  // turned back).
+  async function underworld(ctx) {
+    const { state, settings, memory } = ctx;
+    const page = PAGES.underworldEntry();
+    if (state.page.mod !== page.mod || state.page.submod !== page.submod) return ctx.navigate(ctx.url(page), 'the Hermit');
+    const difficulty = settings.underworld.enter;
+    const label = { normal: 'Normal', medium: 'Middle', hard: 'Hard' }[difficulty];
+    const button = $(SEL.underworld.enter[difficulty]);
+    if (!button) {
+      // No entry form: still in the cooldown after the last visit.
+      memory.nextUnderworldCheck = ctx.now() + 6 * 3600 * 1000;
+      ctx.log('info', 'Underworld: it cannot be entered yet; looking again in 6 hours');
+      return { refresh: true };
+    }
+    if (button.disabled || button.classList.contains('disabled')) {
+      memory.nextUnderworldCheck = ctx.now() + 24 * 3600 * 1000;
+      ctx.log('warn', `Underworld: ${label} is not unlocked yet (beat Dīs Pater on the level before); change it under Settings > Underworld`);
+      return { refresh: true };
+    }
+    if (state.gold !== null && state.gold < brain.UNDERWORLD_COST) {
+      memory.nextUnderworldCheck = ctx.now() + 3600 * 1000;
+      ctx.log('info', 'Underworld: not enough gold for the journey (8,000)');
+      return { refresh: true };
+    }
+    // If the click does not go through, try again in an hour, not at once.
+    memory.nextUnderworldCheck = ctx.now() + 3600 * 1000;
+    ctx.log('info', `Underworld: entering on ${label} (8,000 gold)`);
+    await ctx.persist();
+    await click(ctx, button, `enter the Underworld (${label})`);
+    if (await expectNavigation(ctx)) return { navigated: true };
+    throw new ActionError('Entering the Underworld did not reload the page');
+  }
+
   // ---------------------------------------------------------------- dungeon
 
   function dungeonEnemies() {
@@ -124,28 +250,81 @@
       return ctx.navigate(target, 'dungeon');
     }
 
-    const enemies = dungeonEnemies();
-    if (enemies.length) {
-      await click(ctx, enemies[0], 'attack dungeon enemy');
+    // Still in the cooldown: the page offers to skip it for a ruby. Never
+    // click anything here; the overview shows the real time left.
+    if ($(SEL.dungeon.skipCooldown)) {
+      ctx.log('debug', 'Dungeon: the cooldown is not over yet');
+      return { refresh: true };
+    }
+
+    const targets = dungeonTargets();
+    if (targets.length) {
+      const choice = brain.dungeonChoice(targets, settings.dungeon, ctx.memory);
+      if (choice.cancel) return cancelDungeon(ctx, choice.cancel);
+      const target = targets.find((t) => t.position === choice.position);
+      await click(ctx, target.el, `attack dungeon enemy #${target.position}${target.boss ? ' (boss)' : ''}`);
       if (await expectNavigation(ctx)) return { navigated: true };
       throw new ActionError('Dungeon attack did not open a combat report');
     }
 
     // No dungeon in progress: start one.
-    const advanced = settings.dungeon.difficulty === 'advanced';
-    let start = $(advanced ? SEL.dungeon.startAdvanced : SEL.dungeon.startNormal);
-    if (!start) {
-      // Normal + Advanced. A lone button is "Cancel dungeon": never click it.
+    const startButton = (sel) => {
+      const el = $(sel);
+      return el && !el.disabled && !el.classList.contains(SEL.dungeon.disabledClass) ? el : null;
+    };
+    let advanced = settings.dungeon.difficulty === 'advanced';
+    let start = startButton(advanced ? SEL.dungeon.startAdvanced : SEL.dungeon.startNormal);
+    if (!start && advanced && startButton(SEL.dungeon.startNormal)) {
+      // Advanced unlocks after Normal has been finished at this location.
+      ctx.log('info', 'Dungeon: Advanced is not unlocked here yet, starting Normal');
+      advanced = false;
+      start = startButton(SEL.dungeon.startNormal);
+    }
+    if (!start && !$(SEL.dungeon.startNormal)) {
+      // Normal + Advanced without their names. Never "Cancel dungeon", nor
+      // the ruby cooldown skip (both excluded by the selector).
       const buttons = $$(SEL.dungeon.startFallback);
       if (buttons.length >= 2) start = buttons[advanced ? 1 : 0];
     }
-    if (!start) throw new ActionError('No dungeon enemies and no start button found');
-    if (start.disabled || start.classList.contains(SEL.dungeon.disabledClass)) {
-      throw new ActionError(`The ${advanced ? 'advanced' : 'normal'} dungeon here is not unlocked`);
-    }
+    if (!start) throw new ActionError(`No dungeon enemies and no ${advanced ? 'advanced' : 'normal'} start button (not unlocked?)`);
     await click(ctx, start, `start ${advanced ? 'advanced' : 'normal'} dungeon`);
     if (await expectNavigation(ctx)) return { navigated: true };
     throw new ActionError('Starting the dungeon did not reload the page');
+  }
+
+  // Enemies on the dungeon map by position ({ position, el, boss }), in
+  // page order. Each position has an image-map area, an icon and sometimes
+  // a label; the boss's label is a word ("Boss"), a group's is "1/3".
+  function dungeonTargets() {
+    const targets = [];
+    for (const el of dungeonEnemies()) {
+      const m = /startFight\(\s*['"]?(\d+)/.exec(el.getAttribute('onclick') || '');
+      if (!m) continue;
+      const position = Number(m[1]);
+      let target = targets.find((t) => t.position === position);
+      if (!target) targets.push((target = { position, el, boss: false }));
+      if (el.matches(SEL.dungeon.label) && !/^\s*\d+\s*\/\s*\d+\s*$/.test(el.textContent)) target.boss = true;
+    }
+    return targets;
+  }
+
+  async function cancelDungeon(ctx, why) {
+    const button = $(SEL.dungeon.cancel);
+    if (!button) throw new ActionError('No "Cancel dungeon" button found');
+    ctx.log('info', `Dungeon: ${why}, cancelling it to start a new one`);
+    ctx.memory.dungeonLosses = 0;
+    await ctx.persist();
+    await click(ctx, button, 'cancel dungeon');
+    const outcome = await waitFor(() => (ctx.isUnloading() ? 'navigated' : visibleConfirmDialog() ? 'confirm' : null), 8000, 150);
+    if (outcome === 'navigated') return { navigated: true };
+    if (outcome === 'confirm') {
+      const buttons = $$(SEL.dialogs.confirmButton, visibleConfirmDialog()).filter(isVisible);
+      if (buttons.length) {
+        await click(ctx, buttons[0], 'confirm cancelling the dungeon');
+        if (await expectNavigation(ctx)) return { navigated: true };
+      }
+    }
+    throw new ActionError('Cancelling the dungeon did not reload the page');
   }
 
   // --------------------------------------------------------- arena / circus
@@ -185,7 +364,8 @@
     const avoided = brain.avoidedNames(ctx.memory, type, ctx.now());
     const allowed = brain.filterOpponents(opponents, settings[type], state.level, avoided);
     if (!allowed.length) throw new ActionError(`None of the ${opponents.length} ${type} opponents match your filters`);
-    const order = brain.pickOpponents(allowed, settings[type].target);
+    let order = brain.pickOpponents(allowed, settings[type].target);
+    if (settings[type].preferBeaten) order = brain.preferBeaten(order, ctx.memory.beaten[type], ctx.now());
     for (const opponent of order.slice(0, 3)) {
       // Remembered so the combat report can be tied to this opponent.
       if (ctx.memory.pending) Object.assign(ctx.memory.pending, { opponent: opponent.name, avoidHours: settings[type].avoidLostHours });
@@ -351,8 +531,22 @@
       await sleep(400);
     }
 
+    // Auction wins and other food arrive as packages: take one out.
+    if (GBot.auction) {
+      try {
+        const hp = GBot.state.readHp(document);
+        const taken = await GBot.auction.takeFoodFromPackages(ctx, hp.max && hp.value !== null ? hp.max - hp.value : null);
+        if (taken) {
+          ctx.log('info', `Took ${taken} from the packages to eat`);
+          return { refresh: true };
+        }
+      } catch (e) {
+        ctx.log('warn', `Could not take food from the packages: ${e.message}`);
+      }
+    }
+
     brain.markNoFood(ctx.memory, ctx.now());
-    ctx.log('warn', 'No food in the inventory; waiting for HP to regenerate (retrying food in 30 min)');
+    ctx.log('warn', 'No food in the bags or packages; waiting for HP to regenerate (retrying food in 30 min)');
     if (ctx.notify) ctx.notify('noFood', `GBot: HP is ${state.hp.percent}% and there is no food left in your bags.`);
     return { retick: true };
   }
@@ -532,6 +726,8 @@
     dialog,
     nest,
     expedition,
+    underworld,
+    premium,
     dungeon,
     arena,
     circus,
