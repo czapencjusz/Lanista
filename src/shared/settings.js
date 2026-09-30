@@ -240,7 +240,6 @@
       loggedOut: true,
       activityPaused: true,
       noFood: true,
-      freeTime: true,
     },
 
     ui: {

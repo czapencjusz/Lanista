@@ -4,7 +4,7 @@
 // page.
 //
 //   const view = GBot.ui.createSettingsUI({
-//     settings, memory, tier, compact, initialTab,
+//     settings, memory, compact, initialTab,
 //     onChange: async (settings) => savedSettings,  // persist
 //     onResetStats: async () => {}, onClearLog: async () => {},
 //     // optional, for "Copy from another server":
@@ -12,11 +12,7 @@
 //     loadServerSettings: async (host) => settings,
 //   });
 //   container.appendChild(view.element);
-//   view.update({ settings, memory, tier });  // push external changes in
-//
-// `tier` is GBot.tier.load()'s result; the Premium tab loads it itself when
-// it is not given. `premium` ({ load, activate, deactivate }) replaces
-// GBot.tier's functions of those names (the game page asks the background).
+//   view.update({ settings, memory });  // push external changes in
 (function (root) {
   'use strict';
   const GBot = (root.GBot = root.GBot || {});
@@ -37,7 +33,6 @@
     const view = {
       settings: S.sanitizeSettings(opts.settings || {}),
       memory: opts.memory || null,
-      tier: opts.tier || null,
       tab: ui.TABS.some((t) => t.id === opts.initialTab) ? opts.initialTab : 'general',
     };
 
@@ -404,106 +399,6 @@
       return [since, cards, h('div', { class: 'gb-actions' }, reset)];
     }
 
-    // Free or Premium, today's bot time, and the Premium key.
-    function premiumPane() {
-      const T = GBot.tier;
-      const api = opts.premium || T;
-      const title = h('div', { class: 'gb-plan-name' });
-      const text = h('p', { class: 'gb-plan-text' });
-      const fill = h('span', { class: 'gb-plan-fill' });
-      const meter = h('div', { class: 'gb-plan-meter' }, fill);
-      const usage = h('p', { class: 'gb-plan-usage' });
-      const buy = T.PREMIUM_URL ? h('a', { class: 'gb-btn primary', href: T.PREMIUM_URL, target: '_blank', rel: 'noopener' }, 'Get Premium') : null;
-      const card = h('div', { class: 'gb-plan' }, title, text, meter, usage, buy ? h('div', { class: 'gb-actions' }, buy) : null);
-
-      const input = h('textarea', {
-        class: 'gb-input gb-textarea gb-mono',
-        rows: 3,
-        spellcheck: 'false',
-        placeholder: `${T.KEY_PREFIX}…`,
-        'aria-label': 'Premium key',
-      });
-      const message = h('p', { class: 'gb-help gb-import-status', role: 'status' });
-      const say = (textContent, isError) => {
-        message.textContent = textContent;
-        message.classList.toggle('error', !!isError);
-      };
-      const reload = async () => {
-        view.tier = await api.load();
-        sync();
-      };
-      const activate = h(
-        'button',
-        {
-          type: 'button',
-          class: 'gb-btn primary',
-          onclick: async () => {
-            const check = await api.activate(input.value);
-            if (!check) return say('Lanista could not be reached. Reload the page and try again.', true);
-            if (!check.ok) return say(check.error, true);
-            input.value = '';
-            say(check.license.to ? `Premium is active. Thank you, ${check.license.to}!` : 'Premium is active. Thank you!');
-            await reload();
-          },
-        },
-        'Activate'
-      );
-      const remove = h(
-        'button',
-        {
-          type: 'button',
-          class: 'gb-btn',
-          onclick: () =>
-            confirmThen(remove, 'Remove key', async () => {
-              await api.deactivate();
-              say('The Premium key was removed from this browser.');
-              await reload();
-            }),
-        },
-        'Remove key'
-      );
-      const entry = h('div', {}, input, h('div', { class: 'gb-actions' }, activate));
-      const saved = h('div', { class: 'gb-actions' }, remove);
-
-      syncers.push(() => {
-        const tier = view.tier;
-        if (!tier) return;
-        const used = T.formatDuration(tier.usedMs, Math.floor);
-        card.classList.toggle('premium', tier.premium);
-        card.classList.toggle('out', tier.exhausted);
-        entry.hidden = tier.premium;
-        saved.hidden = !tier.premium && !tier.keyError;
-        if (tier.premium) {
-          const { to, expires } = tier.license;
-          title.textContent = 'Premium';
-          text.textContent = `No time limit.${to ? ` Licensed to ${to}.` : ''} ${expires ? `Valid until ${T.formatDate(expires)}.` : 'Never expires.'}`;
-          meter.hidden = true;
-          usage.textContent = `Bot time today: ${used}.`;
-          if (buy) buy.hidden = true;
-        } else {
-          title.textContent = 'Free';
-          text.textContent = `Every feature, for ${T.allowanceText()} of bot time a day. Bot time is the time the bot is switched on and playing, on any server. It starts again from zero at midnight. Premium has no time limit.`;
-          meter.hidden = false;
-          fill.style.width = `${Math.min(100, (100 * tier.usedMs) / tier.limitMs)}%`;
-          usage.textContent = tier.exhausted
-            ? `Used up for today (${used}). The bot carries on at midnight.`
-            : `Used today: ${used}. Left: ${T.formatDuration(tier.leftMs, Math.ceil)}.`;
-          if (buy) buy.hidden = false;
-        }
-        if (tier.keyError && !message.textContent) say(`${tier.keyError} Enter a new key, or remove this one.`, true);
-      });
-      if (!view.tier) reload();
-
-      return [
-        card,
-        h('h3', {}, 'Premium key'),
-        h('p', { class: 'gb-help' }, 'Paste the key you got when you bought Premium. It is kept in this browser and works on every server.'),
-        entry,
-        saved,
-        message,
-      ];
-    }
-
     function logPane() {
       const filter = h(
         'select',
@@ -696,7 +591,6 @@
       if (tab.custom === 'stats') body = statsPane();
       else if (tab.custom === 'log') body = logPane();
       else if (tab.custom === 'profile') body = profilePane();
-      else if (tab.custom === 'premium') body = premiumPane();
       else body = tab.fields.map(renderField);
 
       pane.textContent = '';
@@ -716,10 +610,9 @@
       for (const fn of syncers) fn();
     }
 
-    function update({ settings, memory, tier } = {}) {
+    function update({ settings, memory } = {}) {
       if (settings) view.settings = S.sanitizeSettings(settings);
       if (memory !== undefined) view.memory = memory;
-      if (tier) view.tier = tier;
       sync();
     }
 

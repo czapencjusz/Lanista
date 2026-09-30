@@ -23,7 +23,6 @@
     "service_worker": "src/background/background.js",
     "scripts": [
       "src/shared/settings.js",
-      "src/shared/tier.js",
       "src/background/background.js"
     ]
   },
@@ -46,7 +45,6 @@
       ],
       "js": [
         "src/shared/settings.js",
-        "src/shared/tier.js",
         "src/content/util.js",
         "src/content/selectors.js",
         "src/content/state.js",

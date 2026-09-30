@@ -4,16 +4,13 @@
 //  - watchdog: reloads the bot's tab if it stops reporting in (e.g. the page
 //    hung, or the browser froze its timers)
 //  - shows desktop notifications for problems that need the user
-//  - adds up the bot time for the free tier's daily limit, and checks Premium
-//    keys for the content scripts (tier.js)
 'use strict';
 
-// Firefox loads these from the manifest's background scripts.
-if (typeof importScripts === 'function' && !(globalThis.GBot && globalThis.GBot.settings)) importScripts('../shared/settings.js', '../shared/tier.js');
+// Firefox loads settings.js from the manifest's background scripts.
+if (typeof importScripts === 'function' && !(globalThis.GBot && globalThis.GBot.settings)) importScripts('../shared/settings.js');
 
 const ext = globalThis.browser || globalThis.chrome;
 const S = globalThis.GBot.settings;
-const T = globalThis.GBot.tier;
 
 const WATCHDOG_ALARM = 'gbot-watchdog';
 const STALE_MS = 4 * 60 * 1000;
@@ -69,8 +66,7 @@ async function claim(host, tabId) {
   if (owner && owner.tabId !== tabId && ownerAlive(owner, now) && (await tabExists(owner.tabId))) {
     return { ok: false };
   }
-  const same = owner && owner.tabId === tabId;
-  owners[host] = { tabId, at: now, nextAt: same ? owner.nextAt : null, countedAt: same ? owner.countedAt : now };
+  owners[host] = { tabId, at: now, nextAt: owner && owner.tabId === tabId ? owner.nextAt : null };
   await setOwners(owners);
   return { ok: true };
 }
@@ -81,8 +77,7 @@ async function heartbeat(host, tabId, nextAt, enabled) {
   if (!enabled) {
     if (owner && owner.tabId === tabId) delete owners[host];
   } else if (!owner || owner.tabId === tabId) {
-    const now = Date.now();
-    owners[host] = { tabId, at: now, nextAt, countedAt: owner ? owner.countedAt : now };
+    owners[host] = { tabId, at: Date.now(), nextAt };
   }
   await setOwners(owners);
 }
@@ -106,31 +101,6 @@ async function alert(kind, message, host) {
   const settings = await S.loadSettings(host);
   if (kind && settings.notifications[kind] === false) return;
   await notify(message);
-}
-
-// Free tier: adds the time since the last count for every tab that runs the
-// bot, and says so once when today's free bot time runs out.
-async function countUsage() {
-  const running = new Set();
-  for (const host of Object.keys(await getOwners())) if (await hostEnabled(host)) running.add(host);
-  const owners = await getOwners();
-  const now = Date.now();
-  let ms = 0;
-  for (const [host, owner] of Object.entries(owners)) {
-    if (running.has(host) && ownerAlive(owner, now)) ms += T.step(owner.countedAt, now);
-    owner.countedAt = now;
-  }
-  if (!Object.keys(owners).length) return;
-  await setOwners(owners);
-  if (!ms) return;
-  const before = (await ext.storage.local.get(T.USAGE_KEY))[T.USAGE_KEY];
-  const usage = T.addUsage(before, ms, now);
-  await ext.storage.local.set({ [T.USAGE_KEY]: usage });
-  const tier = await T.load(now);
-  if (!tier.premium && T.usedToday(before, now) < tier.limitMs && usage.ms >= tier.limitMs) {
-    const [host] = running;
-    await alert('freeTime', `Today's ${T.allowanceText()} of free bot time are used up. Lanista carries on at midnight, or right away with Premium.`, host);
-  }
 }
 
 async function watchdog() {
@@ -175,9 +145,6 @@ ext.runtime.onMessage.addListener((message, sender, sendResponse) => {
   else if (message.type === 'heartbeat' && tabId !== undefined) {
     work = heartbeat(message.host, tabId, message.nextAt, message.enabled).then(() => ({ ok: true }));
   } else if (message.type === 'alert') work = alert(message.kind, message.message, message.host).then(() => ({ ok: true }));
-  else if (message.type === 'tier') work = T.load();
-  else if (message.type === 'activate') work = T.activate(String(message.key || ''));
-  else if (message.type === 'deactivate') work = T.deactivate().then(() => ({ ok: true }));
   else return false;
   work.then(sendResponse, (e) => sendResponse({ ok: true, error: String(e) }));
   return true; // async response
@@ -200,10 +167,7 @@ ext.storage.onChanged.addListener((changes, area) => {
 });
 
 ext.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name !== WATCHDOG_ALARM) return;
-  countUsage()
-    .catch((e) => console.warn('[Lanista] could not count the bot time', e))
-    .then(watchdog);
+  if (alarm.name === WATCHDOG_ALARM) watchdog();
 });
 
 let splitting = null;

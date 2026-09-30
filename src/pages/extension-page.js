@@ -6,7 +6,6 @@
   const GBot = root.GBot;
   const ext = root.browser || root.chrome;
   const S = GBot.settings;
-  const T = GBot.tier;
   const { h, icon } = GBot.ui;
 
   const GAME_ORIGINS = ['https://*.gladiatus.gameforge.com/*'];
@@ -36,7 +35,6 @@
     let host = (await activeGameHost()) || servers[0] || null;
     let settings = await S.loadSettings(host);
     let memory = null;
-    let tier = await T.load();
 
     const loadMemory = async () => {
       if (!host) return null;
@@ -120,7 +118,6 @@
     const view = GBot.ui.createSettingsUI({
       settings,
       memory,
-      tier,
       compact,
       onChange: async (next) => {
         settings = await S.saveSettings(next, host);
@@ -149,9 +146,8 @@
       toggleIcon.replaceChildren(icon(settings.enabled ? 'pause' : 'play', 14));
       toggle.classList.toggle('running', settings.enabled);
       const lastLog = memory && memory.log.length ? memory.log[memory.log.length - 1] : null;
-      const plan = tier.premium ? 'Premium' : tier.exhausted ? 'free time used up' : `${T.formatDuration(tier.leftMs, Math.ceil)} free time left`;
-      if (!host) subtitle.textContent = `Open a Gladiatus game tab to start · ${plan}`;
-      else subtitle.textContent = `${serverName(host)} · ${settings.enabled ? 'running' : 'paused'} · ${plan}${lastLog ? ` · ${lastLog.message}` : ''}`;
+      if (!host) subtitle.textContent = 'Open a Gladiatus game tab to start.';
+      else subtitle.textContent = `${serverName(host)} · ${settings.enabled ? 'running' : 'paused'}${lastLog ? ` · ${lastLog.message}` : ''}`;
     }
 
     async function checkPermission() {
@@ -170,13 +166,6 @@
           if (host !== shown) return;
           settings = next;
           view.update({ settings });
-          render();
-        });
-      }
-      if (changes[T.USAGE_KEY] || changes[T.LICENSE_KEY]) {
-        T.load().then((next) => {
-          tier = next;
-          view.update({ tier });
           render();
         });
       }

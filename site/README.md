@@ -20,10 +20,6 @@ dist/site/fonts/            Marcellus and Alegreya Sans (SIL Open Font License)
 
 It also writes `dist/lanista-site.zip`, the same files in one archive.
 
-The *Free and Premium* section takes the daily allowance and the **Get Premium** link from
-`src/shared/tier.js` (`FREE_MINUTES_PER_DAY`, `PREMIUM_URL`). While `PREMIUM_URL` is empty it says
-Premium keys will be on sale soon. See [docs/premium.md](../docs/premium.md).
-
 The page loads nothing from other websites: no web fonts service, no analytics. Its icons are
 the extension's own (`{{ICON:name}}` in `site/index.html` is replaced with the SVG from
 `src/ui/dom.js`), and `site/img/statistics.png` is the extension's Statistics tab with example

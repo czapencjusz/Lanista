@@ -479,7 +479,6 @@
         { path: 'notifications.loggedOut', type: 'toggle', label: 'Logged out / game tab left the game' },
         { path: 'notifications.activityPaused', type: 'toggle', label: 'An activity was paused after repeated failures' },
         { path: 'notifications.noFood', type: 'toggle', label: 'HP is low and there is no food left' },
-        { path: 'notifications.freeTime', type: 'toggle', label: "Today's free bot time is used up" },
       ],
     },
     {
@@ -504,7 +503,6 @@
     { id: 'stats', title: 'Statistics', icon: 'stats', custom: 'stats', description: 'What the bot has done on this server.' },
     { id: 'log', title: 'Log', icon: 'log', custom: 'log', description: 'Recent bot activity on this server.' },
     { id: 'profile', title: 'Backup', icon: 'profile', custom: 'profile', description: 'Every server keeps its own settings. Copy them from another server, export them to a file, import them on another browser, or reset them.' },
-    { id: 'premium', title: 'Premium', icon: 'premium', custom: 'premium', description: 'Your plan and your Premium key.' },
   ];
 
   // Labels/icons for the priority list and the control bar tiles.

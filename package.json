@@ -11,8 +11,7 @@
     "icons": "node scripts/make-icons.mjs",
     "build": "node scripts/build.mjs",
     "site": "node scripts/build-site.mjs",
-    "screenshots": "node scripts/screenshots.mjs",
-    "license": "node scripts/license.mjs"
+    "screenshots": "node scripts/screenshots.mjs"
   },
   "devDependencies": {
     "jquery": "3.7.1",

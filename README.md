@@ -181,7 +181,6 @@ what is enabled. Changes save as you make them and take effect immediately.
 | Statistics | Fights per activity with wins, losses and win rate; meals, nests, quests, work shifts, stats trained, items repaired, items smelted, items sold, auction bids; gold looted, experience, honour and fame; gold from sales and gold packages; gold change; per-hour rates; reset |
 | Log | Recent activity, filter to warnings only, clear |
 | Backup | Copy from another server, export to a file or the clipboard, import, reset to defaults |
-| Premium | Free or Premium, today's bot time, and the Premium key |
 
 ### Toolbar popup and options page
 
@@ -226,18 +225,6 @@ npm run build        # -> dist/lanista-chrome.zip and dist/lanista-firefox.zip
 Keep the game tab open (it can be in the background). The bot never logs in for you: if the session
 expires, log in again and it carries on. Settings from older versions are migrated automatically:
 version 1 kept one set for all servers, and 2.0 gives each server you played on its own copy.
-
-## Free and Premium
-
-* **Free:** every feature, for 2 hours of bot time a day. Bot time is the time the bot is
-  switched on and playing in a game tab (waiting out cooldowns included), on any server; two servers
-  at once count twice. It starts again from zero at midnight. When it runs out, the bot waits until
-  midnight and carries on by itself. The control bar shows the time left.
-* **Premium:** no time limit. Paste the Premium key in the settings' **Premium** tab and press
-  **Activate**. The key is checked in the browser, without going online, and works on every server.
-
-The daily allowance, the "Get Premium" link and the key check are set in `src/shared/tier.js`.
-Making and selling keys is described in [docs/premium.md](docs/premium.md).
 
 ## How it works
 

@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Lanista for Gladiatus</title>
-<meta name="description" content="Lanista is a browser extension that plays Gladiatus for you: expeditions, dungeons, the arena, the Underworld, healing, repairs, smelting and more, at a human pace. Free for {{FREE_ALLOWANCE}} a day.">
+<meta name="description" content="Lanista is a free browser extension that plays Gladiatus for you: expeditions, dungeons, the arena, the Underworld, healing, repairs, smelting and more, at a human pace.">
 <meta property="og:title" content="Lanista for Gladiatus">
-<meta property="og:description" content="Let Lanista play Gladiatus for you. For Chrome, Edge, Brave, Opera and Firefox, free for {{FREE_ALLOWANCE}} a day.">
+<meta property="og:description" content="Let Lanista play Gladiatus for you. Free for Chrome, Edge, Brave, Opera and Firefox.">
 <meta name="theme-color" content="#110b07">
 <link rel="icon" type="image/png" href="img/icon.png">
 <style>
@@ -212,20 +212,6 @@ section { padding-block: 96px; }
 .warning .ic { color: var(--ember); margin-top: 3px; }
 .warning strong { color: #ffb4a3; }
 
-/* ------------------------------------------------------------ premium */
-.plans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; max-width: 940px; }
-.plan { display: grid; gap: 18px; align-content: start; padding: 32px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); }
-.plan.premium {
-  border-color: var(--gold-2); background: linear-gradient(180deg, #2e1f10, var(--card));
-  box-shadow: 0 0 0 1px rgba(232, 196, 108, 0.18), 0 24px 70px rgba(232, 180, 80, 0.08);
-}
-.plan-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.plan h3 { font-size: 1.9rem; }
-.plan .ic { width: 30px; height: 30px; color: var(--gold); }
-.plan-sum { font: 700 1.15rem/1.4 var(--body); color: var(--gold); }
-.plan .btn { justify-self: start; }
-.plan .soon { color: var(--muted); font-style: italic; }
-
 /* ------------------------------------------------------------ install */
 .install { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .browser { display: grid; gap: 18px; align-content: start; padding: 30px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); }
@@ -288,8 +274,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
   .wrap { padding-inline: 18px; }
   section { padding-block: 64px; }
   .hero { padding-block: 44px 60px; }
-  .steps, .cards, .cards.four, .careful, .install, .trust, .plans { grid-template-columns: minmax(0, 1fr); }
-  .plan { padding: 26px 22px; }
+  .steps, .cards, .cards.four, .careful, .install, .trust { grid-template-columns: minmax(0, 1fr); }
   .group-title { display: grid; gap: 4px; }
   .stage-bar { width: 52%; }
   .browser { padding: 22px; }
@@ -306,7 +291,6 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     <nav class="nav" aria-label="Sections">
       <a href="#features">Features</a>
       <a href="#how">How it works</a>
-      <a href="#premium">Premium</a>
       <a href="#install">Install</a>
       <a href="#faq">FAQ</a>
     </nav>
@@ -325,7 +309,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
           <a class="btn btn-gold" href="downloads/lanista-chrome.zip">{{ICON:profile}}<span>Download for Chrome<small>Also Edge, Brave and Opera · {{CHROME_SIZE}}</small></span></a>
           <a class="btn btn-line" href="downloads/lanista-firefox.zip">{{ICON:profile}}<span>Download for Firefox<small>Firefox 121 or newer · {{FIREFOX_SIZE}}</small></span></a>
         </div>
-        <p class="fine">Free for {{FREE_ALLOWANCE}} of play a day, <a href="#premium">Premium</a> for no limit. <a href="#install">How to install it</a></p>
+        <p class="fine">Free and open source. <a href="#install">How to install it</a></p>
       </div>
       <div class="stage">
         <img class="stage-window" src="img/settings-window.png" alt="The Lanista settings window, with a tab for every activity" width="864" height="624">
@@ -560,45 +544,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     </div>
   </section>
 
-  <section id="premium" class="alt">
-    <div class="wrap">
-      <div class="head">
-        <span class="eyebrow">Free and Premium</span>
-        <h2>Try everything for free</h2>
-        <p>The free version has every feature. The only difference is how long Lanista plays each day.</p>
-      </div>
-      <div class="plans">
-        <div class="plan">
-          <div class="plan-head"><h3>Free</h3>{{ICON:play}}</div>
-          <p class="plan-sum">{{FREE_ALLOWANCE}} of play a day</p>
-          <ul class="ticks">
-            <li><b>Every feature</b>, from expeditions to auctions</li>
-            <li>Counts only the time Lanista is switched on and playing</li>
-            <li>Starts again from zero at midnight</li>
-            <li>No account, nothing to sign up for</li>
-          </ul>
-          <a class="btn btn-line" href="#install">{{ICON:profile}}<span>Download</span></a>
-        </div>
-        <div class="plan premium">
-          <div class="plan-head"><h3>Premium</h3>{{ICON:premium}}</div>
-          <p class="plan-sum">No time limit</p>
-          <ul class="ticks">
-            <li><b>Plays all day</b>, for as long as the tab is open</li>
-            <li>One key for every server you play on</li>
-            <li>Paste the key in the Premium tab and you're done</li>
-            <li>Checked in your browser: no account, nothing sent anywhere</li>
-          </ul>
-<!-- if PREMIUM_URL -->
-          <a class="btn btn-gold" href="{{PREMIUM_URL}}" target="_blank" rel="noopener">{{ICON:premium}}<span>Get Premium</span></a>
-<!-- else -->
-          <p class="soon">Premium keys will be on sale soon.</p>
-<!-- end -->
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section id="install">
+  <section id="install" class="alt">
     <div class="wrap">
       <div class="head">
         <span class="eyebrow">Install</span>
@@ -632,7 +578,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     </div>
   </section>
 
-  <section id="faq" class="alt">
+  <section id="faq">
     <div class="wrap faq-grid">
       <div>
         <div class="head">
@@ -653,14 +599,6 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
         <details open>
           <summary>Can my account get banned?</summary>
           <p>Yes, it's possible. Bots break Gladiatus' rules, and Lanista can't promise it will never be noticed. Only use it if you accept that risk.</p>
-        </details>
-        <details>
-          <summary>What counts toward the free {{FREE_ALLOWANCE}}?</summary>
-          <p>Only the time Lanista is switched on and playing in a game tab, including waiting out cooldowns. Time with the bot stopped doesn't count. With two servers running at once, both count. When the time is used up, Lanista waits until midnight and carries on by itself.</p>
-        </details>
-        <details>
-          <summary>How do I switch on Premium?</summary>
-          <p>Open Lanista's settings, go to the <b>Premium</b> tab, paste your key and press <b>Activate</b>. The key works on every server in that browser, and Lanista checks it without going online.</p>
         </details>
         <details>
           <summary>Does it need my password?</summary>
@@ -690,10 +628,10 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     </div>
   </section>
 
-  <section class="final">
+  <section class="final alt">
     <div class="wrap">
       <h2>Ready to let Lanista fight for you?</h2>
-      <p>For Chrome, Edge, Brave, Opera and Firefox. Free for {{FREE_ALLOWANCE}} a day.</p>
+      <p>Free for Chrome, Edge, Brave, Opera and Firefox.</p>
       <div class="cta-row">
         <a class="btn btn-gold" href="downloads/lanista-chrome.zip">{{ICON:profile}}<span>Download for Chrome<small>{{CHROME_SIZE}}</small></span></a>
         <a class="btn btn-line" href="downloads/lanista-firefox.zip">{{ICON:profile}}<span>Download for Firefox<small>{{FIREFOX_SIZE}}</small></span></a>

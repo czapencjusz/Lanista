@@ -3,22 +3,17 @@
 //
 // Requires a Chromium binary: set CHROMIUM_PATH, or have Playwright's browsers
 // installed (PLAYWRIGHT_BROWSERS_PATH / ~/.cache/ms-playwright).
-//
-// The extension runs from a copy whose Premium public key is a test key pair's,
-// so the tests can make Premium keys.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { webcrypto } = require('node:crypto');
 const { chromium } = require('playwright-core');
 const { MockGame, ORIGIN, GAME, SH } = require('./mock-game');
 const { sanitizeSettings } = require('../../src/shared/settings.js');
-const T = require('../../src/shared/tier.js');
 
-const SOURCE = path.resolve(__dirname, '../..');
+const EXTENSION = path.resolve(__dirname, '../..');
 const HOST = new URL(ORIGIN).host;
 // The mock server's own settings.
 const SETTINGS = `settings:${HOST}`;
@@ -44,7 +39,6 @@ const FAST = { timing: { minClickDelay: 0.05, maxClickDelay: 0.15, maxIdle: 30 }
 let context;
 let worker;
 let page;
-let signKey;
 const game = new MockGame();
 const pageErrors = [];
 
@@ -86,17 +80,6 @@ async function scenario(gameState, settings) {
 
 test.describe('Lanista extension against a mock Gladiatus server', { skip: !executablePath && 'no Chromium binary found' }, () => {
   test.before(async () => {
-    const pair = await webcrypto.subtle.generateKey(T.KEY_ALGORITHM, true, ['sign', 'verify']);
-    const { kty, crv, x, y } = await webcrypto.subtle.exportKey('jwk', pair.publicKey);
-    signKey = async (payload) => {
-      const data = new TextEncoder().encode(JSON.stringify(payload));
-      return T.encodeKey(data, new Uint8Array(await webcrypto.subtle.sign(T.SIGN_ALGORITHM, pair.privateKey, data)));
-    };
-    const EXTENSION = fs.mkdtempSync(path.join(os.tmpdir(), 'gbot-e2e-ext-'));
-    for (const name of ['manifest.json', 'src', 'icons']) fs.cpSync(path.join(SOURCE, name), path.join(EXTENSION, name), { recursive: true });
-    const tierFile = path.join(EXTENSION, 'src', 'shared', 'tier.js');
-    fs.writeFileSync(tierFile, fs.readFileSync(tierFile, 'utf8').replace(/const PUBLIC_KEY = [^;]*;/, `const PUBLIC_KEY = ${JSON.stringify({ kty, crv, x, y })};`));
-
     const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'gbot-e2e-'));
     context = await chromium.launchPersistentContext(profile, {
       executablePath,
@@ -389,96 +372,5 @@ test.describe('Lanista extension against a mock Gladiatus server', { skip: !exec
     assert.equal((await storageGet(SETTINGS)).enabled, false);
     await options.close();
     await worker.evaluate(async (key) => chrome.storage.local.remove(key), `settings:${OTHER}`);
-  });
-
-  test('free tier: the bot stops once the day\'s bot time is used up', { timeout: 60000 }, async () => {
-    const limitMs = T.FREE_MINUTES_PER_DAY * 60000;
-    await worker.evaluate(async () => chrome.storage.local.remove(['usage', 'license']));
-    await scenario({ expPoints: 5, dunPoints: 0 }, { expedition: { enabled: true }, dungeon: { enabled: false } });
-    await waitUntil(() => game.events('expedition').length, 30000, 'first expedition');
-    const bar = page.locator('#gbot-root .gb-panel');
-    await page.waitForFunction(() => /left today/.test(document.querySelector('#gbot-root').shadowRoot.querySelector('.gb-tier').textContent));
-
-    // The background counts the playing tab's time (here 90 s, as if a minute
-    // and a half had passed), which crosses the limit. Its own once-a-minute
-    // count is paused meanwhile.
-    await waitUntil(() => worker.evaluate(async (host) => !!((await chrome.storage.session.get('owners')).owners || {})[host], HOST), 10000, 'tab owner');
-    await worker.evaluate(() => chrome.alarms.clear('gbot-watchdog'));
-    const usage = await worker.evaluate(async (limit) => {
-      const { owners } = await chrome.storage.session.get('owners');
-      for (const owner of Object.values(owners)) owner.countedAt = Date.now() - 90000;
-      await chrome.storage.session.set({ owners });
-      await chrome.storage.local.set({ usage: { day: GBot.tier.dayOf(Date.now()), ms: limit - 30000 } });
-      await countUsage();
-      return (await chrome.storage.local.get('usage')).usage;
-    }, limitMs);
-    await worker.evaluate(() => chrome.alarms.create('gbot-watchdog', { periodInMinutes: 1 }));
-    assert.ok(usage.ms >= limitMs + 55000 && usage.ms <= limitMs + 65000, `counted ${usage.ms - limitMs + 30000} ms`);
-
-    await page.waitForFunction(() => /Free bot time used up/.test(document.querySelector('#gbot-root').shadowRoot.querySelector('.gb-status').textContent));
-    assert.match(await bar.locator('.gb-next').textContent(), /midnight/);
-    assert.equal(await bar.locator('.gb-tier').getAttribute('class'), 'gb-tier out');
-    // Stays stopped even with an expedition ready, and releases the tab.
-    const fought = game.events('expedition').length;
-    game.state.cooldownUntil.expedition = 0;
-    await page.goto(`${GAME}index.php?mod=overview&sh=${SH}`);
-    await page.waitForFunction(() => /Free bot time used up/.test(document.querySelector('#gbot-root').shadowRoot.querySelector('.gb-status').textContent));
-    await page.waitForTimeout(4000);
-    assert.equal(game.events('expedition').length, fought);
-    assert.match(await bar.locator('.gb-status').textContent(), /Free bot time used up/);
-    assert.equal(await worker.evaluate(async (host) => ((await chrome.storage.session.get('owners')).owners || {})[host], HOST), undefined);
-    assert.equal((await storageGet(SETTINGS)).enabled, true, 'the bot stays switched on for tomorrow');
-  });
-
-  test('a Premium key lifts the limit and the bot carries on', { timeout: 60000 }, async () => {
-    const extensionId = new URL(worker.url()).host;
-    const popup = await context.newPage();
-    await popup.goto(`chrome-extension://${extensionId}/src/pages/popup.html`);
-    await popup.click('[data-tab="premium"]');
-    await popup.waitForSelector('.gb-plan-name');
-    assert.equal(await popup.textContent('.gb-plan-name'), 'Free');
-    assert.match(await popup.textContent('.gb-plan-usage'), /Used up for today/);
-    assert.match(await popup.textContent('#status-host'), /free time used up/);
-
-    // Activated in the game's settings window (checked by the background).
-    const bar = page.locator('#gbot-root .gb-panel');
-    await bar.locator('[data-action="premium"]').click();
-    const modal = page.locator('#gbot-root .gb-modal');
-    await modal.locator('.gb-plan-name').waitFor();
-    assert.equal(await modal.locator('.gb-plan-name').textContent(), 'Free');
-
-    // Someone else's key (or a changed one) is refused.
-    // (The last character of a key partly holds padding bits: change one
-    // further in.)
-    const real = await signKey({ v: 1, id: 'x', to: 'Eve', iat: Date.now(), exp: null });
-    const at = real.length - 10;
-    const forged = real.slice(0, at) + (real[at] === 'A' ? 'B' : 'A') + real.slice(at + 1);
-    await modal.locator('textarea[aria-label="Premium key"]').fill(forged);
-    await modal.locator('button:has-text("Activate")').click();
-    await modal.locator('.gb-import-status.error').waitFor();
-    assert.match(await modal.locator('.gb-import-status').textContent(), /not valid/);
-
-    const fought = game.events('expedition').length;
-    const key = await signKey({ v: 1, id: 'e2e', to: 'Marcus', iat: Date.now(), exp: Date.now() + 30 * 24 * 3600 * 1000 });
-    await modal.locator('textarea[aria-label="Premium key"]').fill(`${key.slice(0, 60)}\n${key.slice(60)}`);
-    await modal.locator('button:has-text("Activate")').click();
-    await page.waitForFunction(() => /Premium is active/.test(document.querySelector('#gbot-root').shadowRoot.querySelector('.gb-import-status').textContent));
-    assert.equal(await modal.locator('.gb-plan-name').textContent(), 'Premium');
-    assert.match(await modal.locator('.gb-plan-text').textContent(), /Licensed to Marcus\. Valid until/);
-    assert.equal(await storageGet('license'), key);
-    await page.keyboard.press('Escape');
-
-    // The popup shows it too.
-    await popup.waitForFunction(() => document.querySelector('.gb-plan-name').textContent === 'Premium');
-    assert.match(await popup.textContent('#status-host'), /Premium/);
-    await popup.close();
-
-    // The game tab plays again, with no limit shown.
-    await waitUntil(() => game.events('expedition').length > fought, 30000, 'expedition after activating Premium');
-    await bar.locator('.gb-badge').waitFor({ state: 'visible', timeout: 10000 });
-    await bar.locator('.gb-tier').waitFor({ state: 'hidden', timeout: 10000 });
-
-    await configure({ enabled: false });
-    await worker.evaluate(async () => chrome.storage.local.remove(['usage', 'license']));
   });
 });

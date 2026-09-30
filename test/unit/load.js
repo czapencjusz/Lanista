@@ -2,7 +2,6 @@
 // the GBot namespace.
 'use strict';
 require('../../src/shared/settings.js');
-require('../../src/shared/tier.js');
 require('../../src/content/util.js');
 require('../../src/content/selectors.js');
 require('../../src/content/state.js');
