@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "GBot - Gladiatus Autopilot",
-  "short_name": "GBot",
+  "name": "Lanista - Gladiatus Autopilot",
+  "short_name": "Lanista",
   "version": "2.0.0",
   "description": "Automates Gladiatus: expeditions, dungeons, Underworld, arena, circus, healing, quests, work, repair, smelting, packages, auctions.",
   "minimum_chrome_version": "121",
@@ -27,7 +27,7 @@
     ]
   },
   "action": {
-    "default_title": "GBot",
+    "default_title": "Lanista",
     "default_popup": "src/pages/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",

@@ -1,5 +1,5 @@
 {
-  "name": "gbot",
+  "name": "lanista",
   "version": "2.0.0",
   "private": true,
   "description": "Browser extension (Chrome + Firefox, Manifest V3) that automates Gladiatus gameplay",
@@ -10,7 +10,8 @@
     "lint": "node scripts/check-syntax.mjs",
     "icons": "node scripts/make-icons.mjs",
     "build": "node scripts/build.mjs",
-    "site": "node scripts/build-site.mjs"
+    "site": "node scripts/build-site.mjs",
+    "screenshots": "node scripts/screenshots.mjs"
   },
   "devDependencies": {
     "jquery": "3.7.1",

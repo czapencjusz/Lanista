@@ -64,10 +64,10 @@
 
   function log(level, message) {
     if (level === 'debug' && !DEBUG_LOGS) {
-      console.debug('[GBot]', message);
+      console.debug('[Lanista]', message);
       return;
     }
-    (level === 'error' ? console.error : level === 'warn' ? console.warn : console.log)('[GBot]', message);
+    (level === 'error' ? console.error : level === 'warn' ? console.warn : console.log)('[Lanista]', message);
     if (!memory) return;
     memory.log.push({ t: Date.now(), level, message });
     if (memory.log.length > LOG_LIMIT) memory.log.splice(0, memory.log.length - LOG_LIMIT);
@@ -266,7 +266,7 @@
         tick = document.createElement('input');
         tick.type = 'checkbox';
         tick.className = 'gbot-smelt-tick';
-        tick.title = 'Smelt this item (GBot)';
+        tick.title = 'Smelt this item (Lanista)';
         tick.style.cssText = 'position:absolute;top:2px;right:2px;z-index:5;margin:0;width:15px;height:15px;cursor:pointer;accent-color:#b8382b';
         tick.addEventListener('click', (e) => e.stopPropagation());
         tick.addEventListener('change', () => setSmeltQueued([el], tick.checked));
@@ -347,7 +347,7 @@
       // A repair also runs while paused; it must not run in two tabs at once.
       if ((settings.enabled || repairRunning()) && state.inGame) {
         const claim = await send({ type: 'claim', host: location.host });
-        if (claim && claim.ok === false) decision = { type: 'idle', reason: 'GBot is running in another tab', retryMs: 60000 };
+        if (claim && claim.ok === false) decision = { type: 'idle', reason: 'Lanista is running in another tab', retryMs: 60000 };
       }
 
       panel.update({ settings, memory, decision, state, status: statusFor(state) });
@@ -373,7 +373,7 @@
       if (decision.retryMs) schedule(tick, decision.retryMs);
       if (settings.enabled && !state.inGame && now - lastAlertAt > 30 * 60 * 1000) {
         lastAlertAt = now;
-        notify('loggedOut', 'GBot is enabled but this is not an in-game page. Are you logged out?');
+        notify('loggedOut', 'Lanista is enabled but this is not an in-game page. Are you logged out?');
       }
       return;
     }
@@ -391,7 +391,7 @@
       const attempt = brain.beginAttempt(memory, decision.type, now, settings, state);
       if (!attempt.ok) {
         log('warn', attempt.message);
-        notify('activityPaused', `GBot: ${attempt.message}`);
+        notify('activityPaused', `Lanista: ${attempt.message}`);
         await persist();
         schedule(tick, 1000);
         return;
@@ -507,6 +507,6 @@
 
   // Show the bar's state right away, but give the game's own scripts a moment
   // to initialise before the first tick, which may click or navigate.
-  paintNow().catch((e) => console.debug('[GBot] first paint failed', e));
+  paintNow().catch((e) => console.debug('[Lanista] first paint failed', e));
   schedule(tick, 800 + Math.random() * 1200);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

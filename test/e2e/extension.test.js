@@ -78,7 +78,7 @@ async function scenario(gameState, settings) {
   await configure({ ...settings, enabled: true });
 }
 
-test.describe('GBot extension against a mock Gladiatus server', { skip: !executablePath && 'no Chromium binary found' }, () => {
+test.describe('Lanista extension against a mock Gladiatus server', { skip: !executablePath && 'no Chromium binary found' }, () => {
   test.before(async () => {
     const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'gbot-e2e-'));
     context = await chromium.launchPersistentContext(profile, {
@@ -91,7 +91,7 @@ test.describe('GBot extension against a mock Gladiatus server', { skip: !executa
     worker = context.serviceWorkers()[0] || (await context.waitForEvent('serviceworker'));
     page = context.pages()[0] || (await context.newPage());
     page.on('console', (msg) => {
-      if (process.env.E2E_DEBUG && msg.text().includes('[GBot]')) console.log('   page:', msg.text());
+      if (process.env.E2E_DEBUG && msg.text().includes('[Lanista]')) console.log('   page:', msg.text());
     });
     page.on('pageerror', (e) => pageErrors.push(e.message));
   });

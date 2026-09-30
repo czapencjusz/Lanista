@@ -1,5 +1,5 @@
 // Builds the download page into dist/site/, ready to upload to any static
-// host, plus dist/gbot-site.zip with the same files:
+// host, plus dist/lanista-site.zip with the same files:
 //
 //   dist/site/index.html        site/index.html with version, build and sizes
 //   dist/site/downloads/*.zip   the extension packages (from scripts/build.mjs)
@@ -28,7 +28,7 @@ for (const name of ['settings-window.png', 'control-bar.png', 'docked-bar.png', 
 }
 cpSync(join(root, 'site', 'img'), join(out, 'img'), { recursive: true });
 cpSync(join(root, 'icons', 'icon128.png'), join(out, 'img', 'icon.png'));
-for (const name of ['gbot-chrome.zip', 'gbot-firefox.zip']) {
+for (const name of ['lanista-chrome.zip', 'lanista-firefox.zip']) {
   cpSync(join(root, 'dist', name), join(out, 'downloads', name));
 }
 
@@ -44,8 +44,8 @@ const values = {
   VERSION: JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8')).version,
   COMMIT: git('rev-parse', '--short', 'HEAD') || 'local',
   DATE: git('log', '-1', '--format=%cs') || new Date().toISOString().slice(0, 10),
-  CHROME_SIZE: size(join(out, 'downloads', 'gbot-chrome.zip')),
-  FIREFOX_SIZE: size(join(out, 'downloads', 'gbot-firefox.zip')),
+  CHROME_SIZE: size(join(out, 'downloads', 'lanista-chrome.zip')),
+  FIREFOX_SIZE: size(join(out, 'downloads', 'lanista-firefox.zip')),
 };
 
 // {{ICON:name}} becomes the extension's own SVG icon (src/ui/dom.js), so the
@@ -97,7 +97,7 @@ const walk = (dir) => {
 };
 walk(out);
 writeFileSync(
-  join(root, 'dist', 'gbot-site.zip'),
+  join(root, 'dist', 'lanista-site.zip'),
   zip(files.map((f) => ({ name: relative(out, f).split(sep).join('/'), data: readFileSync(f) })))
 );
-console.log(`dist/site/ (${files.length} files, version ${values.VERSION}, build ${values.COMMIT}) and dist/gbot-site.zip`);
+console.log(`dist/site/ (${files.length} files, version ${values.VERSION}, build ${values.COMMIT}) and dist/lanista-site.zip`);

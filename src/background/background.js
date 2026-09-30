@@ -87,11 +87,11 @@ async function notify(message) {
     await ext.notifications.create({
       type: 'basic',
       iconUrl: ext.runtime.getURL('icons/icon128.png'),
-      title: 'GBot',
+      title: 'Lanista',
       message,
     });
   } catch (e) {
-    console.warn('[GBot] notification failed', e);
+    console.warn('[Lanista] notification failed', e);
   }
 }
 
@@ -123,10 +123,10 @@ async function watchdog() {
       // Reloading would not help (logged out, or the user browsed away).
       delete owners[host];
       changed = true;
-      await alert('loggedOut', `The ${host} tab left the game (logged out?). GBot is waiting until you log back in.`, host);
+      await alert('loggedOut', `The ${host} tab left the game (logged out?). Lanista is waiting until you log back in.`, host);
       continue;
     }
-    console.warn(`[GBot] tab ${owner.tabId} (${host}) stopped reporting, reloading it`);
+    console.warn(`[Lanista] tab ${owner.tabId} (${host}) stopped reporting, reloading it`);
     owners[host] = { ...owner, at: now, nextAt: null };
     changed = true;
     try {
@@ -176,7 +176,7 @@ async function init() {
   // Only create the alarm once: re-creating it on every wake-up would restart
   // its period and it might never fire.
   if (!(await ext.alarms.get(WATCHDOG_ALARM))) ext.alarms.create(WATCHDOG_ALARM, { periodInMinutes: 1 });
-  splitting = splitting || S.splitSettings().catch((e) => console.warn('[GBot] could not split the settings per server', e));
+  splitting = splitting || S.splitSettings().catch((e) => console.warn('[Lanista] could not split the settings per server', e));
   await splitting;
   await updateBadge();
 }

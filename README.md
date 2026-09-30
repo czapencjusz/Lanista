@@ -1,8 +1,9 @@
-# GBot: Gladiatus Autopilot
+# Lanista: Gladiatus Autopilot
 
 A browser extension for **Chrome** (and Edge, Brave, Opera) and **Firefox** that plays
 [Gladiatus](https://gladiatus.gameforge.com) for you. It runs in your normal game tab and clicks
-through the game the way a player would. 
+through the game the way a player would. It's named after the *lanista*, who ran a gladiator school in
+ancient Rome and managed its fighters. 
 
 > **Read this first.** Gameforge's terms of service forbid bots. Using this extension can get your
 > account suspended or banned. You use it at your own risk.
@@ -125,7 +126,7 @@ You can also tailor how the bot behaves:
 * **One tab per server, with a watchdog.** Only one game tab runs the bot. If that tab hangs, it is
   reloaded.
 * **Settings per server.** Each server you play on has its own settings and its own Start/Stop,
-  so two accounts never overwrite each other's locations or budgets. A server GBot has not seen
+  so two accounts never overwrite each other's locations or budgets. A server Lanista has not seen
   before starts with a copy of the settings you saved last, with the bot stopped.
 * **Backup.** Copy the settings of another server, export them to a file, import them in another
   browser, or reset them.
@@ -202,7 +203,7 @@ the settings, Start/Stop, statistics and log shown are those of the selected ser
    For a permanent install, sign the package from `npm run build` on addons.mozilla.org.
 
 In Firefox the extension may start without access to the game website. If the popup shows
-**Grant access**, click it (or allow the site under *about:addons → GBot → Permissions*).
+**Grant access**, click it (or allow the site under *about:addons → Lanista → Permissions*).
 
 After changing or updating the files, reload the extension (the ↻ button on its card in
 `chrome://extensions`) and refresh the game tab.
@@ -211,12 +212,12 @@ After changing or updating the files, reload the extension (the ↻ button on it
 
 ```sh
 npm install
-npm run build        # -> dist/gbot-chrome.zip and dist/gbot-firefox.zip
+npm run build        # -> dist/lanista-chrome.zip and dist/lanista-firefox.zip
 ```
 
 ## Usage
 
-1. Log in to your Gladiatus server as usual. The GBot bar appears on the game page.
+1. Log in to your Gladiatus server as usual. The Lanista bar appears on the game page.
 2. Switch the activities you want on in the tiles. Fine-tune them in the settings window. Training
    and Repair are off until you switch them on in their tabs.
 3. Press **Start**.
