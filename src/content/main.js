@@ -64,10 +64,10 @@
 
   function log(level, message) {
     if (level === 'debug' && !DEBUG_LOGS) {
-      console.debug('[GBot]', message);
+      console.debug('[Lanista]', message);
       return;
     }
-    (level === 'error' ? console.error : level === 'warn' ? console.warn : console.log)('[GBot]', message);
+    (level === 'error' ? console.error : level === 'warn' ? console.warn : console.log)('[Lanista]', message);
     if (!memory) return;
     memory.log.push({ t: Date.now(), level, message });
     if (memory.log.length > LOG_LIMIT) memory.log.splice(0, memory.log.length - LOG_LIMIT);
@@ -119,7 +119,7 @@
   // "Repair all" button under the character (or the mercenary shown) on the
   // overview page.
   function renderRepairButton(state) {
-    let box = document.getElementById('gbot-repair-all');
+    let box = document.getElementById('lanista-repair-all');
     const onOverview = state && state.inGame && state.page.mod === 'overview' && !state.page.submod;
     const dollNumber = Math.min(6, Math.max(1, Number((state && state.page.doll) || 1) || 1));
     const doll = document.querySelector('#char');
@@ -129,7 +129,7 @@
     }
     if (!box) {
       box = document.createElement('div');
-      box.id = 'gbot-repair-all';
+      box.id = 'lanista-repair-all';
       box.style.cssText = 'margin:4px 0 0;text-align:center;font:11px Arial,sans-serif;color:#4a2d0d';
       const button = document.createElement('button');
       button.type = 'button';
@@ -147,14 +147,14 @@
         });
       });
       const status = document.createElement('div');
-      status.className = 'gbot-repair-status';
+      status.className = 'lanista-repair-status';
       status.style.marginTop = '2px';
       box.append(button, status);
       doll.insertAdjacentElement('afterend', box);
     }
     const button = box.querySelector('button');
     button.dataset.doll = String(dollNumber);
-    const status = box.querySelector('.gbot-repair-status');
+    const status = box.querySelector('.lanista-repair-status');
     const cutoff = settings.repair.allUpToPercent;
     const worn = GBot.workbench.readDoll(document, dollNumber).filter((i) => brain.inRepairAll(i, settings));
     const quality = ['Standard', 'Ceres', 'Neptun', 'Mars', 'Jupiter', 'Olymp'][settings.repair.maxQuality + 1];
@@ -176,7 +176,7 @@
 
   // "Store all resources in the Horreum" button on the packages page.
   function renderPackagesButton(state) {
-    let box = document.getElementById('gbot-store-resources');
+    let box = document.getElementById('lanista-store-resources');
     const list = document.querySelector(GBot.selectors.SEL.packages.list);
     if (!(state && state.inGame && state.page.mod === 'packages') || !list) {
       if (box) box.remove();
@@ -187,7 +187,7 @@
       return;
     }
     box = document.createElement('div');
-    box.id = 'gbot-store-resources';
+    box.id = 'lanista-store-resources';
     box.style.cssText = 'margin:6px 0;text-align:center;font:11px Arial,sans-serif;color:#4a2d0d';
     const button = document.createElement('button');
     button.type = 'button';
@@ -215,7 +215,7 @@
     });
     const tickAll = document.createElement('button');
     tickAll.type = 'button';
-    tickAll.className = 'awesome-button gbot-smelt-all';
+    tickAll.className = 'awesome-button lanista-smelt-all';
     tickAll.style.marginLeft = '6px';
     tickAll.addEventListener('click', () => {
       const items = smeltableOnPage();
@@ -223,7 +223,7 @@
       setSmeltQueued(items, !all);
     });
     const queueLine = document.createElement('div');
-    queueLine.className = 'gbot-smelt-status';
+    queueLine.className = 'lanista-smelt-status';
     queueLine.style.marginTop = '3px';
     box.append(button, tickAll, status, queueLine);
     // Above the packages' "Content" header, with or without add-ons
@@ -260,13 +260,13 @@
     const items = smeltableOnPage();
     for (const el of items) {
       const pkg = el.closest('.packageItem');
-      let tick = pkg.querySelector('.gbot-smelt-tick');
+      let tick = pkg.querySelector('.lanista-smelt-tick');
       if (!tick) {
         if (getComputedStyle(pkg).position === 'static') pkg.style.position = 'relative';
         tick = document.createElement('input');
         tick.type = 'checkbox';
-        tick.className = 'gbot-smelt-tick';
-        tick.title = 'Smelt this item (GBot)';
+        tick.className = 'lanista-smelt-tick';
+        tick.title = 'Smelt this item (Lanista)';
         tick.style.cssText = 'position:absolute;top:2px;right:2px;z-index:5;margin:0;width:15px;height:15px;cursor:pointer;accent-color:#b8382b';
         tick.addEventListener('click', (e) => e.stopPropagation());
         tick.addEventListener('change', () => setSmeltQueued([el], tick.checked));
@@ -274,14 +274,14 @@
       }
       tick.checked = smeltQueued(el);
     }
-    const tickAll = box.querySelector('.gbot-smelt-all');
+    const tickAll = box.querySelector('.lanista-smelt-all');
     const all = items.length && items.every((el) => smeltQueued(el));
     tickAll.textContent = all ? 'Untick all on this page' : 'Tick all on this page for smelting';
     tickAll.disabled = !items.length;
     tickAll.title = 'Queue every weapon, armour and jewellery item on this page for smelting. Smelting destroys the item and gives resources.';
     const queued = memory ? memory.smeltQueue.length : 0;
     const note = !settings || !settings.smelting.enabled ? ' (smelting is off under Settings > Smelting)' : !settings.enabled ? ' (starts when the bot runs)' : '';
-    box.querySelector('.gbot-smelt-status').textContent = queued ? `${queued} item${queued === 1 ? '' : 's'} queued for smelting${note}` : '';
+    box.querySelector('.lanista-smelt-status').textContent = queued ? `${queued} item${queued === 1 ? '' : 's'} queued for smelting${note}` : '';
   }
 
   function renderPageButtons(state) {
@@ -347,7 +347,7 @@
       // A repair also runs while paused; it must not run in two tabs at once.
       if ((settings.enabled || repairRunning()) && state.inGame) {
         const claim = await send({ type: 'claim', host: location.host });
-        if (claim && claim.ok === false) decision = { type: 'idle', reason: 'GBot is running in another tab', retryMs: 60000 };
+        if (claim && claim.ok === false) decision = { type: 'idle', reason: 'Lanista is running in another tab', retryMs: 60000 };
       }
 
       panel.update({ settings, memory, decision, state, status: statusFor(state) });
@@ -373,7 +373,7 @@
       if (decision.retryMs) schedule(tick, decision.retryMs);
       if (settings.enabled && !state.inGame && now - lastAlertAt > 30 * 60 * 1000) {
         lastAlertAt = now;
-        notify('loggedOut', 'GBot is enabled but this is not an in-game page. Are you logged out?');
+        notify('loggedOut', 'Lanista is on but this is not an in-game page. Are you logged out?');
       }
       return;
     }
@@ -391,7 +391,7 @@
       const attempt = brain.beginAttempt(memory, decision.type, now, settings, state);
       if (!attempt.ok) {
         log('warn', attempt.message);
-        notify('activityPaused', `GBot: ${attempt.message}`);
+        notify('activityPaused', `Lanista: ${attempt.message}`);
         await persist();
         schedule(tick, 1000);
         return;
@@ -507,6 +507,6 @@
 
   // Show the bar's state right away, but give the game's own scripts a moment
   // to initialise before the first tick, which may click or navigate.
-  paintNow().catch((e) => console.debug('[GBot] first paint failed', e));
+  paintNow().catch((e) => console.debug('[Lanista] first paint failed', e));
   schedule(tick, 800 + Math.random() * 1200);
 })(typeof globalThis !== 'undefined' ? globalThis : this);

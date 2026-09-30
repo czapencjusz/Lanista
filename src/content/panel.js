@@ -9,12 +9,17 @@
   const { h, icon, countdown } = ui;
 
   const TILE_ORDER = ['expedition', 'dungeon', 'arena', 'circus', 'heal', 'work', 'quests'];
-  const POS_KEY = 'gbot-panel-pos';
-  const MIN_KEY = 'gbot-panel-min';
+  const POS_KEY = 'lanista-panel-pos';
+  const MIN_KEY = 'lanista-panel-min';
+  // Keys used before the rename (GBot); read once, then removed.
+  const OLD_KEYS = { [POS_KEY]: 'gbot-panel-pos', [MIN_KEY]: 'gbot-panel-min' };
 
   const storage = {
     get(key) {
       try {
+        const old = OLD_KEYS[key] && localStorage.getItem(OLD_KEYS[key]);
+        if (old !== null && old !== undefined && localStorage.getItem(key) === null) localStorage.setItem(key, old);
+        if (OLD_KEYS[key]) localStorage.removeItem(OLD_KEYS[key]);
         return localStorage.getItem(key);
       } catch (e) {
         return null;
@@ -37,7 +42,7 @@
   };
 
   function create(handlers) {
-    const host = h('div', { id: 'gbot-root' });
+    const host = h('div', { id: 'lanista-root' });
     const shadow = host.attachShadow({ mode: 'open' });
     const style = document.createElement('style');
     style.textContent = ui.STYLES;
@@ -58,7 +63,7 @@
     const head = h(
       'div',
       { class: 'gb-panel-head' },
-      h('span', { class: 'gb-brand' }, icon('arena', 16), 'GBot'),
+      h('span', { class: 'gb-brand' }, icon('arena', 16), 'Lanista'),
       play,
       h('button', { type: 'button', class: 'gb-icon-btn', title: 'Check now', dataset: { action: 'run' }, onclick: () => handlers.onRunNow() }, icon('refresh', 16)),
       h('button', { type: 'button', class: 'gb-icon-btn', title: 'Settings', dataset: { action: 'settings' }, onclick: () => openSettings() }, icon('gear', 16)),
@@ -108,7 +113,7 @@
       h('button', { type: 'button', class: 'gb-icon-btn', title: 'Log', onclick: () => openSettings('log') }, icon('log', 15))
     );
     const body = h('div', { class: 'gb-body' }, h('div', { class: 'gb-summary' }, statusEl, nextEl), vitalsEl, tileGrid, lastLog, foot);
-    const panel = h('div', { class: 'gb-panel', role: 'region', 'aria-label': 'GBot control bar' }, head, body);
+    const panel = h('div', { class: 'gb-panel', role: 'region', 'aria-label': 'Lanista control bar' }, head, body);
     wrap.appendChild(panel);
     document.documentElement.appendChild(host);
 
@@ -293,12 +298,12 @@
       };
       const dialog = h(
         'div',
-        { class: 'gb-modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'GBot settings' },
+        { class: 'gb-modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Lanista settings' },
         h(
           'div',
           { class: 'gb-modal-head' },
           icon('arena', 18),
-          h('span', { class: 'gb-title' }, handlers.host ? `GBot settings · ${GBot.settings.serverName(handlers.host)}` : 'GBot settings'),
+          h('span', { class: 'gb-title' }, handlers.host ? `Lanista settings · ${GBot.settings.serverName(handlers.host)}` : 'Lanista settings'),
           h('button', { type: 'button', class: 'gb-icon-btn', title: 'Close (Esc)', dataset: { action: 'close' }, onclick: close }, icon('close', 18))
         ),
         h('div', { class: 'gb-modal-body' }, view.element)

@@ -1,278 +1,265 @@
-# GBot: Gladiatus Autopilot
+# Lanista
 
-A browser extension for **Chrome** (and Edge, Brave, Opera) and **Firefox** that plays
-[Gladiatus](https://gladiatus.gameforge.com) for you. It runs in your normal game tab and clicks
-through the game the way a player would. 
+In ancient Rome a *lanista* ran a gladiator school: he trained the fighters, sent them into the
+arena and kept the whole business going. That's pretty much what this does for your
+[Gladiatus](https://gladiatus.gameforge.com) character.
 
-> **Read this first.** Gameforge's terms of service forbid bots. Using this extension can get your
-> account suspended or banned. You use it at your own risk.
+Lanista is a browser extension for **Chrome** (plus Edge, Brave and Opera) and **Firefox**. It sits
+in your normal game tab and plays the way you would: it clicks through expeditions, dungeons, the
+arena and everything around them, and keeps an eye on your health, gear and packages while it's at
+it. (It used to be called GBot.)
+
+> **Heads-up before you start:** Gameforge's rules don't allow automating the game. Using Lanista
+> can get your account suspended or banned. It's your call and your risk.
 
 ![In-game control bar](docs/control-bar.png) ![Settings window](docs/settings-window.png)
 
-## Features
+## What it can do
 
-| Activity | What the bot does |
-| --- | --- |
-| **Expeditions** | Attacks the enemy you choose (1-4) at a location you pick from the game's own list, or at your last visited one, whenever the cooldown is ready. It can keep some points in reserve. With the boss selected, it can first fight the location's other enemies until all their bonuses are learned, so the boss gets them too (see below). |
-| **Dungeons** | Starts a Normal or Advanced dungeon when none is running (Normal where Advanced is not unlocked yet), then fights the enemies one by one. Optionally it never fights the boss: the other enemies go first, then the dungeon is cancelled and a new one started. It can also start over after a number of lost fights in a row. The ruby button that skips the cooldown is never used. |
-| **Underworld** | Optional. From level 100: fights the Underworld's enemies with its own expedition points, always the newest area and enemy, and waits for HP to regenerate since food cannot be eaten there. It can also enter the Underworld for you (Normal, Middle or Hard) whenever it is allowed again. It never leaves, never turns back or shortens the journey, and never attacks without points (that would cost rubies). |
-| **Arena Provinciarum** | Attacks the lowest-level, highest-level or a random opponent. It can stick to opponents near your level and skip names on a never-attack list. Opponents who beat you are skipped for a while (24 hours by default), and optionally those you have beaten go first. If the game refuses a fight, it tries another opponent. |
-| **Points refills** | Optional. Uses Gate Keys and Mobilisations you own (never bought) when dungeon or expedition points run out, up to a number per day. |
-| **Circus Turma Provinciarum** | Same options as the arena. |
-| **Enemy nests** | After some wins the game offers to search the enemy's nest for extra loot. The bot does a quick search, a thorough search, or returns to safety, as you choose. |
-| **Healing** | Eats food below one HP threshold and stops fighting below another. It picks the food that best fills the missing HP from the bags you choose for food, so usables you keep in other bags are safe; when those bags are empty it takes food from the packages into one of them. By default only plain food is eaten: eggs that give rubies, points or cooldown skips, Cervisia that activates Centurio and the like are left alone. |
-| **Training** | Optional. Spends gold above a reserve you set on stat points, always on the cheapest of the stats you pick, which keeps them balanced. Gold you spend cannot be stolen in the arena. |
-| **Repair** | Optional. When an item you wear drops below a conditioning threshold, the bot takes it off, repairs it at the workbench with materials from the Horreum, and puts it back on (see below). |
-| **Stable work** | Optional. Once you are out of expedition and dungeon points, it starts the job and number of hours you chose. |
-| **Pantheon quests** | Optional. Collects finished quests and accepts the best-paying new one of the types you pick. It skips quests for places you do not fight at and for activities that are switched off, and stops when all quest slots are taken. |
-| **Pop-ups** | Collects the daily login bonus and closes notification dialogs. |
-| **Packages** | A **Store all resources in the Horreum** button on the packages page moves every resource from all your packages into the Horreum in one go. Optionally, every 30 minutes the bot also tidies the packages: it takes the gold out of gold packages, stores resources in the Horreum, sells weapons, armour and jewellery up to a quality you choose to a merchant, and moves packages that are about to expire into your bags (or sells them). |
-| **Smelting** | Tick weapons, armour and jewellery on the packages page (one by one, or **Tick all on this page**) to queue them for smelting, or let rules pick them by quality and kind. While running, the bot fills free smelter slots from the queue, pays the rent in gold and puts the resources of finished smelts in the Horreum (or in a package). |
-| **Auction house** | Optional. Bids on food and healing potions that heal at least the HP per gold you set, late in the auction round, once per lot, within a gold reserve, a budget per round and a limit on how much food you hold. Won items arrive as packages. |
+### Fighting
 
-**The bot never spends rubies.** Workbench and smelter rent is paid in gold, expedition bonuses are
-only learned by fighting, auction Buyout (which costs rubies) is never used, and neither are the
-buttons that skip a dungeon cooldown, shorten the journey to the Underworld, or attack there without
-expedition points.
+- **Expeditions.** Pick a location (or just use the last one you visited) and an enemy, and it
+  attacks whenever the cooldown is up. It can keep a few points in reserve. Farming the boss? It can
+  first beat the other enemies there until you've learned all their bonuses, so the boss gets them
+  too ([more below](#expedition-bonuses-before-the-boss)).
+- **Dungeons.** Starts a Normal or Advanced dungeon when none is running (Normal if Advanced isn't
+  unlocked yet) and works through the enemies. Not a fan of the boss? Tell it to skip bosses: it
+  clears everyone else, then cancels the dungeon and starts a fresh one. It can also start over after
+  a few losses in a row.
+- **Arena and Circus Turma** (the Provinciarum ones). Go for the weakest, the strongest or a random
+  opponent, stay near your own level, keep a never-attack list, and steer clear of anyone who beat
+  you recently. Optionally it goes back to people you've already beaten first.
+- **The Underworld.** From level 100 it fights its way through the Underworld for you, carefully,
+  since a bad fight there can get you kicked out for days
+  ([more below](#the-underworld)).
+- **Enemy nests.** When the game offers to search a nest after a win, it does a quick or thorough
+  search, or heads back to safety, whichever you like.
+
+### Keeping you alive
+
+- **Healing.** Eats when your HP drops below one limit and stops fighting below another. It picks the
+  food that best fills the gap.
+- **Food bags.** Tell it which inventory bags hold its food, and your other bags are safe. When
+  those bags run dry it grabs food from your packages.
+- **Plain food only.** Eggs that give rubies or skip cooldowns, Cervisia that turns on Centurio and
+  other goodies stay untouched (you can switch this off).
+- **Food from the auction house.** Optionally bids on cheap food in the auction house, late in the
+  round when you're least likely to be outbid, within a budget you set. Heads-up: the game keeps
+  your gold if someone outbids you, so it bids once per item and never early.
+
+### Gear and loot
+
+- **Repairs.** When something you're wearing gets worn down, it takes it off, fixes it at the
+  workbench with materials from your Horreum (cheapest first, up to the quality you allow) and puts
+  it back on. There's also a **Repair all** button on the overview page, on your character and on
+  each mercenary's tab ([more below](#repairs)).
+- **Smelting.** Tick items on the packages page (or tick a whole page at once), or let rules pick
+  them by quality and kind. It keeps the smelter busy and puts the resources in the Horreum.
+- **Tidying the packages.** Takes gold out of gold packages, stores resources in the Horreum, sells
+  gear you don't want to a merchant, and rescues packages that are about to expire
+  ([more below](#tidying-the-packages)). There's also a one-click **Store all resources in the
+  Horreum** button on the packages page.
+
+### Everything else
+
+- **Training.** Spends gold above a reserve on stats, always the cheapest of the ones you pick, so
+  they grow evenly. Spent gold can't be stolen in the arena, either.
+- **Stable work.** Takes a job once you're out of expedition and dungeon points.
+- **Pantheon quests.** Hands in finished quests and picks up the best-paying new ones of the kinds you
+  want, skipping ones for places you don't fight at.
+- **Point refills.** If you want, it uses Gate Keys and Mobilisations you already own when your
+  points run out, up to a daily limit.
+- **Small stuff.** Grabs the daily login bonus and closes pop-ups.
+
+### It never spends rubies
+
+Not on rent, not on bonuses, not on Buyout. Lanista never presses the buttons that skip a
+dungeon cooldown, shorten the trip to the Underworld, or attack there without points. Items like
+Mobilisations are only used if you already own them and turned that on, and they're never bought.
+
+## A closer look
 
 ### The Underworld
 
-The Hermit sends characters of level 100 and above to the Underworld for 8,000 gold: four areas of
-three enemies and a boss each, ending with Dīs Pater. Inside, the Underworld has its own 18
-expedition points, there are no dungeons, and food cannot be eaten.
+Once you're level 100, the Hermit will send you down for 8,000 gold. It has four areas with three
+enemies and a boss each, and Dīs Pater waiting at the end. Down there you get a separate pool of 18
+expedition points, there are no dungeons, and you can't eat food.
 
-With *Underworld* switched on, the bot fights there whenever the expedition cooldown is ready: the
-newest unlocked area and its newest open enemy, with the stakes slider left at its default. It
-waits for HP to regenerate above your limit (60% by default), because falling to 0 HP only offers to
-leave, and leaving locks the Underworld for days. For the same reason it never follows *Leave the
-Underworld*, and closes the game's dialogs there instead of answering them. When the points run
-out it stops: further attacks would cost rubies.
+With *Underworld* switched on, Lanista fights the newest area and whichever enemy is up next, and
+leaves the stakes slider alone. Since hitting 0 HP down there only offers you the exit (and leaving
+locks the Underworld for days), it waits for your HP to come back above your limit (60% by default)
+before each fight. It never clicks *Leave the Underworld*, and it only ever closes the game's pop-ups
+there rather than answering them. When your points run out, it stops, because the next attack would
+cost rubies.
 
-*Enter automatically* takes the Hermit's offer on the difficulty you choose whenever it is allowed
-again. The journey (about 30 minutes, less on speed servers) is waited out.
+A few extras if you want them:
 
-You can also let it use items you already own in the premium inventory, up to a number per visit:
-a **Mobilisation** (+3 Underworld points) when the points run out, and a **100% Healing Potion**
-when HP drops below a limit (20% by default). Both are off until you set a number; nothing is ever
-bought.
-
-**Careful with the auction house:** the game keeps your gold if someone outbids you. That is why the
-bot bids only when the round is ending (by default) and never twice on the same lot.
+- **Enter automatically.** It takes the Hermit's offer again on Normal, Middle or Hard as soon as
+  you're allowed back, and waits out the trip.
+- **Mobilisations.** Uses ones you own (+3 points each) when the points run out, up to a number per
+  visit.
+- **100% Healing Potions.** Uses ones you own when HP gets really low, also up to a number per visit.
 
 ### Expedition bonuses before the boss
 
-Every expedition enemy has four bonuses (more gold, experience, item chance and honour). Each win
-against an enemy has a chance to teach you one of its missing bonuses. The chance is shown in the
-bonus tooltip and depends on your character and the enemy. Once enemies 1-3 of a location have
-learned a bonus, the game switches it on for the boss as well.
+Every expedition enemy has four bonuses (gold, experience, item chance and honour). Each win has a
+chance to teach you one you're missing. The chance is in the bonus tooltip and depends on you and the
+enemy. Once you've learned a bonus from enemies 1 to 3, the boss gets it too.
 
-With the boss selected and *Before the boss, learn the other enemies' bonuses* on, the bot fights
-enemies 1-3 in turn, always the first one with bonuses still to learn, and moves on to the boss when
-they are done. The log shows the progress, e.g. *Skeleton Berserker has 4 bonuses left to learn
-(25% per win), fighting it before the boss*. Bonuses you gave up (deactivated for rubies) cannot be
-learned in combat and are not waited for.
+Pick the boss, switch on *Before the boss, learn the other enemies' bonuses*, and Lanista works
+through enemies 1 to 3 first, then moves on to the boss. The log keeps you posted, for example
+*"Skeleton Berserker has 4 bonuses left to learn (25% per win), fighting it before the boss"*.
+Bonuses you've turned off with rubies can't be learned in a fight, so it doesn't wait for those.
 
-### Repairing gear at the workbench
+### Repairs
 
-When an item on your character drops below the *Repair below* threshold (50% conditioning by
-default), the bot:
+When an item drops below your *Repair below* limit (50% by default), Lanista:
 
-1. takes the item off into a free spot in your bags;
-2. checks the Horreum for the materials the workbench asks for, using the lowest quality first and
-   stopping at the best quality you allow (Neptun, blue, by default);
-3. rents a workbench slot for gold, fills in the materials and starts the repair;
-4. collects the repaired item from the packages and puts it back on.
+1. takes it off into a free spot in your bags,
+2. checks the Horreum for what the workbench wants, lowest quality first and never above the quality
+   you allow (Neptun, blue, by default),
+3. rents a workbench slot for gold and starts the repair,
+4. picks the item up from your packages and puts it back on.
 
-Fights wait while an item is off your character. If the Horreum has no suitable materials, the item
-goes straight back on and is tried again in 6 hours. If a step keeps failing, the bot puts the item
-back on, or logs where it is (on the workbench or in the packages).
+Fights wait while something is off. No materials? The item goes straight back on and it tries again
+in 6 hours. And if something goes wrong halfway, it puts the item back on or tells you in the log
+exactly where it is.
+
+The **Repair all** button repairs everything at or below a cutoff (60% by default), worst first,
+even while Lanista is stopped. It's on your character's overview and on tab X and every mercenary's
+tab too. Under *Repair* you can choose whose gear the automatic repair looks after (just your
+character, unless you tick more).
 
 ### Tidying the packages
 
-Under *Smelting* and *Packages* you set rules by quality (Standard, Ceres, Neptun, ...) and kind
-(weapons, armour, rings and amulets). Every 30 minutes while the bot runs, it goes through all your
-packages:
+Under *Smelting* and *Packages* you set simple rules by quality (Standard, Ceres, Neptun and up) and
+kind (weapons, armour, rings and amulets). Every 30 minutes Lanista goes through your packages and:
 
-1. gold packages are opened, so the gold goes to your character;
-2. resources go to the Horreum, if you want;
-3. gear matching a smelting rule joins the smelting queue, as if you had ticked it;
-4. gear matching a selling rule is sold to a merchant for its value, through a free spot in your
-   bags (like dragging it onto the merchant);
-5. packages about to expire (less than 24 hours left by default) are moved into your bags, or sold.
+1. opens gold packages, so the gold lands on your character,
+2. moves resources into the Horreum, if you want,
+3. queues gear that matches a smelting rule, as if you'd ticked it,
+4. sells gear that matches a selling rule to a merchant,
+5. rescues packages that are about to expire (less than 24 hours left by default) by moving them into
+   your bags, or sells them.
 
-Items you ticked for smelting are never sold. Smelting rules go before selling rules, and anything
-that matches no rule stays where it is. All of it is off until you switch it on.
+Items you ticked for smelting are never sold, smelting rules come before selling rules, and anything
+that matches nothing stays put. It's all off until you turn it on.
 
-The overview page also gets a **Repair all** button under your character. It repairs every item at
-or below a cutoff (60% by default, changeable under *Repair*), worst first, one at a time. It works
-even while the bot is stopped. The button is also there on the other overview tabs (X and the four
-mercenaries) and repairs that tab's gear, and under *Repair* you can choose which tabs the automatic
-repair looks after (only your character by default).
+## Getting around
 
-You can also tailor how the bot behaves:
+### The control bar
 
-* **Priority.** Choose which activity goes first when several are ready at once.
-* **Schedule.** Play only between set hours (overnight ranges work, e.g. 22:00 → 06:00), and take
-  random breaks, e.g. about 15 minutes every 2 hours. Both vary by ±30%.
-* **Human-like timing.** Every click waits a random delay in a range you set. Between actions the
-  bot sleeps until the next cooldown ends instead of polling.
-* **Loop protection.** An activity that keeps failing, for example after a game update, is paused
-  for a while instead of reloading the page forever. The reason appears in the log.
-* **Fight results.** Every combat report is read. The log shows each fight as won or lost with the
-  gold, experience and honour or fame it brought, and *Statistics* shows win rates and totals.
-* **Notifications.** Desktop alerts when you are logged out, when an activity gets paused, or when
-  HP is low and there is no food left. Each one can be turned off.
-* **One tab per server, with a watchdog.** Only one game tab runs the bot. If that tab hangs, it is
-  reloaded.
-* **Settings per server.** Each server you play on has its own settings and its own Start/Stop,
-  so two accounts never overwrite each other's locations or budgets. A server GBot has not seen
-  before starts with a copy of the settings you saved last, with the bot stopped.
-* **Backup.** Copy the settings of another server, export them to a file, import them in another
-  browser, or reset them.
+It's on every game page:
 
-## The interface
+- **Start / Stop** turns Lanista on and off.
+- **Check now** makes it look at the game right away.
+- **Minimise** folds the bar down to its title.
+- The status line shows what it's doing, what's next and when, plus your HP, points and gold.
+- The **activity tiles** switch things on and off with a click and show how each one is doing:
+  *ready*, a countdown, *no points*, *low HP*, *paused* or *off*. Hover a tile and click its little
+  gear for that activity's settings.
+- At the bottom you get the last log line and a quick tally for the session.
 
-### Control bar (on every game page)
-
-* **Start / Stop** turns the bot on and off.
-* **Check now** re-checks the game immediately. **Minimise** folds the bar down to its title.
-* **Status** shows what the bot is doing, what comes next and when, plus your HP, expedition and
-  dungeon points, and gold. It is filled in as soon as the page loads.
-* **Activity tiles** (Expedition, Dungeon, Arena, Circus, Heal, Work, Quests):
-  * Click a tile to switch that activity on or off.
-  * Each tile shows its live state: *ready*, a cooldown countdown, *no points*, *low HP*, *paused*,
-    or *off*.
-  * Hover a tile and click its small gear to open that activity's settings.
-* **Last log line**, then a **footer** with statistics for the session and shortcuts to the stats
-  and log.
-
-The bar floats and can be dragged anywhere; its position is remembered. Under *Interface* you can
-instead dock it along the top of the page, where it pushes the game (and Gameforge's own top strip)
-down rather than covering it. In a narrow window its tiles wrap onto a second row:
+Drag the bar anywhere you like and it'll remember the spot. If you'd rather not have it floating,
+dock it along the top of the page under *Interface*, and it'll push the game down instead of
+covering it:
 
 ![Docked bar](docs/docked-bar.png)
 
-### Settings window
+### Settings
 
-Open it with the gear in the bar, the *Settings* tile, or a tile's own gear. It has one tab per
-feature. Activity tabs have an on/off switch in their title, and the green dots in the sidebar show
-what is enabled. Changes save as you make them and take effect immediately.
+Open them with the gear on the bar, the *Settings* tile, or a tile's own gear. Every feature has its
+own tab. The green dots show what's switched on, and changes save and apply as you go.
 
-| Tab | Options |
+| Tab | What you'll find there |
 | --- | --- |
-| General | Bot on/off, activity priority order, enemy nest search (quick / thorough / return to safety / leave it to me) |
-| Expedition | Location (last visited, one from the game's list, or any id), enemy 1-4, learn the other enemies' bonuses before the boss, points to keep in reserve, Mobilisations to use per day |
-| Dungeon | Location, Normal/Advanced, points to keep in reserve, never fight the boss, start a new dungeon after lost fights, Gate Keys to use per day |
-| Underworld | Fighting on/off, minimum HP to fight, enter automatically (off, Normal, Middle, Hard), Mobilisations and 100% Healing Potions to use per visit |
-| Arena / Circus Turma | Lowest / highest / random opponent, level range around yours, never-attack list, how long to skip opponents who beat you, prefer opponents you have beaten |
-| Health | Eat food on/off, eat below X% HP, stop fighting below Y% HP, bags to eat from (I-VIII), only plain food |
-| Stable work | Job number, hours |
-| Training | Gold to always keep, stats to train |
-| Repair | Repair below X% conditioning, cutoff for the *Repair all* button, best material quality to use, whose gear to look after (character, tab X, mercenaries I-IV) |
-| Smelting | Smelting on/off, put the resources in the Horreum or in a package, smelt package items automatically by quality and kind |
-| Packages | Tidying on/off, take gold out of gold packages, store resources in the Horreum, sell gear by quality and kind, what to do with packages about to expire |
-| Auction house | Bidding on/off, minimum HP per gold, how late in the round to bid, gold per round, gold to keep, food limit |
-| Quests | Quest types to accept (combat, arena, circus, expedition, dungeon, items, work), only quests for my location and dungeon, only quests for activities that are on |
+| General | The main on/off switch, which activity goes first, what to do with enemy nests |
+| Expedition | Location, which enemy, learning bonuses before the boss, points to keep, Mobilisations per day |
+| Dungeon | Location, Normal or Advanced, points to keep, skipping the boss, starting over after losses, Gate Keys per day |
+| Underworld | Fighting on/off, the HP limit, entering automatically, Mobilisations and healing potions per visit |
+| Arena / Circus Turma | Who to attack, level range, never-attack list, avoiding people who beat you, going back to people you beat |
+| Health | Eating on/off, when to eat, when to stop fighting, which bags hold food, plain food only |
+| Stable work | Which job, how many hours |
+| Training | Gold to keep, which stats |
+| Repair | When to repair, the *Repair all* cutoff, best materials to use, whose gear to look after |
+| Smelting | On/off, where the resources go, automatic smelting rules |
+| Packages | Gold packages, resources, selling rules, packages about to expire |
+| Auction house | Bidding on/off, price per HP, how late to bid, budget, gold to keep, how much food is enough |
+| Quests | Which quest types, only quests that fit what you're doing |
 | Schedule | Active hours, random breaks |
-| Timing & safety | Click delay range, longest idle time, failed attempts before pausing, pause length |
-| Notifications | Which desktop notifications to show |
+| Timing & safety | Click delays, how long to wait between checks, what to do when something keeps failing |
+| Notifications | Which desktop alerts you want |
 | Interface | Show the bar, floating or docked |
-| Statistics | Fights per activity with wins, losses and win rate; meals, nests, quests, work shifts, stats trained, items repaired, items smelted, items sold, auction bids; gold looted, experience, honour and fame; gold from sales and gold packages; gold change; per-hour rates; reset |
-| Log | Recent activity, filter to warnings only, clear |
-| Backup | Copy from another server, export to a file or the clipboard, import, reset to defaults |
+| Statistics | Fights won and lost, loot, gold earned and spent, per-hour rates |
+| Log | What it's been up to |
+| Backup | Copy settings from another server, export, import, reset |
 
-### Toolbar popup and options page
+Playing on more than one server? Each one gets its own settings and its own Start/Stop, so your
+accounts never step on each other's toes. A server Lanista hasn't seen before starts with a copy of
+whatever you saved last, switched off.
 
-The toolbar button opens a compact version of the same settings, with icon-only tabs, a Start/Stop
-button and the server's status. The *open in tab* button, or the browser's extension options,
-shows the full-size settings page. If you play on several servers, it also has a server selector:
-the settings, Start/Stop, statistics and log shown are those of the selected server.
+### Popup and options page
+
+The toolbar button opens a compact version of the same settings with a Start/Stop button. The *open
+in tab* button (or the extension's options) gives you the full-size page. If you play on several
+servers, pick one from the list at the top.
 
 <img src="docs/popup.png" alt="Popup" width="330">
 
-## Installation
-
-### From source (developer mode)
+## Installing
 
 1. Download or clone this repository.
-2. **Chrome / Edge / Brave / Opera:** open `chrome://extensions`, turn on **Developer mode**, click
-   **Load unpacked** and select the repository folder (the one containing `manifest.json`).
-3. **Firefox (121+):** open `about:debugging#/runtime/this-firefox`, click **Load Temporary
-   Add-on...** and select `manifest.json`. Temporary add-ons are removed when Firefox restarts.
-   For a permanent install, sign the package from `npm run build` on addons.mozilla.org.
+2. **Chrome, Edge, Brave or Opera:** go to `chrome://extensions`, turn on **Developer mode**, click
+   **Load unpacked** and pick this folder (the one with `manifest.json` in it).
+3. **Firefox (121+):** go to `about:debugging#/runtime/this-firefox`, click **Load Temporary
+   Add-on…** and pick `manifest.json`. Temporary add-ons disappear when Firefox restarts; for a
+   permanent install, sign the package from `npm run build` on addons.mozilla.org.
 
-In Firefox the extension may start without access to the game website. If the popup shows
-**Grant access**, click it (or allow the site under *about:addons → GBot → Permissions*).
+Firefox sometimes starts the extension without access to the game site. If the popup shows **Grant
+access**, click it (or allow the site under *about:addons → Lanista → Permissions*).
 
-After changing or updating the files, reload the extension (the ↻ button on its card in
-`chrome://extensions`) and refresh the game tab.
+Updated the files? Reload the extension (the ↻ on its card in `chrome://extensions`) and refresh the
+game tab.
 
-### Packaged zips
+Want zip files instead?
 
 ```sh
 npm install
-npm run build        # -> dist/gbot-chrome.zip and dist/gbot-firefox.zip
+npm run build        # -> dist/lanista-chrome.zip and dist/lanista-firefox.zip
 ```
 
-## Usage
+## Using it
 
-1. Log in to your Gladiatus server as usual. The GBot bar appears on the game page.
-2. Switch the activities you want on in the tiles. Fine-tune them in the settings window. Training
-   and Repair are off until you switch them on in their tabs.
-3. Press **Start**.
+1. Log in to your Gladiatus server as usual. The Lanista bar shows up on the game page.
+2. Switch on the activities you want with the tiles, and fine-tune them in the settings.
+3. Hit **Start**.
 
-Keep the game tab open (it can be in the background). The bot never logs in for you: if the session
-expires, log in again and it carries on. Settings from older versions are migrated automatically:
-version 1 kept one set for all servers, and 2.0 gives each server you played on its own copy.
+That's it. Keep the game tab open (a background tab is fine). Lanista never logs in for you, so if
+your session runs out, just log back in and it picks up where it left off.
 
-## How it works
+A few handy things to know:
 
-```
-manifest.json                 MV3 manifest, valid for Chrome and Firefox
-src/shared/settings.js        defaults, validation rules, migration, storage
-src/content/selectors.js      ALL knowledge of the game's HTML (IDs, classes, URLs)
-src/content/state.js          reads HP, points, cooldowns, locations, dialogs, combat reports
-                              and expedition bonuses from the DOM
-src/content/brain.js          pure decision engine: priority, schedule, retries, tile status,
-                              quest choice, training, repair planning
-src/content/actions.js        performs decisions: navigate, click, drag food, fill forms; dungeon
-                              choices and the Underworld
-src/content/workbench.js      gear repair through the game's own AJAX requests
-src/content/smelter.js        smelting queue: packages → smelter → Horreum, the same way
-src/content/packages.js       package rules: gold, resources, smelting, selling, expiring
-src/content/main.js           runner: show the bar, then read state → decide → act, once per
-                              page load; also the overview page's "Repair all" button
-src/content/panel.js          in-game control bar + settings window (shadow DOM)
-src/ui/schema.js              declarative list of every settings tab and field
-src/ui/settings-ui.js         renders the schema; shared by game window, popup and options page
-src/ui/dom.js, styles.js      DOM helpers, icons, Gladiatus-style theme
-src/pages/                    toolbar popup and options page
-src/background/background.js  badge, tab lock, watchdog, notifications
-```
+- **Only one tab plays at a time**, even with the game open in several. If that tab freezes, it gets
+  reloaded.
+- **It paces itself.** Every click waits a random moment, and between actions it simply waits for the
+  next cooldown instead of refreshing all the time. You can also give it active hours and random
+  breaks.
+- **It doesn't get stuck in loops.** If something keeps failing (after a game update, say), that
+  activity takes a break and the log tells you why.
+- **It can ping you** with a desktop notification when you're logged out, when something gets paused,
+  or when you're low on HP with no food left.
+- **Older settings carry over.** Settings from older versions are moved over automatically, and each
+  server gets its own copy.
 
-Gladiatus reloads the page for almost every action, so the bot is a small state machine that runs
-again on every page load:
+## Under the hood
 
-1. Read the game state from the page.
-2. Check whether the previous action worked, for example whether the cooldown started or HP went up.
-3. Decide the next step.
-4. Perform it.
+Gladiatus reloads the page for almost everything you do, so Lanista works in small steps. On every
+page load it reads the game (HP, points, cooldowns and so on), checks whether its last move worked,
+decides what's next and does it. Anything it needs to remember between pages (your stats, the log, a
+repair in progress) is kept in the extension's storage, separately for each server.
 
-Anything that must survive a page load, such as attempt counters, work end time, a repair in
-progress, stats and the log, is kept per server in extension storage, next to that server's
-settings.
-
-The bar is filled in from storage and the page as soon as the page is parsed. The first action
-waits 0.8-2 seconds so the game's own scripts are ready, and every click waits the human-like
-delay from *Timing & safety*.
-
-The workbench repair does not click through pages: like the game's own workbench, packages and
-inventory pages, it sends the game's AJAX requests (with its CSRF token), so the bot stays on the
-current page while an item is repaired.
-
-To add a setting, add a default in `settings.js`, optionally a validation rule, and a field in
-`schema.js`. The settings window, popup and options page pick it up automatically.
-
+Workbench repairs, smelting, the package rules and auction bids don't click through pages at all.
+They send the same requests the game's own pages send, so you stay on whatever page you're on.
 
 ## License
 

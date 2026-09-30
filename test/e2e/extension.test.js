@@ -74,13 +74,13 @@ async function scenario(gameState, settings) {
   game.reset(gameState);
   await worker.evaluate(async (host) => chrome.storage.local.remove(`memory:${host}`), HOST);
   await page.goto(`${GAME}index.php?mod=overview&sh=${SH}`);
-  await page.waitForSelector('#gbot-root', { state: 'attached' });
+  await page.waitForSelector('#lanista-root', { state: 'attached' });
   await configure({ ...settings, enabled: true });
 }
 
 test.describe('GBot extension against a mock Gladiatus server', { skip: !executablePath && 'no Chromium binary found' }, () => {
   test.before(async () => {
-    const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'gbot-e2e-'));
+    const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'lanista-e2e-'));
     context = await chromium.launchPersistentContext(profile, {
       executablePath,
       headless: true,
@@ -123,7 +123,7 @@ test.describe('GBot extension against a mock Gladiatus server', { skip: !executa
     }, 15000, 'stats update');
     assert.equal(memory.stats.expedition, 1);
     await page.waitForFunction(() => {
-      const root = document.querySelector('#gbot-root').shadowRoot;
+      const root = document.querySelector('#lanista-root').shadowRoot;
       return /Waiting/.test(root.querySelector('.gb-status').textContent);
     }, null, { timeout: 15000 });
   });
@@ -202,12 +202,12 @@ test.describe('GBot extension against a mock Gladiatus server', { skip: !executa
     await configure({ enabled: false });
     game.reset({ expPoints: 0, dunPoints: 0 });
     await page.goto(`${GAME}index.php?mod=overview&sh=${SH}`);
-    const bar = page.locator('#gbot-root .gb-panel');
+    const bar = page.locator('#lanista-root .gb-panel');
     await bar.waitFor();
 
     await bar.locator('[data-activity="arena"]').click();
     await waitUntil(async () => (await storageGet(SETTINGS)).arena.enabled === true, 5000, 'arena on');
-    await page.waitForFunction(() => document.querySelector('#gbot-root').shadowRoot.querySelector('[data-activity="arena"]').classList.contains('on'));
+    await page.waitForFunction(() => document.querySelector('#lanista-root').shadowRoot.querySelector('[data-activity="arena"]').classList.contains('on'));
     await bar.locator('[data-activity="arena"]').click();
     await waitUntil(async () => (await storageGet(SETTINGS)).arena.enabled === false, 5000, 'arena off');
 
@@ -219,10 +219,10 @@ test.describe('GBot extension against a mock Gladiatus server', { skip: !executa
 
     // Docked layout pushes the page down instead of covering it.
     await configure({ enabled: false, ui: { panel: true, layout: 'bar' } });
-    await page.waitForFunction(() => document.querySelector('#gbot-root').shadowRoot.querySelector('.gb-panel').classList.contains('bar'));
+    await page.waitForFunction(() => document.querySelector('#lanista-root').shadowRoot.querySelector('.gb-panel').classList.contains('bar'));
     assert.ok(parseInt(await page.evaluate(() => document.documentElement.style.paddingTop), 10) > 20);
     await configure({ enabled: false, ui: { panel: false } });
-    await page.waitForFunction(() => document.querySelector('#gbot-root').shadowRoot.querySelector('.gb-panel').style.display === 'none');
+    await page.waitForFunction(() => document.querySelector('#lanista-root').shadowRoot.querySelector('.gb-panel').style.display === 'none');
     assert.equal(await page.evaluate(() => document.documentElement.style.paddingTop), '');
   });
 
@@ -231,7 +231,7 @@ test.describe('GBot extension against a mock Gladiatus server', { skip: !executa
     game.reset({ expPoints: 0, dunPoints: 0 });
     await worker.evaluate(async (host) => chrome.storage.local.remove(`memory:${host}`), HOST);
     await page.goto(`${GAME}index.php?mod=overview&sh=${SH}`);
-    const root = page.locator('#gbot-root');
+    const root = page.locator('#lanista-root');
     await root.locator('[data-settings="arena"]').click({ force: true });
     const dialog = root.locator('.gb-modal');
     await dialog.waitFor();

@@ -45,7 +45,7 @@
       // 0 HP): only ever close it.
       const close = $(SEL.underworld.closeDialog);
       if (!close || !isVisible(close)) {
-        ctx.notify('activityPaused', 'GBot: a dialog in the Underworld needs your answer; the bot will not choose for you.');
+        ctx.notify('activityPaused', 'Lanista: a dialog in the Underworld needs your answer; it will not choose for you.');
         throw new ActionError('A dialog in the Underworld has no close button; leaving it to you');
       }
       await click(ctx, close, 'close the dialog');
@@ -580,7 +580,7 @@
 
     brain.markNoFood(ctx.memory, ctx.now());
     ctx.log('warn', 'No food in the food bags or the packages; waiting for HP to regenerate (retrying food in 30 min)');
-    if (ctx.notify) ctx.notify('noFood', `GBot: HP is ${state.hp.percent}% and there is no food left in your bags.`);
+    if (ctx.notify) ctx.notify('noFood', `Lanista: HP is ${state.hp.percent}% and there is no food left in your bags.`);
     return { retick: true };
   }
 

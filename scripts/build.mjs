@@ -1,4 +1,4 @@
-// Packages the extension into dist/gbot-chrome.zip and dist/gbot-firefox.zip.
+// Packages the extension into dist/lanista-chrome.zip and dist/lanista-firefox.zip.
 // The repo root is a valid unpacked extension for both browsers; the packaged
 // manifests only drop the keys the other browser needs, to avoid warnings.
 // Uses a tiny built-in ZIP writer so no external tools are required.
@@ -101,7 +101,7 @@ for (const [name, transform] of Object.entries(targets)) {
     { name: 'manifest.json', data: Buffer.from(JSON.stringify(manifest, null, 2) + '\n') },
     ...files.map((f) => ({ name: relative(root, join(root, f)).split(sep).join('/'), data: readFileSync(join(root, f)) })),
   ];
-  const out = join(root, 'dist', `gbot-${name}.zip`);
+  const out = join(root, 'dist', `lanista-${name}.zip`);
   writeFileSync(out, zip(entries));
   console.log(`${relative(root, out)}  (${entries.length} files)`);
 }

@@ -430,7 +430,7 @@
       function download() {
         const blob = new Blob([exportJson()], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
-        const a = h('a', { href: url, download: `gbot-settings-${new Date().toISOString().slice(0, 10)}.json` });
+        const a = h('a', { href: url, download: `lanista-settings-${new Date().toISOString().slice(0, 10)}.json` });
         element.appendChild(a);
         a.click();
         a.remove();
@@ -459,7 +459,7 @@
           return;
         }
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-          status.textContent = 'That does not look like GBot settings.';
+          status.textContent = 'That does not look like Lanista settings.';
           status.classList.add('error');
           return;
         }
@@ -543,7 +543,7 @@
         if (others.length) actions.append(select, button);
         note.textContent = others.length
           ? `Replace the settings of ${host ? S.serverName(host) : 'this server'} with those of another server you play on.`
-          : 'GBot has only been used on this server so far.';
+          : 'Lanista has only been used on this server so far.';
       });
       return [h('h3', {}, 'Copy from another server'), note, actions];
     }

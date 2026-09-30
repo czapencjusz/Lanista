@@ -66,7 +66,7 @@
       icon: 'general',
       description: 'Master switch, and which activity goes first when several are ready at once.',
       fields: [
-        { path: 'enabled', type: 'toggle', label: 'Bot is running' },
+        { path: 'enabled', type: 'toggle', label: 'Lanista is running' },
         {
           path: 'general.order',
           type: 'order',
