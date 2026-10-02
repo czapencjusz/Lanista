@@ -93,3 +93,70 @@ test('food from the packages goes into a food bag, and eggs stay in the packages
   // the egg in bag II (not a food bag, and not plain food) does not.
   assert.equal(await withGame(mockGame(), () => auction.countFood('abc', settings)), 2);
 });
+
+// The General goods merchant's food tab on s303-en (2026-10): container
+// 305, items with data-price-gold and data-level; tooltips as in the bags.
+const APPLE = ['Heudois Apple of Love', 'Using: Heals 3860 of life', 'From intelligence: +2325 vitality point(s)', 'Level 95', 'Merchant Price 1.424'];
+const MEAT = ['Sentarions Meat haunch of Martial Arts', 'Using: Heals 6030 of life', 'From intelligence: +2325 vitality point(s)', 'Level 95', 'Merchant Price 5.130'];
+const HIGH = ['Heavy Bread', 'Using: Heals 9000 of life', 'From intelligence: +2325 vitality point(s)', 'Level 120', 'Merchant Price 900'];
+const shopItem = (lines, x, price, level = 95, extra = '') =>
+  item(lines, ` data-position-x="${x}" data-position-y="1" data-price-gold="${price}" data-level="${level}"${extra}`);
+const SHOP = `<div id="shop" class="ui-droppable-grid" data-container-number="305" style="width:192px;height:256px;">
+  ${shopItem(APPLE, 1, 1424)}${shopItem(MEAT, 2, 5130)}${shopItem(TIPS.ginkgo, 3, 17865)}${shopItem(TIPS.rubyEgg, 4, 100)}
+  ${shopItem(HIGH, 5, 900, 120)}${shopItem(APPLE, 6, 50, 95, ' data-price-rubies="2"')}</div>`;
+
+test('merchant food: plain healing food for gold, up to the character level', () => {
+  const doc = new window.DOMParser().parseFromString(SHOP, 'text/html');
+  const offers = auction.readShopFood(doc, S.sanitizeSettings({}), 110);
+  assert.deepEqual(
+    offers.map((o) => [o.name, o.heal, o.price, o.cn, o.x, o.y]),
+    [
+      ['Heudois Apple of Love', 3860, 1424, 305, 1, 1],
+      ['Sentarions Meat haunch of Martial Arts', 6030, 5130, 305, 2, 1],
+    ],
+    'no buff, no egg, nothing above level 110, nothing with a ruby price'
+  );
+});
+
+test('buying food: best HP per gold, within the day\'s budget and the reserve, into a food bag', async () => {
+  const moves = [];
+  const empty = '<div id="shop" data-container-number="304" style="width:192px;height:256px;"></div>';
+  const fetch = async (url) => {
+    const u = new URL(url);
+    const reply = (text) => ({ ok: true, text: async () => text });
+    if (u.searchParams.get('submod') === 'move') {
+      const p = Object.fromEntries(u.searchParams);
+      moves.push(`${p.from} ${p.fromX},${p.fromY} -> ${p.to} at ${p.toX},${p.toY}`);
+      return reply('{}');
+    }
+    const mod = u.searchParams.get('mod');
+    if (mod === 'overview') return reply(`<script>new BagLoader(a, b, JSON.parse('${JSON.stringify([[], [], [], [], [], [], [], []])}'));</script>`);
+    if (mod === 'inventory') return reply(u.searchParams.get('sub') === '3' && u.searchParams.get('subsub') === '1' ? SHOP : empty);
+    throw new Error(`unexpected ${url}`);
+  };
+  const NOW = new Date(2026, 9, 2, 18, 0).getTime();
+  const settings = S.sanitizeSettings({ heal: { buy: true, buyAtOnce: 3, buyMaxGoldPerDay: 7000, buyKeepGold: 100000, bags: { b1: false, b2: true } } });
+  const memory = brain.createMemory(NOW);
+  const ctx = { settings, memory, state: { sh: 'abc', gold: 200000, level: 110 }, now: () => NOW, humanDelay: async () => {}, persist: async () => {} };
+
+  const result = await withGame({ fetch }, () => auction.buyFood(ctx));
+  assert.deepEqual(moves, ['305 1,1 -> 513 at 1,1', '305 2,1 -> 513 at 1,1'], 'apple first (2.7 HP/gold), then the meat; bag II is the food bag');
+  assert.equal(result.gold, 1424 + 5130);
+  assert.deepEqual(memory.foodShop, { sub: 3, subsub: 1 }, 'remembered for next time');
+  assert.deepEqual(memory.foodBought, { day: new Date(NOW).toDateString(), gold: 6554, items: 2 });
+  assert.equal(memory.stats.foodBought, 2);
+  assert.equal(memory.stats.goldSpent, 6554);
+
+  moves.length = 0;
+  const again = await withGame({ fetch }, () => auction.buyFood(ctx));
+  assert.deepEqual(moves, [], 'only 446 of the 7,000 a day are left, and the cheapest food costs 1,424');
+  assert.equal(again.reason, "the merchant's food costs more than the 446 gold left to spend");
+
+  memory.foodBought.gold = 7000;
+  assert.equal((await withGame({ fetch }, () => auction.buyFood(ctx))).reason, 'the daily food budget is spent');
+  const poor = { ...ctx, memory: brain.createMemory(NOW), state: { ...ctx.state, gold: 100500 } };
+  assert.equal((await withGame({ fetch }, () => auction.buyFood(poor))).reason, "the merchant's food costs more than the 500 gold left to spend", 'the reserve counts too');
+  const broke = { ...ctx, memory: brain.createMemory(NOW), state: { ...ctx.state, gold: 90000 } };
+  assert.equal((await withGame({ fetch }, () => auction.buyFood(broke))).reason, 'gold is at the reserve you set');
+  assert.deepEqual(moves, []);
+});

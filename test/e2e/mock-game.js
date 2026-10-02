@@ -34,6 +34,18 @@ function defaultState() {
     questFinished: false,
     expeditionDisabled: false,
     acceptedQuests: [],
+    gold: 12345,
+    // The local arena's "Own placing": players ranked just above us.
+    localArena: [
+      { id: 501, rank: 6, name: 'Friend', buddy: true },
+      { id: 502, rank: 7, name: 'Tough' },
+      { id: 503, rank: 8, name: 'Middle' },
+      { id: 504, rank: 9, name: 'NextUp' },
+    ],
+    // Local Circus Turma: attacks are only listed while taking part.
+    circusActive: false,
+    // Food in the General goods merchant's second tab (container 305).
+    shopFood: [],
     // Accepted quests: { pos, type, title, failed }. A failed one only offers
     // "Start quest again" (it runs again), a running one "Cancel quest".
     quests: [],
@@ -68,6 +80,7 @@ class MockGame {
       sh: SH,
       hp: s.hp,
       hpMax: s.hpMax,
+      gold: s.gold,
       expPoints: s.expPoints,
       dunPoints: s.dunPoints,
       cooldowns: {
@@ -199,6 +212,43 @@ class MockGame {
     );
   }
 
+  // The local arena (mod=arena) and circus (submod=grouparena), as on
+  // s303-en: rank, name (span.buddy for buddies) and an attack button.
+  localArenaPage(circus) {
+    const own = this.state.localArena
+      .map(
+        (p) => `<tr><td>${p.rank}</td><td><div><span${p.buddy ? ' class="buddy"' : ''}><a href="index.php?mod=player&p=${p.id}&sh=${SH}">${p.name}</a></span></div></td>
+          <td>${circus && !this.state.circusActive ? '' : `<div class="attack" onclick="startFight(this, ${p.id})"></div>`}</td></tr>`
+      )
+      .join('');
+    return this.render(
+      'arenaPage',
+      `<div id="errorRow" style="display:none"><div id="errorText"></div></div>
+       <h2 class="section-header">Own placing</h2>
+       <table><tr><th>Rank</th><th>Name</th><th></th></tr>${own}<tr><td>10</td><td>Me</td><td></td></tr></table>`,
+      `function startFight(el, id) {
+         $.get('ajax.php?mod=arena&submod=localFight&circus=${circus ? 1 : 0}&did=' + id + '&sh=' + secureHash, function (r) {
+           if (r.redirect) window.location.href = r.redirect;
+           else { $('#errorText').text(r.error); $('#errorRow').show(); }
+         }, 'json');
+       }`
+    );
+  }
+
+  // A merchant: General goods' second tab sells the food in state.shopFood;
+  // every other tab has an empty grid.
+  shopPage(sub, subsub) {
+    const food = sub === '3' && subsub === '1' ? this.state.shopFood : [];
+    const items = food
+      .map((f) => {
+        const tooltip = JSON.stringify([[['Apple', 'white'], [`Using: Heals ${f.heal} of life`, 'white'], ['From intelligence: +100 vitality point(s)', 'lime'], ['Level 20', 'white'], [`Merchant Price ${f.price}`, 'white']]]);
+        return `<div data-content-type="64" data-level="20" data-price-gold="${f.price}" data-position-x="${f.x}" data-position-y="${f.y}"
+                  data-measurement-x="1" data-measurement-y="1" data-tooltip='${tooltip}'></div>`;
+      })
+      .join('');
+    return this.render('shopPage', `<div id="shop" class="ui-droppable-grid" data-container-number="${300 + Number(sub) * 2 + Number(subsub)}" style="width:192px;height:256px;">${items}</div>`);
+  }
+
   arenaPage(aType) {
     const type = aType === '3' ? 'circus' : 'arena';
     const levels = type === 'arena' ? this.state.arenaLevels : this.state.circusLevels;
@@ -298,6 +348,21 @@ class MockGame {
         const levels = kind === 'arena' ? s.arenaLevels : s.circusLevels;
         return json(this.fight(kind, { opponent: q.opponentId, level: levels[Number(q.opponentId) - 100] }));
       }
+      if (q.mod === 'arena' && q.submod === 'localFight') {
+        const player = s.localArena.find((p) => String(p.id) === q.did);
+        return json(this.fight(q.circus === '1' ? 'circus' : 'arena', { opponent: player && player.name, local: true }));
+      }
+      if (q.mod === 'inventory' && q.submod === 'move' && q.from === '307') {
+        // Bought from the shop into a bag (General goods, tab 2).
+        const food = s.shopFood.find((f) => String(f.x) === q.fromX && String(f.y) === q.fromY);
+        if (!food) return json({ error: 'nothing there' });
+        if (s.gold < food.price) return json({ error: 'not enough gold' });
+        s.gold -= food.price;
+        s.shopFood = s.shopFood.filter((f) => f !== food);
+        (s.bags[q.to] = s.bags[q.to] || []).push({ x: Number(q.toX), y: Number(q.toY), heal: food.heal });
+        this.record('buy', { heal: food.heal, price: food.price, bag: Number(q.to) });
+        return json({ to: { data: { itemId: 9000 + s.events.length } } });
+      }
       if (q.mod === 'inventory' && q.submod === 'loadBag') {
         return route.fulfill({ contentType: 'text/html', body: this.bagItems(Number(q.bag)) });
       }
@@ -353,7 +418,10 @@ class MockGame {
       case 'dungeon':
         return page(this.dungeonPage());
       case 'arena':
-        return page(this.arenaPage(q.aType));
+        if (q.submod === 'serverArena') return page(this.arenaPage(q.aType));
+        return page(this.localArenaPage(q.submod === 'grouparena'));
+      case 'inventory':
+        return page(this.shopPage(q.sub, q.subsub));
       case 'work':
         return page(this.workPage());
       case 'quests':

@@ -27,9 +27,13 @@ it. (It used to be called GBot.)
   unlocked yet) and works through the enemies. Not a fan of the boss? Tell it to skip bosses: it
   clears everyone else, then cancels the dungeon and starts a fresh one. It can also start over after
   a few losses in a row.
-- **Arena and Circus Turma** (the Provinciarum ones). Go for the weakest, the strongest or a random
-  opponent, stay near your own level, keep a never-attack list, and steer clear of anyone who beat
-  you recently. Optionally it goes back to people you've already beaten first.
+- **Arena and Circus Turma**, in the Provinciarum (players from other servers) or on your own
+  server. Go for the weakest, the strongest or a random opponent, stay near your own level, keep a
+  never-attack list, and steer clear of anyone who beat you recently. Optionally it goes back to
+  people you've already beaten first. Your buddies are never attacked. On your own server the game
+  only shows the players ranked just above you, without levels, so "weakest" means the next rank
+  up. The local Circus also needs your participation status set to Active; Lanista leaves that
+  switch to you.
 - **The Underworld.** From level 100 it fights its way through the Underworld for you, carefully,
   since a bad fight there can get you kicked out for days
   ([more below](#the-underworld)).
@@ -47,6 +51,9 @@ it. (It used to be called GBot.)
 - **Food from the auction house.** Optionally bids on cheap food in the auction house, late in the
   round when you're least likely to be outbid, within a budget you set. Heads-up: the game keeps
   your gold if someone outbids you, so it bids once per item and never early.
+- **Food from the merchants.** When the food bags and the packages are both empty, it can buy a few
+  pieces from the General goods merchant, best HP per gold first, within a daily budget and never
+  below the gold you want to keep. It's pricier than the auction house, so think of it as a backup.
 
 ### Gear and loot
 
@@ -181,8 +188,8 @@ own tab. The green dots show what's switched on, and changes save and apply as y
 | Expedition | Location, which enemy, learning bonuses before the boss, an easier enemy after losses, points to keep, Mobilisations per day |
 | Dungeon | Location, Normal or Advanced, points to keep, skipping the boss, starting over after losses, Gate Keys per day |
 | Underworld | Fighting on/off, the HP limit, entering automatically, Mobilisations and healing potions per visit |
-| Arena / Circus Turma | Who to attack, level range, never-attack list, avoiding people who beat you, going back to people you beat |
-| Health | Eating on/off, when to eat, when to stop fighting, which bags hold food, plain food only |
+| Arena / Circus Turma | Provinciarum or your own server, who to attack, level range, never-attack list, avoiding people who beat you, going back to people you beat |
+| Health | Eating on/off, when to eat, when to stop fighting, which bags hold food, plain food only, buying food from the merchants |
 | Stable work | Which job, how many hours |
 | Training | Gold to keep, which stats |
 | Repair | When to repair, the *Repair all* cutoff, best materials to use, whose gear to look after |
@@ -194,7 +201,7 @@ own tab. The green dots show what's switched on, and changes save and apply as y
 | Timing & safety | Click delays, how long to wait between checks, what to do when something keeps failing |
 | Notifications | Which alerts you want, on the desktop and (if you like) on your phone |
 | Interface | Show the bar, floating or docked |
-| Statistics | Fights won and lost, loot, gold earned and spent, per-hour rates |
+| Statistics | Fights won and lost, loot, gold earned and spent, per-hour rates, and a table per day for the last 30 days |
 | Log | What it's been up to, a *Copy log* button and *Report a problem* |
 | Backup | Copy settings from another server, export, import, reset |
 

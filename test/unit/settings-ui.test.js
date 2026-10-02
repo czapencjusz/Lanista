@@ -205,3 +205,20 @@ test('phone alerts: the address is saved as typed, and "Send a test" sends to it
   assert.equal(sent.length, 1, 'not sent without https://');
   assert.equal($('.gb-push-status').textContent, 'Enter an https:// address first.');
 });
+
+test('statistics: a row per day with fights, wins, gold in and out', () => {
+  const t = Date.now();
+  const today = GBot.brain.dayKey(t);
+  const stats = { ...GBot.brain.createMemory(t).stats, expedition: 4, arena: 2, results: { expedition: { won: 3, lost: 1 }, arena: { won: 2, lost: 0 } }, loot: { gold: 10000, xp: 40, honour: 900, fame: 0 }, soldGold: 500, goldSpent: 1424 };
+  const base = { ...GBot.brain.createMemory(t).stats, loot: { gold: 0, xp: 0, honour: 0, fame: 0 } };
+  const memory = { stats, log: [], today: { day: today, base }, history: [{ day: '2026-09-28', dungeon: 5, results: { dungeon: { won: 5 } }, loot: { gold: 7000, fame: 300 } }] };
+  const { view, $ } = mount({}, { memory });
+  view.showTab('stats');
+  const rows = [...view.element.querySelectorAll('.gb-days tbody tr')].map((r) => [...r.children].map((c) => c.textContent));
+  const n = (v) => Number(v).toLocaleString();
+  assert.deepEqual(rows[0], ['Today', '6', '83%', n(10500), '40', '900', '0', n(1424)]);
+  assert.equal(rows[1][1], '5');
+  assert.equal(rows[1][2], '100%');
+  assert.equal(rows[1][3], n(7000));
+  assert.ok($('.gb-card') && [...view.element.querySelectorAll('.gb-card-label')].some((l) => l.textContent === 'Food bought'));
+});

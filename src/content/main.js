@@ -353,6 +353,7 @@
         log('info', `Back from the Underworld${used.length ? ` (used ${used.join(' and ')})` : ''}`);
       }
       for (const event of brain.resolvePending(state, memory, now)) log(event.level, event.message);
+      brain.rollStatsDay(memory, now);
       // Out of food, and food has turned up in the bags since (put there by
       // hand, or bought): no need to wait out the 30 minutes.
       if ((memory.noFoodUntil || 0) > now && state.inGame && foodInBags()) {
@@ -487,6 +488,8 @@
     onResetStats: () =>
       editMemory((m) => {
         m.stats = brain.createMemory(Date.now()).stats;
+        m.today = null;
+        m.history = [];
         m.blockedUntil = {};
         m.noFoodUntil = 0;
       }),

@@ -64,6 +64,14 @@
       underworldRun: null,
       // ... and outside it, per local day: { day, mobilisations, gateKeys }.
       itemsToday: null,
+      // Food bought from the merchants today ({ day, gold, items }), and the
+      // shop tab it was found in last ({ sub, subsub }).
+      foodBought: null,
+      foodShop: null,
+      // Statistics per day: the counters as they stood when today began
+      // ({ day, base }), and the finished days, newest first.
+      today: null,
+      history: [],
       // Auction house: when to look again, and this round's bids
       // ({ rank, spent, bids: { lotId: amount } }).
       nextAuctionCheck: 0,
@@ -93,6 +101,7 @@
         smelted: 0,
         sold: 0,
         soldGold: 0,
+        foodBought: 0,
         goldCollected: 0,
         auctionBids: 0,
         goldSpent: 0,
@@ -130,6 +139,7 @@
       beaten: { arena: { ...((memory.beaten && memory.beaten.arena) || {}) }, circus: { ...((memory.beaten && memory.beaten.circus) || {}) } },
       repairSkip: { ...(memory.repairSkip || {}) },
       smeltQueue: Array.isArray(memory.smeltQueue) ? memory.smeltQueue : [],
+      history: Array.isArray(memory.history) ? memory.history : [],
       log: Array.isArray(memory.log) ? memory.log : [],
     };
   }
@@ -730,6 +740,68 @@
 
   const fmt = (n) => Number(n).toLocaleString('en-US');
 
+  // ------------------------------------------------------------ history
+
+  // Statistics per day. memory.today keeps the counters as they stood when
+  // the day began, so the day's numbers are the difference; once a new day
+  // starts, the finished one goes into memory.history (newest first).
+  const HISTORY_DAYS = 30;
+  const NOT_COUNTERS = ['since', 'goldStart', 'goldNow'];
+
+  const dayKey = (now) => {
+    const d = new Date(now);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  // The numbers in the statistics (nested ones too), without the dates.
+  function counters(stats) {
+    const out = {};
+    for (const [key, value] of Object.entries(stats || {})) {
+      if (NOT_COUNTERS.includes(key)) continue;
+      if (typeof value === 'number') out[key] = value;
+      else if (value && typeof value === 'object') out[key] = counters(value);
+    }
+    return out;
+  }
+
+  // now - base, keeping only what changed.
+  function countersSince(now, base) {
+    const out = {};
+    for (const [key, value] of Object.entries(now)) {
+      const before = base ? base[key] : undefined;
+      if (typeof value === 'number') {
+        const diff = value - (typeof before === 'number' ? before : 0);
+        if (diff) out[key] = diff;
+      } else {
+        const diff = countersSince(value, before && typeof before === 'object' ? before : {});
+        if (Object.keys(diff).length) out[key] = diff;
+      }
+    }
+    return out;
+  }
+
+  // Called on every page: starts a new day's record when the date changes.
+  function rollStatsDay(memory, now) {
+    const day = dayKey(now);
+    const t = memory.today;
+    if (t && t.day === day) return;
+    if (t) {
+      const done = countersSince(counters(memory.stats), t.base);
+      if (Object.keys(done).length) {
+        memory.history = [{ day: t.day, ...done }, ...(memory.history || []).filter((h) => h.day !== t.day)].slice(0, HISTORY_DAYS);
+      }
+    }
+    memory.today = { day, base: counters(memory.stats) };
+  }
+
+  // The days to show, newest first: the current record (today so far, or a
+  // day that ended before the next page load) and the finished ones.
+  function statsDays(memory) {
+    const t = memory && memory.today;
+    const current = t ? [{ day: t.day, ...countersSince(counters(memory.stats), t.base) }] : [];
+    return current.concat(((memory && memory.history) || []).filter((h) => !t || h.day !== t.day));
+  }
+
   // How long the easier expedition enemy is fought after too many losses.
   const EASIER_ENEMY_MS = 3600 * 1000;
 
@@ -794,22 +866,52 @@
     return memory.questSteps.count <= 12;
   }
 
+  // Food to buy from the merchants' offers ([{ heal, price }]): best HP per
+  // gold first, up to `count` items that `gold` pays for together.
+  function planFoodPurchase(offers, count, gold) {
+    const picked = [];
+    let left = gold;
+    for (const offer of offers.slice().sort((a, b) => b.heal / b.price - a.heal / a.price)) {
+      if (picked.length >= count) break;
+      if (offer.price > 0 && offer.heal > 0 && offer.price <= left) {
+        picked.push(offer);
+        left -= offer.price;
+      }
+    }
+    return picked;
+  }
+
+  // What may still be spent on food today: the daily limit minus what was
+  // spent, and never below the gold reserve. `today` is the day's record.
+  function foodBudget(settings, memory, gold, now) {
+    const day = dayOf(now);
+    const today = memory.foodBought && memory.foodBought.day === day ? memory.foodBought : { day, gold: 0, items: 0 };
+    const cfg = settings.heal;
+    const byDay = cfg.buyMaxGoldPerDay - today.gold;
+    const byReserve = gold === null || gold === undefined ? 0 : gold - cfg.buyKeepGold;
+    return { today, budget: Math.max(0, Math.min(byDay, byReserve)), byDay: byDay <= byReserve };
+  }
+
   function markNoFood(memory, now) {
     memory.noFoodUntil = now + NO_FOOD_RETRY_MS;
     memory.pending = null;
   }
 
   // Opponent choice for arena / circus. `opponents` = [{ level, index }].
+  // Orders opponents by strength: their level, or where no levels are shown
+  // (the local arena) their rank, a better rank counting as stronger.
   function pickOpponents(opponents, strategy, random = Math.random) {
-    const list = opponents.filter((o) => o.level !== null && !Number.isNaN(o.level));
+    const known = (n) => n !== null && n !== undefined && !Number.isNaN(n);
+    const power = (o) => (known(o.level) ? o.level : known(o.rank) ? -o.rank : null);
+    const list = opponents.filter((o) => power(o) !== null);
     const rest = opponents.filter((o) => !list.includes(o));
-    if (strategy === 'highest') list.sort((a, b) => b.level - a.level);
+    if (strategy === 'highest') list.sort((a, b) => power(b) - power(a));
     else if (strategy === 'random') {
       for (let i = list.length - 1; i > 0; i--) {
         const j = Math.floor(random() * (i + 1));
         [list[i], list[j]] = [list[j], list[i]];
       }
-    } else list.sort((a, b) => a.level - b.level);
+    } else list.sort((a, b) => power(a) - power(b));
     return list.concat(rest);
   }
 
@@ -930,6 +1032,11 @@
     inRepairAll,
     expeditionTarget,
     easierEnemy,
+    planFoodPurchase,
+    foodBudget,
+    rollStatsDay,
+    statsDays,
+    dayKey,
     nextSmeltCheck,
     dungeonChoice,
     underworldSettings,

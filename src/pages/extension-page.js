@@ -131,6 +131,8 @@
       onResetStats: () =>
         editMemory((m) => {
           m.stats = GBot.brain.createMemory(Date.now()).stats;
+          m.today = null;
+          m.history = [];
           m.blockedUntil = {};
           m.noFoodUntil = 0;
         }),

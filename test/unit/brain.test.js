@@ -470,3 +470,42 @@ test('expedition: an easier enemy for an hour after losses in a row', () => {
   assert.equal(off.easierEnemy, null, '0 = off');
   assert.equal(makeSettings().expedition.easierAfterLosses, 0, 'off by default');
 });
+
+test('statistics per day: today so far, finished days kept for 30 days', () => {
+  const m = memory();
+  const at = (d, h = 12) => new Date(2026, 9, d, h).getTime();
+  brain.rollStatsDay(m, at(1, 9));
+  m.stats.expedition += 3;
+  m.stats.loot.gold += 1500;
+  m.stats.results.expedition = { won: 2, lost: 1 };
+  brain.rollStatsDay(m, at(1, 23));
+  assert.deepEqual(brain.statsDays(m), [{ day: '2026-10-01', expedition: 3, loot: { gold: 1500 }, results: { expedition: { won: 2, lost: 1 } } }]);
+
+  brain.rollStatsDay(m, at(2, 0));
+  m.stats.arena += 1;
+  m.stats.results.arena = { won: 1, lost: 0 };
+  m.stats.goldNow = 999999;
+  const days = brain.statsDays(m);
+  assert.deepEqual(days.map((d) => d.day), ['2026-10-02', '2026-10-01']);
+  assert.deepEqual(days[0], { day: '2026-10-02', arena: 1, results: { arena: { won: 1 } } }, 'only what changed today; gold on hand is not a counter');
+  assert.equal(days[1].expedition, 3);
+
+  // A day without a page load is skipped; the bot's next day starts fresh.
+  brain.rollStatsDay(m, at(5));
+  assert.deepEqual(m.history.map((d) => d.day), ['2026-10-02', '2026-10-01']);
+  assert.deepEqual(brain.statsDays(m)[0], { day: '2026-10-05' });
+  for (let d = 6; d < 45; d++) {
+    m.stats.heal += 1;
+    brain.rollStatsDay(m, new Date(2026, 9, d).getTime());
+  }
+  assert.equal(m.history.length, 30);
+});
+
+test('the local arena has no levels: weakest is the next rank up, strongest the best rank', () => {
+  const local = [{ name: 'A', rank: 6, level: null }, { name: 'B', rank: 7, level: null }, { name: 'C', rank: 9, level: null }];
+  assert.deepEqual(brain.pickOpponents(local, 'lowest').map((o) => o.name), ['C', 'B', 'A']);
+  assert.deepEqual(brain.pickOpponents(local, 'highest').map((o) => o.name), ['A', 'B', 'C']);
+  const s = makeSettings();
+  assert.equal(brain.filterOpponents(local, { ...s.arena, limitLevels: true }, 110).length, 3, 'the level range does not apply');
+  assert.equal(s.arena.where, 'provinciarum', 'Provinciarum by default');
+});

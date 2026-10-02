@@ -18,6 +18,9 @@
 
   const opponentDefaults = () => ({
     enabled: false,
+    // 'provinciarum' (players from other servers) | 'local' (this server's
+    // own arena: the players ranked just above you, no levels shown).
+    where: 'provinciarum',
     target: 'lowest', // 'lowest' | 'highest' | 'random'
     // Only attack opponents within [myLevel - maxBelow, myLevel + maxAbove].
     limitLevels: false,
@@ -112,6 +115,14 @@
       // Only food that just heals: not eggs, Cervisia and the like that also
       // give rubies, points, cooldown skips or Centurio.
       plainOnly: true,
+      // When the food bags and the packages are empty: buy food from the
+      // merchants (for gold only), best HP per gold first, up to buyAtOnce
+      // items per trip and buyMaxGoldPerDay a day, never going below
+      // buyKeepGold.
+      buy: false,
+      buyAtOnce: 3,
+      buyMaxGoldPerDay: 50000,
+      buyKeepGold: 100000,
     },
 
     work: {
@@ -287,6 +298,11 @@
     'underworld.potionBelowPercent': { int: true, min: 1, max: 99 },
     'heal.eatBelowPercent': { int: true, min: 0, max: 100 },
     'heal.minHpPercent': { int: true, min: 0, max: 100 },
+    'heal.buyAtOnce': { int: true, min: 1, max: 20 },
+    'heal.buyMaxGoldPerDay': { int: true, min: 0, max: 2000000000 },
+    'heal.buyKeepGold': { int: true, min: 0, max: 2000000000 },
+    'arena.where': { enum: ['provinciarum', 'local'] },
+    'circus.where': { enum: ['provinciarum', 'local'] },
     'work.job': { int: true, min: 0, max: 19 },
     'work.hours': { int: true, min: 1, max: 24 },
     'training.keepGold': { int: true, min: 0, max: 2000000000 },

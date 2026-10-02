@@ -1,5 +1,6 @@
-// Bids on healing items in the auction house, and takes food from the
-// packages when the bags run out (auction wins arrive as packages).
+// Bids on healing items in the auction house, takes food from the
+// packages when the bags run out (auction wins arrive as packages), and
+// buys food from the merchants when both are empty.
 //
 // The game warns: "If someone overbids you you do NOT get your gold back."
 // So the bot bids late in the round (when few players can still outbid
@@ -156,9 +157,78 @@
     return GBot.forge.tooltipLines(el)[0] || 'food';
   }
 
+  // The merchants' shop tabs (sub = merchant, subsub = tab). General goods
+  // (3) sells food on the servers seen so far, so it is looked at first,
+  // after the tab that had food last time.
+  const SHOP_TABS = [3, 1, 2, 4, 5, 6].flatMap((sub) => [0, 1, 2].map((subsub) => ({ sub, subsub })));
+
+  // Food on a merchant's shop page the bot may eat and buy: plain food (as
+  // set) for gold, never anything with a ruby price, at most the
+  // character's level.
+  function readShopFood(doc, settings, level) {
+    const shop = doc.querySelector(SEL.shop);
+    if (!shop) return [];
+    const cn = parseNumber(shop.getAttribute('data-container-number'));
+    return Array.from(shop.querySelectorAll(`[data-content-type="${FOOD_TYPE}"]`))
+      .filter((el) => edible(el, settings))
+      .filter((el) => !Array.from(el.attributes).some((a) => /rub(y|ies)/i.test(a.name)) && !/rub(y|ies)/i.test(el.getAttribute('data-tooltip') || ''))
+      .filter((el) => !level || !Number(el.dataset.level) || Number(el.dataset.level) <= level)
+      .map((el) => ({
+        name: GBot.forge.tooltipLines(el)[0] || 'food',
+        heal: healOf(el),
+        price: Number(el.dataset.priceGold) || 0,
+        cn,
+        x: Number(el.dataset.positionX),
+        y: Number(el.dataset.positionY),
+        w: Number(el.dataset.measurementX) || 1,
+        h: Number(el.dataset.measurementY) || 1,
+      }))
+      .filter((o) => o.price > 0 && o.heal > 0 && o.x && o.y);
+  }
+
+  // Buys food from a merchant into a food bag: what a player does by
+  // dragging it out of the shop (the same "move" request). Returns
+  // { bought: [names], gold } or { bought: [], reason }.
+  async function buyFood(ctx) {
+    const { settings, memory, state } = ctx;
+    const sh = state.sh;
+    const { today, budget, byDay } = brain.foodBudget(settings, memory, state.gold, ctx.now());
+    if (budget <= 0) return { bought: [], reason: byDay ? 'the daily food budget is spent' : 'gold is at the reserve you set' };
+
+    const last = memory.foodShop;
+    const tabs = last ? [last, ...SHOP_TABS.filter((t) => t.sub !== last.sub || t.subsub !== last.subsub)] : SHOP_TABS;
+    for (const tab of tabs) {
+      const { doc } = await GBot.forge.getDoc(sh, { mod: 'inventory', ...tab });
+      const offers = readShopFood(doc, settings, state.level);
+      if (!offers.length) continue;
+      const plan = brain.planFoodPurchase(offers, settings.heal.buyAtOnce, budget);
+      if (!plan.length) return { bought: [], reason: `the merchant's food costs more than the ${fmt(budget)} gold left to spend` };
+      memory.foodShop = tab;
+      const bought = [];
+      let gold = 0;
+      for (const item of plan) {
+        const spot = await GBot.forge.freeBagSpot(sh, item.w, item.h, brain.foodBags(settings));
+        await ctx.humanDelay();
+        await GBot.forge.moveItem(sh, { from: item.cn, fromX: item.x, fromY: item.y, to: spot.bag, toX: spot.x, toY: spot.y, amount: 1 });
+        bought.push(`${item.name} (${fmt(item.heal)} HP, ${fmt(item.price)} gold)`);
+        gold += item.price;
+        today.gold += item.price;
+        today.items += 1;
+        memory.foodBought = today;
+        memory.stats.foodBought = (memory.stats.foodBought || 0) + 1;
+        memory.stats.goldSpent = (memory.stats.goldSpent || 0) + item.price;
+        await ctx.persist();
+      }
+      return { bought, gold };
+    }
+    return { bought: [], reason: 'no merchant has food right now' };
+  }
+
+  const fmt = (n) => Number(n).toLocaleString('en-US');
+
   GBot.actions = GBot.actions || {};
   GBot.actions.auction = auction;
-  GBot.auction = { readAuction, timeRank, bidBody, takeFoodFromPackages, countFood, FOOD_TYPE };
+  GBot.auction = { readAuction, timeRank, bidBody, takeFoodFromPackages, countFood, readShopFood, buyFood, FOOD_TYPE };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = GBot.auction;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

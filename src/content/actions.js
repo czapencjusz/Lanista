@@ -367,22 +367,24 @@
 
   // --------------------------------------------------------- arena / circus
 
-  function readOpponents(type) {
-    const table = $(SEL.arena.tables[type]);
+  // The opponents on the page: name and level per row (Provinciarum), or
+  // rank and name (the local arena and circus, which show no levels).
+  // `buddy` marks players on the buddy list. null when there is no list.
+  function readOpponents(type, local = false) {
+    const table = local ? $$(SEL.arena.localTable).find((t) => t.querySelector(SEL.arena.attack)) : $(SEL.arena.tables[type]);
     if (!table) return null;
+    const cellText = (row, i) => (row.cells[i] ? row.cells[i].textContent.trim() : '');
     return $$('tr', table)
       .map((row) => ({ row, attack: row.querySelector(SEL.arena.attack) }))
       .filter((o) => o.attack)
-      .map((o, index) => {
-        const cell = o.row.cells[SEL.arena.levelCellIndex];
-        const nameCell = o.row.cells[SEL.arena.nameCellIndex];
-        return {
-          ...o,
-          index,
-          level: cell ? parseNumber(cell.textContent) : null,
-          name: nameCell ? nameCell.textContent.trim() : '',
-        };
-      });
+      .map((o, index) => ({
+        ...o,
+        index,
+        level: local ? null : parseNumber(cellText(o.row, SEL.arena.levelCellIndex)),
+        rank: local ? parseNumber(cellText(o.row, SEL.arena.localRankCellIndex)) : null,
+        name: cellText(o.row, local ? SEL.arena.localNameCellIndex : SEL.arena.nameCellIndex),
+        buddy: !!o.row.querySelector(SEL.arena.buddy),
+      }));
   }
 
   function visibleConfirmDialog() {
@@ -391,24 +393,39 @@
 
   async function arenaLike(ctx, type) {
     const { state, settings } = ctx;
-    const page = type === 'arena' ? PAGES.arena() : PAGES.circus();
-    const onPage = state.page.mod === 'arena' && state.page.submod === 'serverArena' && state.page.aType === String(page.aType);
-    if (!onPage) return ctx.navigate(ctx.url(page), type === 'arena' ? 'arena provinciarum' : 'circus provinciarum');
+    const local = settings[type].where === 'local';
+    const page = local ? (type === 'arena' ? PAGES.localArena() : PAGES.localCircus()) : type === 'arena' ? PAGES.arena() : PAGES.circus();
+    const name = `${local ? 'local ' : ''}${type}${local ? '' : ' provinciarum'}`;
+    const onPage = local
+      ? state.page.mod === 'arena' && (state.page.submod || null) === (page.submod || null)
+      : state.page.mod === 'arena' && state.page.submod === 'serverArena' && state.page.aType === String(page.aType);
+    if (!onPage) return ctx.navigate(ctx.url(page), local ? `the ${name}` : name);
 
-    const opponents = readOpponents(type);
-    if (!opponents) throw new ActionError(`The ${type} opponent list was not found`);
-    if (!opponents.length) throw new ActionError(`No ${type} opponents can be attacked`);
+    const opponents = readOpponents(type, local);
+    if (!opponents && local && type === 'circus') {
+      // Nobody to attack in the local Circus while the participation status
+      // is Passive. Changing it is the player's call (it also opens them to
+      // attacks), so wait a while instead of failing over and over.
+      ctx.memory.blockedUntil[type] = ctx.now() + 6 * 3600 * 1000;
+      ctx.memory.pending = null;
+      ctx.log('warn', 'Local circus: nobody can be attacked. Is your participation status Passive? Set it to Active on the Circus Turma page, or switch to Provinciarum under Settings > Circus Turma. Looking again in 6 hours.');
+      return { retick: true };
+    }
+    if (!opponents) throw new ActionError(`The ${name} opponent list was not found`);
+    if (!opponents.length) throw new ActionError(`No ${name} opponents can be attacked`);
 
+    // Players on the buddy list are never attacked.
     const avoided = brain.avoidedNames(ctx.memory, type, ctx.now());
-    const allowed = brain.filterOpponents(opponents, settings[type], state.level, avoided);
-    if (!allowed.length) throw new ActionError(`None of the ${opponents.length} ${type} opponents match your filters`);
+    const allowed = brain.filterOpponents(opponents.filter((o) => !o.buddy), settings[type], state.level, avoided);
+    if (!allowed.length) throw new ActionError(`None of the ${opponents.length} ${name} opponents match your filters (buddies are never attacked)`);
     let order = brain.pickOpponents(allowed, settings[type].target);
     if (settings[type].preferBeaten) order = brain.preferBeaten(order, ctx.memory.beaten[type], ctx.now());
     for (const opponent of order.slice(0, 3)) {
       // Remembered so the combat report can be tied to this opponent.
       if (ctx.memory.pending) Object.assign(ctx.memory.pending, { opponent: opponent.name, avoidHours: settings[type].avoidLostHours });
       await ctx.persist();
-      await click(ctx, opponent.attack, `attack ${type} opponent ${opponent.name || ''} (level ${opponent.level ?? '?'})`);
+      const about = opponent.rank !== null && opponent.rank !== undefined ? `rank ${opponent.rank}` : `level ${opponent.level ?? '?'}`;
+      await click(ctx, opponent.attack, `attack ${name} opponent ${opponent.name || ''} (${about})`);
       const outcome = await waitFor(() => {
         if (ctx.isUnloading()) return 'navigated';
         if (visibleConfirmDialog()) return 'confirm';
@@ -616,8 +633,22 @@
       }
     }
 
+    // Still nothing: buy some from a merchant, if allowed.
+    if (settings.heal.buy && GBot.auction) {
+      try {
+        const result = await GBot.auction.buyFood(ctx);
+        if (result.bought.length) {
+          ctx.log('info', `Bought food from the merchant for ${result.gold.toLocaleString('en-US')} gold: ${result.bought.join(', ')}`);
+          return { refresh: true };
+        }
+        ctx.log('info', `Did not buy food: ${result.reason}`);
+      } catch (e) {
+        ctx.log('warn', `Could not buy food: ${e.message}`);
+      }
+    }
+
     brain.markNoFood(ctx.memory, ctx.now());
-    ctx.log('warn', 'No food in the food bags or the packages; waiting for HP to regenerate (looking again in 30 min, or as soon as food shows up in a food bag or you press Check now)');
+    ctx.log('warn', `No food in the food bags or the packages${settings.heal.buy ? ', and none bought' : ''}; waiting for HP to regenerate (looking again in 30 min, or as soon as food shows up in a food bag or you press Check now)`);
     if (ctx.notify) ctx.notify('noFood', `Lanista: HP is ${state.hp.percent}% and there is no food left in your food bags. Put some in and press Check now.`);
     return { retick: true };
   }

@@ -150,6 +150,12 @@ a.gb-btn, a.gb-icon-btn { text-decoration: none; }
 .gb-card-value { font: 700 19px/1.1 var(--gb-heading); color: var(--gb-blood); font-variant-numeric: tabular-nums; }
 .gb-card-label { font-weight: 700; margin-top: 2px; }
 .gb-card-sub { font-size: 11px; color: var(--gb-muted); }
+.gb-table-wrap { overflow-x: auto; border: 1px solid var(--gb-line); border-radius: 6px; background: var(--gb-parchment-2); }
+.gb-table { width: 100%; border-collapse: collapse; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.gb-table th, .gb-table td { padding: 4px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid rgba(122, 90, 50, .18); }
+.gb-table thead th { color: var(--gb-muted); font-weight: 700; }
+.gb-table th[scope="row"], .gb-table thead th:first-child { text-align: left; }
+.gb-table tbody tr:last-child th, .gb-table tbody tr:last-child td { border-bottom: 0; }
 .gb-log {
   max-height: 360px; overflow-y: auto; padding: 6px 8px; background: var(--gb-parchment-2);
   border: 1px solid var(--gb-line); border-radius: 6px; font: 11px/1.5 var(--gb-font); font-variant-numeric: tabular-nums;

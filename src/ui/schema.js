@@ -29,6 +29,20 @@
   const KINDS_HELP = 'Armour means helmets, shields, chest armour, gloves and shoes.';
 
   const opponentFields = (type) => [
+    {
+      path: `${type}.where`,
+      type: 'select',
+      label: 'Where',
+      options: [
+        { value: 'provinciarum', label: type === 'arena' ? 'Arena Provinciarum (other servers)' : 'Circus Provinciarum (other servers)' },
+        { value: 'local', label: type === 'arena' ? 'Local arena (this server)' : 'Local Circus Turma (this server)' },
+      ],
+      help:
+        (type === 'arena'
+          ? 'Locally you fight the players ranked just above you on your own server, for a share of their gold, and they can hit back. '
+          : 'Locally you fight the teams ranked just above you on your own server. It needs your participation status set to Active on the Circus Turma page (which lets others attack you too); Lanista never changes it. ') +
+        'No levels are shown there, so the level range is ignored and the weakest is the one ranked just above you. Players on your buddy list are never attacked.',
+    },
     { path: `${type}.target`, type: 'select', label: 'Opponent choice', options: TARGETS },
     {
       path: `${type}.limitLevels`,
@@ -214,7 +228,7 @@
       title: 'Arena',
       icon: 'arena',
       enable: 'arena.enabled',
-      description: 'Arena Provinciarum: fight players from other servers.',
+      description: "Fight other players: in the Arena Provinciarum (other servers) or your own server's arena.",
       fields: opponentFields('arena'),
     },
     {
@@ -222,7 +236,7 @@
       title: 'Circus Turma',
       icon: 'circus',
       enable: 'circus.enabled',
-      description: 'Circus Turma Provinciarum: team fights. Your own HP is not used.',
+      description: "Team fights, in the Circus Provinciarum or your own server's Circus Turma. Your own HP is not used.",
       fields: opponentFields('circus'),
     },
     {
@@ -255,6 +269,16 @@
           dependsOn: 'heal.enabled',
           help: 'Skip food that does something besides healing: eggs that give rubies, points or cooldown skips, Cervisia that activates Centurio, and the like. The auction house does not bid on those either.',
         },
+        {
+          path: 'heal.buy',
+          type: 'toggle',
+          label: 'Buy food from the merchants when none is left',
+          dependsOn: 'heal.enabled',
+          help: "Only when the food bags and the packages hold no food. The merchants' food (General goods sells it) costs more than the auction house, so the best HP per gold goes first. It goes into a food bag. Gold only, never rubies.",
+        },
+        { path: 'heal.buyAtOnce', type: 'number', label: 'Items to buy per trip', dependsOn: 'heal.buy' },
+        { path: 'heal.buyMaxGoldPerDay', type: 'number', label: 'Spend at most', unit: 'gold a day', dependsOn: 'heal.buy' },
+        { path: 'heal.buyKeepGold', type: 'number', label: 'Never let gold drop below', dependsOn: 'heal.buy' },
       ],
     },
     {

@@ -178,6 +178,45 @@ test.describe('Lanista against a mock Gladiatus server', { skip: !executablePath
     assert.equal(game.events('circus')[0].level, 45);
   });
 
+  test('local arena: the strongest that is not a buddy; local circus waits while passive', { timeout: 90000 }, async () => {
+    await scenario(
+      { expPoints: 0, dunPoints: 0 },
+      {
+        expedition: { enabled: false },
+        dungeon: { enabled: false },
+        arena: { enabled: true, where: 'local', target: 'highest' },
+        circus: { enabled: true, where: 'local' },
+      }
+    );
+    const [fight] = await waitUntil(() => game.events('arena').length && game.events('arena'), 60000, 'a local arena fight');
+    assert.deepEqual([fight.opponent, fight.local], ['Tough', true], 'rank 6 is a buddy, so rank 7');
+    const memory = await waitUntil(async () => {
+      const m = await storageGet(`memory:${HOST}`);
+      return m && m.blockedUntil && m.blockedUntil.circus ? m : null;
+    }, 30000, 'the circus to wait');
+    assert.ok(memory.blockedUntil.circus > Date.now() + 5 * 3600 * 1000, 'about 6 hours');
+    assert.equal(game.events('circus').length, 0);
+    assert.ok(memory.log.some((l) => /participation status Passive/.test(l.message)));
+  });
+
+  test('out of food: buys the best HP per gold from the merchant, then eats it', { timeout: 90000 }, async () => {
+    const shopFood = [
+      { x: 1, y: 1, heal: 300, price: 500 },
+      { x: 2, y: 1, heal: 400, price: 2000 },
+      { x: 3, y: 1, heal: 350, price: 400 },
+    ];
+    await scenario(
+      { hp: 100, expPoints: 0, dunPoints: 0, bags: { 512: [], 513: [] }, shopFood },
+      { expedition: { enabled: true }, heal: { enabled: true, eatBelowPercent: 50, minHpPercent: 25, buy: true, buyAtOnce: 2, buyKeepGold: 1000, bags: { b1: false, b2: true } } }
+    );
+    await waitUntil(() => game.events('heal').length, 60000, 'eating the bought food');
+    assert.deepEqual(game.events('buy').map((b) => [b.price, b.bag]), [[400, 513], [500, 513]], 'best HP per gold first, into the food bag (II)');
+    assert.equal(game.state.gold, 12345 - 900);
+    const memory = await storageGet(`memory:${HOST}`);
+    assert.equal(memory.stats.foodBought, 2);
+    assert.equal(memory.foodBought.gold, 900);
+  });
+
   test('collects the daily login bonus', { timeout: 45000 }, async () => {
     await scenario({ loginBonus: true, expPoints: 0, dunPoints: 0 }, {});
     await waitUntil(() => game.events('loginBonus').length, 30000, 'login bonus');

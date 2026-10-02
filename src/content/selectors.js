@@ -106,6 +106,15 @@
       levelCellIndex: 1,
       error: '#errorRow',
       errorText: '#errorText',
+      // The local arena and circus (this server): "Own placing" lists the
+      // players ranked just above you (rank, name, attack); no levels.
+      // Players on your buddy list have their name in a span.buddy. The
+      // local Circus only lists attacks while your participation status is
+      // Active; Lanista never changes it.
+      localTable: '#content table',
+      localRankCellIndex: 0,
+      localNameCellIndex: 1,
+      buddy: '.buddy',
     },
 
     inventory: {
@@ -241,6 +250,8 @@
     premiumInventory: () => ({ mod: 'premium', submod: 'inventory' }),
     arena: () => ({ mod: 'arena', submod: 'serverArena', aType: 2 }),
     circus: () => ({ mod: 'arena', submod: 'serverArena', aType: 3 }),
+    localArena: () => ({ mod: 'arena' }),
+    localCircus: () => ({ mod: 'arena', submod: 'grouparena' }),
     work: () => ({ mod: 'work' }),
     training: () => ({ mod: 'training' }),
     quests: () => ({ mod: 'quests' }),

@@ -393,16 +393,65 @@
 
     const formatNumber = (n) => (n === null || n === undefined ? '–' : Number(n).toLocaleString());
 
+    // "Today", "Yesterday", or "Mon 28 Sep" for a day key (YYYY-MM-DD).
+    function dayLabel(day) {
+      const [y, m, d] = day.split('-').map(Number);
+      const date = new Date(y, m - 1, d);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const ago = Math.round((today - date) / 86400000);
+      if (ago === 0) return 'Today';
+      if (ago === 1) return 'Yesterday';
+      return date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+    }
+
+    // One row per day: fights and how many were won, what came in and what
+    // was spent.
+    function daysTable(days) {
+      const fightTypes = ['expedition', 'dungeon', 'arena', 'circus'];
+      const n = (v) => (typeof v === 'number' ? v : 0);
+      const rows = days.map((d) => {
+        const fights = fightTypes.reduce((sum, t) => sum + n(d[t]), 0);
+        const results = d.results || {};
+        const won = fightTypes.reduce((sum, t) => sum + n(results[t] && results[t].won), 0);
+        const lost = fightTypes.reduce((sum, t) => sum + n(results[t] && results[t].lost), 0);
+        const loot = d.loot || {};
+        const gold = n(loot.gold) + n(d.soldGold) + n(d.goldCollected);
+        return h(
+          'tr',
+          { dataset: { day: d.day } },
+          h('th', { scope: 'row' }, dayLabel(d.day)),
+          h('td', {}, formatNumber(fights)),
+          h('td', {}, won + lost ? `${Math.round((100 * won) / (won + lost))}%` : '–'),
+          h('td', {}, formatNumber(gold)),
+          h('td', {}, formatNumber(n(loot.xp))),
+          h('td', {}, formatNumber(n(loot.honour))),
+          h('td', {}, formatNumber(n(loot.fame))),
+          h('td', {}, formatNumber(n(d.goldSpent)))
+        );
+      });
+      const head = ['Day', 'Fights', 'Won', 'Gold in', 'XP', 'Honour', 'Fame', 'Gold spent'].map((t) => h('th', { scope: 'col' }, t));
+      return h('div', { class: 'gb-table-wrap' }, h('table', { class: 'gb-table gb-days' }, h('thead', {}, h('tr', {}, head)), h('tbody', {}, rows)));
+    }
+
     function statsPane() {
       const cards = h('div', { class: 'gb-cards' });
+      const daysBox = h('div', {});
       const since = h('p', { class: 'gb-desc' });
       const reset = h('button', { type: 'button', class: 'gb-btn', onclick: () => confirmThen(reset, 'Reset statistics', opts.onResetStats) }, 'Reset statistics');
       syncers.push(() => {
         const stats = (view.memory && view.memory.stats) || null;
         cards.textContent = '';
+        daysBox.textContent = '';
         if (!stats) {
           since.textContent = 'No data yet. Open a game tab with the bot running.';
           return;
+        }
+        const days = GBot.brain && GBot.brain.statsDays ? GBot.brain.statsDays(view.memory) : [];
+        if (days.length) {
+          daysBox.appendChild(h('h3', {}, 'Per day'));
+          daysBox.appendChild(daysTable(days));
+          daysBox.appendChild(h('p', { class: 'gb-help' }, 'Gold in: looted, sold and taken from gold packages. Gold spent: training, repairs and food. The last 30 days are kept.'));
         }
         const hours = Math.max((Date.now() - stats.since) / 3600000, 1 / 60);
         const card = (label, value, sub) =>
@@ -419,6 +468,7 @@
           ['repairs', 'Items repaired'],
           ['smelted', 'Items smelted'],
           ['sold', 'Items sold'],
+          ['foodBought', 'Food bought'],
           ['auctionBids', 'Auction bids'],
           ['quests', 'Quests finished'],
           ['work', 'Work shifts'],
@@ -442,7 +492,7 @@
         }
         since.textContent = `Since ${new Date(stats.since).toLocaleString()}.`;
       });
-      return [since, cards, h('div', { class: 'gb-actions' }, reset)];
+      return [since, cards, daysBox, h('div', { class: 'gb-actions' }, reset)];
     }
 
     function logPane() {
