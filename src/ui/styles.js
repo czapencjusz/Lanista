@@ -109,6 +109,9 @@ a.gb-btn, a.gb-icon-btn { text-decoration: none; }
 .gb-number { width: 76px; }
 .gb-select { min-width: 150px; max-width: 100%; }
 .gb-textarea { width: 100%; resize: vertical; min-height: 64px; }
+.gb-push { display: flex; width: 100%; }
+.gb-input-wide { flex: 1 1 auto; min-width: 0; }
+.gb-push-status { margin-top: 4px; }
 .gb-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; }
 .gb-input:disabled { cursor: not-allowed; }
 
@@ -141,6 +144,7 @@ a.gb-btn, a.gb-icon-btn { text-decoration: none; }
 .gb-order li.on .gb-order-state { color: var(--gb-green); }
 
 .gb-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
+.gb-offscreen { position: fixed; left: -9999px; top: 0; width: 1px; height: 1px; opacity: 0; }
 .gb-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
 .gb-card { padding: 9px 11px; background: var(--gb-parchment-2); border: 1px solid var(--gb-line); border-radius: 7px; }
 .gb-card-value { font: 700 19px/1.1 var(--gb-heading); color: var(--gb-blood); font-variant-numeric: tabular-nums; }

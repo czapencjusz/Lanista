@@ -203,6 +203,19 @@ test.describe('Lanista against a mock Gladiatus server', { skip: !executablePath
     assert.deepEqual(game.events('questAccept').map((e) => e.questType), ['expedition']);
   });
 
+  test('failed quests: started again, or given up when the bot would not do them', { timeout: 60000 }, async () => {
+    const types = { combat: false, arena: true, circus: false, expedition: true, dungeon: false, items: false };
+    const quests = [
+      { pos: 4, type: 'arena', title: 'Arena: Win 3 attacks in succession', failed: true },
+      { pos: 5, type: 'expedition', title: 'Defeat 5 opponents', failed: true },
+    ];
+    await scenario({ quests, acceptedQuests: ['expedition', 'items'], expPoints: 0, dunPoints: 0 }, { arena: { enabled: false }, quests: { enabled: true, types } });
+    await waitUntil(() => game.events('cancelQuest').length && game.events('restartQuest').length === 2, 45000, 'both quests started again, one cancelled');
+    assert.deepEqual(game.events('restartQuest').map((e) => e.title).sort(), ['Arena: Win 3 attacks in succession', 'Defeat 5 opponents']);
+    assert.deepEqual(game.events('cancelQuest').map((e) => e.title), ['Arena: Win 3 attacks in succession'], 'the arena is off: given up');
+    assert.deepEqual(game.state.quests.map((q) => [q.title, q.failed]), [['Defeat 5 opponents', false]]);
+  });
+
   test('pauses an activity that keeps failing instead of looping', { timeout: 90000 }, async () => {
     await scenario(
       { expeditionDisabled: true, expPoints: 5, dunPoints: 0 },

@@ -335,6 +335,19 @@ test('chooseQuest picks the best-paying quest for my places and activities', () 
   assert.equal(brain.chooseQuest(work, withWork, {}).type, 'work');
 });
 
+test('failed quests are started again twice a day, then given up', () => {
+  const s = makeSettings();
+  const m = memory();
+  const quest = { type: 'expedition', title: 'Cursed Village: Defeat 5 x Ancient' };
+  const step = (q, now = NOW) => brain.failedQuestStep(q, s, { location: 'Cursed Village' }, m, now);
+  assert.deepEqual(step(quest), { step: 'restart' });
+  assert.deepEqual(step(quest), { step: 'restart' });
+  assert.deepEqual(step(quest), { step: 'drop', why: 'failed 3 times today' });
+  assert.deepEqual(step(quest, NOW + 24 * 3600 * 1000), { step: 'restart' }, 'a new day');
+  assert.deepEqual(step({ type: 'arena', title: 'Arena: Win 3 attacks in succession' }), { step: 'drop', why: 'not one Lanista takes on' }, 'the arena is off');
+  assert.deepEqual(step({ type: 'expedition', title: 'Death Hill: Defeat 3 x Harpy' }), { step: 'drop', why: 'not one Lanista takes on' }, 'another location');
+});
+
 test('combat reports are counted and losing opponents avoided', () => {
   const m = memory();
   m.pending = { type: 'arena', at: NOW, attempts: 1, opponent: 'Kaczuszek', avoidHours: 24 };
@@ -423,4 +436,37 @@ test('with the boss selected, earlier enemies with bonuses to learn go first', (
   assert.equal(brain.expeditionTarget(enemies, { enemy: 2, bonusesFirst: true }), 1, 'only applies to the boss');
   assert.equal(brain.expeditionTarget([], cfg), 3, 'page not understood: keep the chosen enemy');
   assert.equal(makeSettings().expedition.bonusesFirst, false, 'off by default');
+});
+
+test('expedition: an easier enemy for an hour after losses in a row', () => {
+  const m = memory();
+  const fight = (win, enemy = 3, at = NOW) => {
+    m.pending = { type: 'expedition', at, attempts: 1, enemy, loc: '7', easierAfter: 3 };
+    return brain.resolvePending(makeState({ report: { win, gold: 0, xp: 1, renown: 0 } }), m, at + 1000).map((e) => e.message);
+  };
+  fight(false);
+  fight(false);
+  fight(true);
+  assert.equal(brain.easierEnemy(m, '7', NOW), null, 'a win starts the count again');
+  fight(false);
+  fight(false, 2);
+  fight(false);
+  assert.equal(brain.easierEnemy(m, '7', NOW), null, 'losses against different enemies do not add up');
+  fight(false);
+  const events = fight(false);
+  assert.ok(events.includes('Expedition: 3 lost fights in a row against enemy #4, fighting enemy #3 for an hour'), events.join(' / '));
+  assert.equal(brain.easierEnemy(m, '7', NOW + 1000), 2);
+  assert.equal(brain.easierEnemy(m, '8', NOW + 1000), null, 'only at that location');
+  assert.equal(brain.easierEnemy(m, '7', NOW + 3601 * 1000), null, 'back to the chosen enemy after an hour');
+
+  fight(false, 0);
+  fight(false, 0);
+  assert.ok(fight(false, 0).includes('Expedition: 3 lost fights in a row, and enemy #1 is already the easiest here'));
+  const off = memory();
+  for (let i = 0; i < 5; i++) {
+    off.pending = { type: 'expedition', at: NOW, attempts: 1, enemy: 3, loc: '7', easierAfter: 0 };
+    brain.resolvePending(makeState({ report: { win: false, gold: 0, xp: 1, renown: 0 } }), off, NOW + 1000);
+  }
+  assert.equal(off.easierEnemy, null, '0 = off');
+  assert.equal(makeSettings().expedition.easierAfterLosses, 0, 'off by default');
 });

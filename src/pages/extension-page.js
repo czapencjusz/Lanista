@@ -138,6 +138,7 @@
         editMemory((m) => {
           m.log = [];
         }),
+      onTestPush: (url) => ext.runtime.sendMessage({ type: 'pushTest', url, host }),
     });
 
     document.body.append(header, permission, h('main', { class: 'gb-page-main' }, view.element));

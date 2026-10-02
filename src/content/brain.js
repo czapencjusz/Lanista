@@ -48,8 +48,17 @@
       nextPackagesCheck: 0,
       // Dungeon fights lost in a row (for dungeon.restartAfterLosses).
       dungeonLosses: 0,
-      // When to look at the Hermit again for entering the Underworld.
+      // Expedition fights lost in a row against one enemy ({ key, count },
+      // key = "loc:enemy index"), and the easier enemy fought for a while
+      // after too many ({ loc, enemy, until }), for
+      // expedition.easierAfterLosses.
+      expeditionLosses: null,
+      easierEnemy: null,
+      // When to look at the Hermit again for entering the Underworld, and
+      // the level not entered because its Dīs Pater's Armor is still held
+      // (the player is told once).
       nextUnderworldCheck: 0,
+      underworldArmor: null,
       // Premium items used during the current Underworld visit:
       // { since, mobilisations, potions }; null outside.
       underworldRun: null,
@@ -60,6 +69,11 @@
       nextAuctionCheck: 0,
       auctionRound: null,
       questSteps: { since: 0, count: 0 },
+      // Failed quests started again today ({ day, titles: { title: n } }),
+      // and the one given up: started again on the last visit, to be
+      // cancelled on the next.
+      questRestarts: null,
+      questDrop: null,
       breakUntil: 0,
       nextBreakAt: 0,
       // Facts about the game read from pages, shown in the settings UI.
@@ -674,6 +688,7 @@
           const prev = memory.beaten[type][key];
           memory.beaten[type][key] = { wins: ((prev && prev.wins) || 0) + 1, at: now };
         }
+        if (type === 'expedition' && pending.enemy !== undefined) events.push(...trackExpeditionLosses(memory, pending, state.report.win, now));
         if (!state.report.win && pending.opponent && memory.avoid[type] && pending.avoidHours > 0) {
           memory.avoid[type][pending.opponent.toLowerCase()] = now + pending.avoidHours * 3600 * 1000;
           events.push({ level: 'info', message: `${LABELS[type]}: avoiding ${pending.opponent} for ${pending.avoidHours}h after a loss` });
@@ -714,6 +729,32 @@
   }
 
   const fmt = (n) => Number(n).toLocaleString('en-US');
+
+  // How long the easier expedition enemy is fought after too many losses.
+  const EASIER_ENEMY_MS = 3600 * 1000;
+
+  // Counts expedition losses in a row against one enemy (pending.enemy, a
+  // 0-based index at pending.loc). After pending.easierAfter of them the
+  // next easier enemy is fought for a while. Returns log events.
+  function trackExpeditionLosses(memory, pending, win, now) {
+    const key = `${pending.loc}:${pending.enemy}`;
+    const prev = memory.expeditionLosses && memory.expeditionLosses.key === key ? memory.expeditionLosses.count : 0;
+    const count = win ? 0 : prev + 1;
+    memory.expeditionLosses = { key, count };
+    if (!(pending.easierAfter > 0) || count < pending.easierAfter) return [];
+    memory.expeditionLosses = { key, count: 0 };
+    if (pending.enemy <= 0) {
+      return [{ level: 'warn', message: `Expedition: ${count} lost fights in a row, and enemy #1 is already the easiest here` }];
+    }
+    memory.easierEnemy = { loc: pending.loc, enemy: pending.enemy - 1, until: now + EASIER_ENEMY_MS };
+    return [{ level: 'info', message: `Expedition: ${count} lost fights in a row against enemy #${pending.enemy + 1}, fighting enemy #${pending.enemy} for an hour` }];
+  }
+
+  // The easier expedition enemy (0-based) to fight at `loc` now, or null.
+  function easierEnemy(memory, loc, now) {
+    const e = memory.easierEnemy;
+    return e && e.until > now && String(e.loc) === String(loc) ? e.enemy : null;
+  }
 
   // Adds a combat report to the statistics; returns the log message.
   function recordFight(memory, type, report, opponent, now) {
@@ -829,7 +870,9 @@
   //
   // With onlyActive, quests for activities the bot does not do are skipped.
   // Dungeon quests are titled "<Dungeon>: ..." and matched like locations.
-  function chooseQuest(offers, settings, places = {}) {
+  // Whether the bot would take on a quest: its type is ticked, the bot does
+  // that activity, and it is for the location the bot fights at.
+  function questWanted(quest, settings, places = {}) {
     const q = settings.quests;
     const norm = (s) => (s ? String(s).trim().toLowerCase() : null);
     const where = { expedition: norm(places.location), dungeon: norm(places.dungeon) };
@@ -842,21 +885,40 @@
       items: settings.expedition.enabled || settings.dungeon.enabled,
       combat: FIGHTS.some((t) => settings[t].enabled),
     };
-    const ok = offers.filter((quest) => {
-      if (!quest.type || !q.types[quest.type]) return false;
-      if (q.onlyActive && doing[quest.type] === false) return false;
-      const here = where[quest.type];
-      if (!q.matchLocation || !here) return true;
-      const m = String(quest.title || '').match(/^([^:]+):/);
-      return !m || m[1].trim().toLowerCase() === here;
-    });
+    if (!quest.type || !q.types[quest.type]) return false;
+    if (q.onlyActive && doing[quest.type] === false) return false;
+    const here = where[quest.type];
+    if (!q.matchLocation || !here) return true;
+    const m = String(quest.title || '').match(/^([^:]+):/);
+    return !m || m[1].trim().toLowerCase() === here;
+  }
+
+  function chooseQuest(offers, settings, places = {}) {
+    const ok = offers.filter((quest) => questWanted(quest, settings, places));
     if (!ok.length) return null;
     return ok.slice().sort((a, b) => (b.reward || 0) - (a.reward || 0))[0];
+  }
+
+  // A failed quest keeps its slot until it is started again. It is started
+  // again while the bot would take it on, at most this often per quest and
+  // day; otherwise it is given up: started again, then cancelled.
+  const QUEST_RESTARTS_PER_DAY = 2;
+
+  function failedQuestStep(quest, settings, places, memory, now) {
+    const day = dayOf(now);
+    if (!memory.questRestarts || memory.questRestarts.day !== day) memory.questRestarts = { day, titles: {} };
+    const titles = memory.questRestarts.titles;
+    if (!questWanted(quest, settings, places)) return { step: 'drop', why: 'not one Lanista takes on' };
+    if ((titles[quest.title] || 0) >= QUEST_RESTARTS_PER_DAY) return { step: 'drop', why: `failed ${QUEST_RESTARTS_PER_DAY + 1} times today` };
+    titles[quest.title] = (titles[quest.title] || 0) + 1;
+    return { step: 'restart' };
   }
 
   GBot.brain = {
     FIGHTS,
     chooseQuest,
+    questWanted,
+    failedQuestStep,
     pickTraining,
     wantsTraining,
     conditionOf,
@@ -867,6 +929,7 @@
     DOLL_LABELS,
     inRepairAll,
     expeditionTarget,
+    easierEnemy,
     nextSmeltCheck,
     dungeonChoice,
     underworldSettings,

@@ -494,6 +494,7 @@
       editMemory((m) => {
         m.log = [];
       }),
+    onTestPush: (url) => send({ type: 'pushTest', url, host: HOST }),
   });
 
   ext.storage.onChanged.addListener((changes, area) => {

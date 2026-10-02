@@ -142,11 +142,30 @@
   }
 
   // "Report a problem": a new issue on the project's GitHub page, with a
-  // short template and the version. Nothing from the game or the log goes
-  // into the link; people add what they want to share themselves.
+  // short template, the version and (from the game's settings window) the
+  // last log lines. GitHub shows it all for editing before anything is
+  // posted.
   const ISSUES_URL = 'https://github.com/czapencjusz/gbot/issues/new';
 
-  function reportUrl() {
+  // Log entries ({ t, level, message }) as plain text, oldest first. Game
+  // session codes (sh=...) are blanked: a log may end up in a public issue.
+  function logText(entries) {
+    const pad = (n) => String(n).padStart(2, '0');
+    return entries
+      .map((e) => {
+        const d = new Date(e.t);
+        const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        return `${stamp} ${String(e.level).padEnd(5)} ${String(e.message).replace(/\bsh=[^&\s"']+/g, 'sh=…')}`;
+      })
+      .join('\n');
+  }
+
+  // The newest log lines put into a report, and a cap on the link's length
+  // (GitHub turns very long ones away): older lines are dropped to fit.
+  const REPORT_LOG_LINES = 30;
+  const REPORT_URL_MAX = 7000;
+
+  function reportUrl(log = []) {
     let version = '';
     try {
       const api = root.browser || root.chrome;
@@ -154,38 +173,51 @@
     } catch (e) {
       // Outside the extension (tests): no version.
     }
-    const body = [
-      '**What happened?**',
-      '',
-      '',
-      '**What did you expect instead?**',
-      '',
-      '',
-      '**Where?** (server, game page, which feature; a few lines from the Log tab help a lot)',
-      '',
-      '',
-      `Lanista ${version}`.trim(),
-    ].join('\n');
-    return `${ISSUES_URL}?body=${encodeURIComponent(body)}`;
+    const build = (entries) => {
+      const body = [
+        '**What happened?**',
+        '',
+        '',
+        '**What did you expect instead?**',
+        '',
+        '',
+        entries.length ? '**Where?** (server, game page, which feature)' : '**Where?** (server, game page, which feature; a few lines from the Log tab help a lot)',
+        '',
+        '',
+        ...(entries.length ? ['**Log** (the last lines; remove anything you would rather not share)', '```', logText(entries), '```', ''] : []),
+        `Lanista ${version}`.trim(),
+      ].join('\n');
+      return `${ISSUES_URL}?body=${encodeURIComponent(body)}`;
+    };
+    let entries = (log || []).slice(-REPORT_LOG_LINES);
+    let url = build(entries);
+    while (url.length > REPORT_URL_MAX && entries.length) {
+      entries = entries.slice(1);
+      url = build(entries);
+    }
+    return url;
   }
 
   // Link that opens the report page in a new tab: a labelled button, or
-  // an icon-only one for headers.
-  function reportLink({ iconOnly = false } = {}) {
-    return h(
+  // an icon-only one for headers. `log` returns the log entries to attach;
+  // they are read when the link is followed, so the newest ones go in.
+  function reportLink({ iconOnly = false, log = null } = {}) {
+    const link = h(
       'a',
       {
         class: iconOnly ? 'gb-icon-btn gb-report' : 'gb-btn gb-report',
         href: reportUrl(),
         target: '_blank',
         rel: 'noopener noreferrer',
-        title: 'Report a problem on GitHub (opens a new tab)',
+        title: log ? 'Report a problem on GitHub, with the last log lines (opens a new tab)' : 'Report a problem on GitHub (opens a new tab)',
         'aria-label': 'Report a problem',
       },
       icon('report', 16),
       iconOnly ? null : 'Report a problem'
     );
+    if (log) link.addEventListener('click', () => (link.href = reportUrl(log() || [])));
+    return link;
   }
 
-  Object.assign(ui, { h, append, icon, ICONS, countdown, reportUrl, reportLink, ISSUES_URL });
+  Object.assign(ui, { h, append, icon, ICONS, countdown, logText, reportUrl, reportLink, ISSUES_URL });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

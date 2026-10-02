@@ -114,6 +114,13 @@
         },
         { path: 'expedition.keepPoints', type: 'number', label: 'Keep points in reserve', help: 'Stop when this many expedition points are left.' },
         {
+          path: 'expedition.easierAfterLosses',
+          type: 'number',
+          label: 'Fight an easier enemy after',
+          unit: 'lost fights in a row',
+          help: 'A loss still costs a point and HP. After that many in a row against one enemy, the next easier one is fought for an hour, then the chosen one gets another try. 0 turns it off.',
+        },
+        {
           path: 'expedition.mobilisationsPerDay',
           type: 'number',
           label: 'Mobilisations to use per day',
@@ -185,7 +192,7 @@
             { value: 'medium', label: 'Yes, on Middle' },
             { value: 'hard', label: 'Yes, on Hard' },
           ],
-          help: 'Whenever the Underworld can be entered again. Costs 8,000 gold and about 30 minutes of travel (less on speed servers). On Hard, dying costs a skill point.',
+          help: 'Whenever the Underworld can be entered again. Costs 8,000 gold and about 30 minutes of travel (less on speed servers). On Hard, dying costs a skill point. Not while you still hold Dīs Pater\'s Armor from that level: beating him again would not give another, so you get a notification instead.',
         },
         {
           path: 'underworld.mobilisations',
@@ -489,11 +496,19 @@
       id: 'notifications',
       title: 'Notifications',
       icon: 'notifications',
-      description: 'Desktop notifications for things that need your attention.',
+      description: 'Desktop notifications for things that need your attention, and on your phone if you like.',
       fields: [
         { path: 'notifications.loggedOut', type: 'toggle', label: 'Logged out / game tab left the game' },
         { path: 'notifications.activityPaused', type: 'toggle', label: 'An activity was paused after repeated failures' },
         { path: 'notifications.noFood', type: 'toggle', label: 'HP is low and there is no food left' },
+        { path: 'notifications.underworld', type: 'toggle', label: 'The Underworld was not entered: Dīs Pater\'s Armor from that level is still unused' },
+        {
+          path: 'notifications.pushUrl',
+          type: 'push',
+          label: 'Also send them to your phone',
+          placeholder: 'https://ntfy.sh/your-topic or a Discord webhook',
+          help: 'An ntfy topic (install the free ntfy app, subscribe to a long, hard-to-guess topic name and paste https://ntfy.sh/that-name) or a Discord webhook (channel settings > Integrations > Webhooks > Copy Webhook URL). The alerts switched on above go there too. Anyone with the address can post to it (and read an ntfy topic), so keep it to yourself; exported settings include it. Empty = desktop only.',
+        },
       ],
     },
     {

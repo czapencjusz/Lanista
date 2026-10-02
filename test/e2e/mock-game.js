@@ -34,6 +34,9 @@ function defaultState() {
     questFinished: false,
     expeditionDisabled: false,
     acceptedQuests: [],
+    // Accepted quests: { pos, type, title, failed }. A failed one only offers
+    // "Start quest again" (it runs again), a running one "Cancel quest".
+    quests: [],
     events: [],
   };
 }
@@ -248,7 +251,19 @@ class MockGame {
         </div>`
       )
       .join('');
-    return this.render('questsPage', finished + open);
+    const icons = { expedition: 'expedition', arena: 'arena', items: 'items' };
+    const accepted = this.state.quests
+      .map(
+        (q) => `<div class="contentboard_slot contentboard_slot_active">
+          <div class="quest_slot_icon" style="background-image:url('img/ui/quest/icon_${icons[q.type]}_active.jpg')"></div>
+          <div class="quest_slot_title">${q.title}</div>
+          ${q.failed
+            ? `<div class="quest_slot_time">Failed</div><a class="quest_slot_button quest_slot_button_restart" href="index.php?mod=quests&submod=restartQuest&questPos=${q.pos}&sh=${SH}" title="Start quest again"></a>`
+            : `<a class="quest_slot_button quest_slot_button_cancel" href="index.php?mod=quests&submod=cancelQuest&questPos=${q.pos}&sh=${SH}" title="Cancel quest"></a>`}
+        </div>`
+      )
+      .join('');
+    return this.render('questsPage', finished + accepted + open);
   }
 
   // ---------------------------------------------------------------- routing
@@ -320,6 +335,12 @@ class MockGame {
     if (q.mod === 'quests' && q.submod === 'finishQuest') {
       s.questFinished = false;
       this.record('questFinish');
+    }
+    if (q.mod === 'quests' && (q.submod === 'restartQuest' || q.submod === 'cancelQuest')) {
+      const quest = s.quests.find((x) => String(x.pos) === q.questPos);
+      if (quest && q.submod === 'restartQuest') quest.failed = false;
+      if (quest && q.submod === 'cancelQuest') s.quests = s.quests.filter((x) => x !== quest);
+      this.record(q.submod, { title: quest && quest.title });
     }
     if (q.mod === 'quests' && q.submod === 'startQuest') {
       s.acceptedQuests.push(q.type);

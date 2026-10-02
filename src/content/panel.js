@@ -284,6 +284,7 @@
         onChange: (s) => handlers.onSaveSettings(s),
         onResetStats: () => handlers.onResetStats(),
         onClearLog: () => handlers.onClearLog(),
+        onTestPush: handlers.onTestPush,
         host: handlers.host,
         listServers: handlers.listServers,
         loadServerSettings: handlers.loadServerSettings,
@@ -304,7 +305,7 @@
           { class: 'gb-modal-head' },
           icon('arena', 18),
           h('span', { class: 'gb-title' }, handlers.host ? `Lanista settings · ${GBot.settings.serverName(handlers.host)}` : 'Lanista settings'),
-          ui.reportLink({ iconOnly: true }),
+          ui.reportLink({ iconOnly: true, log: () => (memory && memory.log) || [] }),
           h('button', { type: 'button', class: 'gb-icon-btn', title: 'Close (Esc)', dataset: { action: 'close' }, onclick: close }, icon('close', 18))
         ),
         h('div', { class: 'gb-modal-body' }, view.element)

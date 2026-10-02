@@ -149,6 +149,13 @@
         medium: '#content input[name="difficulty_medium"]',
         hard: '#content input[name="difficulty_hard"]',
       },
+      // While the player still holds a level's Dīs Pater's Armor, the page's
+      // script binds that level's button to a popup ("Enter the Underworld?
+      // ... you will not receive the armor a second time"). The script names
+      // the button (difficulty_normal, ...) next to the popup's name.
+      armorPopupName: 'confirmEnter',
+      armorPopup: '#blackoutDialogconfirmEnter',
+      armorPopupNo: '#linkcancelconfirmEnter',
     },
 
     // Premium inventory (mod=premium&submod=inventory): items already owned,
@@ -195,6 +202,12 @@
 
     quests: {
       finish: '#content .contentboard_slot a.quest_slot_button_finish',
+      // A failed quest ("Failed") keeps its slot and only offers "Start
+      // quest again"; an accepted one offers "Cancel quest". Plain links.
+      restart: '#content .contentboard_slot a.quest_slot_button_restart',
+      slot: '.contentboard_slot',
+      activeSlots: '#content .contentboard_slot_active',
+      cancelInSlot: '.quest_slot_button_cancel',
       openSlots: '#content .contentboard_slot_inactive',
       acceptInSlot: '.quest_slot_button_accept',
       icon: '.quest_slot_icon',

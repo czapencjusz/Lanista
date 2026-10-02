@@ -63,6 +63,52 @@ test('the Log tab has a "Report a problem" link to a new GitHub issue', () => {
   assert.equal(GBot.ui.reportLink({ iconOnly: true }).textContent, '', 'icon-only version for headers');
 });
 
+test('the report link takes the last log lines along when it is followed', () => {
+  const t = new Date(2026, 9, 2, 17, 29, 30).getTime();
+  const log = Array.from({ length: 40 }, (_, i) => ({ t: t + i * 1000, level: i === 39 ? 'warn' : 'info', message: `line ${i}` }));
+  const { view, $ } = mount({}, { memory: { log, stats: null } });
+  view.showTab('log');
+  const link = $('a.gb-report');
+  link.addEventListener('click', (e) => e.preventDefault());
+  link.click();
+  const body = new URL(link.getAttribute('href')).searchParams.get('body');
+  assert.match(body, /\*\*Log\*\* \(the last lines; remove anything you would rather not share\)/);
+  assert.match(body, /2026-10-02 17:30:09 warn  line 39\n```/);
+  assert.ok(body.includes('line 10\n'), 'the last 30 lines');
+  assert.ok(!body.includes('line 9\n'));
+
+  const long = Array.from({ length: 30 }, (_, i) => ({ t, level: 'info', message: `${'x'.repeat(300)} ${i} sh=0123abcd&mod=overview` }));
+  const url = GBot.ui.reportUrl(long);
+  assert.ok(url.length <= 7000, 'older lines dropped to keep the link short enough for GitHub');
+  const capped = new URL(url).searchParams.get('body');
+  assert.ok(capped.includes(' 29 sh=…&mod=overview'), 'session codes are blanked');
+  assert.ok(!capped.includes('0123abcd'));
+  assert.ok(!capped.includes(' 0 sh='));
+});
+
+test('"Copy log" copies the shown lines, oldest first', async () => {
+  const t = new Date(2026, 9, 2, 17, 29, 30).getTime();
+  const log = [
+    { t, level: 'info', message: 'Arena is ready' },
+    { t: t + 1000, level: 'warn', message: 'Quests: giving up the failed quest' },
+  ];
+  const { view, $ } = mount({}, { memory: { log, stats: null } });
+  view.showTab('log');
+  let copied = null;
+  Object.defineProperty(dom.window.navigator, 'clipboard', { value: { writeText: async (text) => (copied = text) }, configurable: true });
+  const globalNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  Object.defineProperty(globalThis, 'navigator', { value: dom.window.navigator, configurable: true });
+  try {
+    const button = [...view.element.querySelectorAll('button')].find((b) => b.textContent === 'Copy log');
+    button.click();
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(copied, '2026-10-02 17:29:30 info  Arena is ready\n2026-10-02 17:29:31 warn  Quests: giving up the failed quest');
+    assert.equal($('.gb-copy-status').textContent, 'Copied 2 lines.');
+  } finally {
+    if (globalNavigator) Object.defineProperty(globalThis, 'navigator', globalNavigator);
+  }
+});
+
 test('number fields are clamped before saving', async () => {
   const { view, saved, $, change } = mount();
   view.showTab('heal');
@@ -137,4 +183,25 @@ test('log and statistics tabs render memory', () => {
   assert.equal($('.gb-card-value').textContent, '12');
   view.showTab('log');
   assert.match($('.gb-log-line.warn').textContent, /attack refused/);
+});
+
+test('phone alerts: the address is saved as typed, and "Send a test" sends to it', async () => {
+  const sent = [];
+  const { view, saved, $, change } = mount({}, { onTestPush: async (url) => (sent.push(url), { ok: true }) });
+  view.showTab('notifications');
+  const input = $('[data-path="notifications.pushUrl"]');
+  change(input, ' https://ntfy.sh/Lanista-Ab12 ');
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(saved.at(-1).notifications.pushUrl, 'https://ntfy.sh/Lanista-Ab12');
+  const button = [...view.element.querySelectorAll('button')].find((b) => b.textContent === 'Send a test');
+  button.click();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(sent, ['https://ntfy.sh/Lanista-Ab12']);
+  assert.match($('.gb-push-status').textContent, /^Sent\./);
+
+  input.value = 'ntfy.sh/x';
+  button.click();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(sent.length, 1, 'not sent without https://');
+  assert.equal($('.gb-push-status').textContent, 'Enter an https:// address first.');
 });

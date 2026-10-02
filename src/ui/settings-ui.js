@@ -307,6 +307,52 @@
         };
       },
 
+      // Address for phone alerts, with a button that sends a test message.
+      push(field) {
+        const input = h('input', {
+          type: 'url',
+          class: 'gb-input gb-input-wide',
+          placeholder: field.placeholder,
+          spellcheck: 'false',
+          'aria-label': field.label,
+          dataset: { path: field.path },
+          onchange: () => commit(field.path, input.value.trim()),
+        });
+        const status = h('div', { class: 'gb-help gb-push-status', role: 'status' });
+        const test = h(
+          'button',
+          {
+            type: 'button',
+            class: 'gb-btn',
+            onclick: async () => {
+              const url = input.value.trim();
+              if (!/^https:\/\//i.test(url)) {
+                status.textContent = 'Enter an https:// address first.';
+                return;
+              }
+              status.textContent = 'Sending…';
+              let result;
+              try {
+                result = await opts.onTestPush(url);
+              } catch (e) {
+                result = { ok: false, error: e && e.message ? e.message : String(e) };
+              }
+              status.textContent =
+                result && result.ok ? 'Sent. If nothing arrives, check the address.' : `Could not send: ${(result && result.error) || 'Lanista did not answer (reload the page?)'}`;
+            },
+          },
+          'Send a test'
+        );
+        return {
+          control: h('div', {}, h('span', { class: 'gb-inline gb-push' }, input, opts.onTestPush ? test : null), status),
+          inputs: [input, test],
+          stack: true,
+          sync: () => {
+            if (!isFocused(input)) input.value = get(field.path);
+          },
+        };
+      },
+
       checks(field) {
         const controls = field.items.map((item) => ({ item, control: switchControl(item.path, item.label) }));
         const grid = h(
@@ -408,8 +454,36 @@
       );
       const list = h('div', { class: 'gb-log' });
       const clear = h('button', { type: 'button', class: 'gb-btn', onclick: () => confirmThen(clear, 'Clear log', opts.onClearLog) }, 'Clear log');
+      const status = h('span', { class: 'gb-help gb-copy-status', role: 'status' });
+      const shown = () => ((view.memory && view.memory.log) || []).filter((e) => filter.value === 'all' || e.level === 'warn' || e.level === 'error');
+
+      // The lines shown, oldest first, as text: for a bug report or a chat.
+      async function copyLog() {
+        const text = ui.logText(shown());
+        let copied = false;
+        try {
+          await navigator.clipboard.writeText(text);
+          copied = true;
+        } catch (e) {
+          // No clipboard access here: copy through a selected text field.
+          const area = h('textarea', { class: 'gb-offscreen', 'aria-hidden': 'true' });
+          area.value = text;
+          element.appendChild(area);
+          area.select();
+          try {
+            copied = document.execCommand('copy');
+          } catch (e2) {
+            copied = false;
+          }
+          area.remove();
+        }
+        status.textContent = copied ? `Copied ${shown().length} lines.` : 'Could not reach the clipboard.';
+        setTimeout(() => (status.textContent = ''), 4000);
+      }
+      const copy = h('button', { type: 'button', class: 'gb-btn', onclick: copyLog }, 'Copy log');
+
       syncers.push(() => {
-        const entries = ((view.memory && view.memory.log) || []).filter((e) => filter.value === 'all' || e.level === 'warn' || e.level === 'error');
+        const entries = shown();
         list.textContent = '';
         if (!entries.length) list.appendChild(h('div', { class: 'gb-empty' }, 'Nothing logged yet.'));
         for (const e of entries.slice().reverse()) {
@@ -417,7 +491,8 @@
           list.appendChild(h('div', { class: `gb-log-line ${e.level}` }, h('span', { class: 'gb-log-time' }, time), ' ', e.message));
         }
       });
-      return [h('div', { class: 'gb-actions' }, filter, clear, ui.reportLink()), list];
+      const report = ui.reportLink({ log: () => (view.memory && view.memory.log) || [] });
+      return [h('div', { class: 'gb-actions' }, filter, copy, clear, report, status), list];
     }
 
     function profilePane() {

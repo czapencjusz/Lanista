@@ -3,7 +3,8 @@
 //  - makes sure only one tab per game server runs the bot ("claim")
 //  - watchdog: reloads the bot's tab if it stops reporting in (e.g. the page
 //    hung, or the browser froze its timers)
-//  - shows desktop notifications for problems that need the user
+//  - shows desktop notifications for problems that need the user, and
+//    sends them to the phone (Discord webhook or ntfy topic) if set up
 'use strict';
 
 // Firefox loads settings.js from the manifest's background scripts.
@@ -95,12 +96,42 @@ async function notify(message) {
   }
 }
 
+// Phone alerts: the text goes to a Discord webhook as a form field
+// ("content"), and to anything else (an ntfy topic) as the plain request
+// body, which is what ntfy publishes. Both are "simple" no-cors requests,
+// so no extra permission is needed; the reply cannot be read, only a
+// network failure shows.
+const DISCORD_WEBHOOK = /^https:\/\/(?:[\w-]+\.)?discord(?:app)?\.com\/api\/webhooks\//i;
+
+async function push(url, message) {
+  if (!/^https:\/\//i.test(url || '')) return { ok: false, error: 'not an https:// address' };
+  let body = message;
+  if (DISCORD_WEBHOOK.test(url)) {
+    body = new FormData();
+    body.append('content', message);
+  }
+  try {
+    await fetch(url, { method: 'POST', mode: 'no-cors', credentials: 'omit', body });
+    return { ok: true };
+  } catch (e) {
+    console.warn('[Lanista] phone alert failed', e);
+    return { ok: false, error: (e && e.message) || String(e) };
+  }
+}
+
+// "Lanista (Server 303): ..." for the phone, where the server is not obvious.
+function pushText(message, host) {
+  const text = String(message).replace(/^Lanista:\s*/, '');
+  return host ? `Lanista (${S.serverName(host)}): ${text}` : `Lanista: ${text}`;
+}
+
 // Notification requested by a content script; respects the user's choice
 // for that server.
 async function alert(kind, message, host) {
   const settings = await S.loadSettings(host);
   if (kind && settings.notifications[kind] === false) return;
   await notify(message);
+  if (settings.notifications.pushUrl) await push(settings.notifications.pushUrl, pushText(message, host));
 }
 
 async function watchdog() {
@@ -145,6 +176,7 @@ ext.runtime.onMessage.addListener((message, sender, sendResponse) => {
   else if (message.type === 'heartbeat' && tabId !== undefined) {
     work = heartbeat(message.host, tabId, message.nextAt, message.enabled).then(() => ({ ok: true }));
   } else if (message.type === 'alert') work = alert(message.kind, message.message, message.host).then(() => ({ ok: true }));
+  else if (message.type === 'pushTest') work = push(message.url, pushText('Test message. Alerts will arrive here.', message.host));
   else return false;
   work.then(sendResponse, (e) => sendResponse({ ok: true, error: String(e) }));
   return true; // async response

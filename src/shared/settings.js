@@ -54,6 +54,9 @@
       bonusesFirst: false,
       // Stop attacking when this many points are left (saved for later).
       keepPoints: 0,
+      // After this many lost fights in a row against one enemy, fight the
+      // next easier one for an hour (0 = never).
+      easierAfterLosses: 0,
       // Owned Mobilisations (+3 points each) to use per day once the points
       // run out. Never bought.
       mobilisationsPerDay: 0,
@@ -246,6 +249,11 @@
       loggedOut: true,
       activityPaused: true,
       noFood: true,
+      // The Underworld was not entered (Dīs Pater's Armor still held).
+      underworld: true,
+      // Also send the alerts above to this address: a Discord webhook or an
+      // ntfy topic (https://ntfy.sh/<topic>). Empty = desktop only.
+      pushUrl: '',
     },
 
     ui: {
@@ -265,6 +273,7 @@
     'expedition.location': { pattern: LOCATION },
     'expedition.enemy': { int: true, min: 1, max: 4 },
     'expedition.keepPoints': { int: true, min: 0, max: 500 },
+    'expedition.easierAfterLosses': { int: true, min: 0, max: 20 },
     'dungeon.location': { pattern: LOCATION },
     'dungeon.difficulty': { enum: ['normal', 'advanced'] },
     'dungeon.keepPoints': { int: true, min: 0, max: 500 },
@@ -288,6 +297,7 @@
     'packages.sellUpTo': { int: true, min: -1, max: 4 },
     'packages.expiring': { enum: ['off', 'bag', 'sell'] },
     'packages.expiringHours': { int: true, min: 1, max: 168 },
+    'notifications.pushUrl': { pattern: /^(https:\/\/[^\s]+)?$/i, keepCase: true, maxLength: 500 },
     'auction.minHpPerGold': { min: 0.1, max: 1000 },
     'auction.bidWhen': { enum: ['short', 'medium', 'any'] },
     'auction.maxPerRound': { int: true, min: 0, max: 2000000000 },
@@ -374,7 +384,8 @@
       const fallback = getPath(DEFAULT_SETTINGS, path);
       if (rule.enum && !rule.enum.includes(value)) value = fallback;
       if (rule.pattern) {
-        value = String(value).trim().toLowerCase();
+        value = String(value).trim();
+        if (!rule.keepCase) value = value.toLowerCase();
         if (!rule.pattern.test(value)) value = fallback;
       }
       if (typeof fallback === 'number') {

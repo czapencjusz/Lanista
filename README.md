@@ -21,7 +21,8 @@ it. (It used to be called GBot.)
 - **Expeditions.** Pick a location (or just use the last one you visited) and an enemy, and it
   attacks whenever the cooldown is up. It can keep a few points in reserve. Farming the boss? It can
   first beat the other enemies there until you've learned all their bonuses, so the boss gets them
-  too ([more below](#expedition-bonuses-before-the-boss)).
+  too ([more below](#expedition-bonuses-before-the-boss)). And if it keeps losing to one enemy, it
+  can drop to an easier one for an hour before trying again.
 - **Dungeons.** Starts a Normal or Advanced dungeon when none is running (Normal if Advanced isn't
   unlocked yet) and works through the enemies. Not a fan of the boss? Tell it to skip bosses: it
   clears everyone else, then cancels the dungeon and starts a fresh one. It can also start over after
@@ -66,7 +67,8 @@ it. (It used to be called GBot.)
   they grow evenly. Spent gold can't be stolen in the arena, either.
 - **Stable work.** Takes a job once you're out of expedition and dungeon points.
 - **Pantheon quests.** Hands in finished quests and picks up the best-paying new ones of the kinds you
-  want, skipping ones for places you don't fight at.
+  want, skipping ones for places you don't fight at. A failed quest gets another go (twice a day at
+  most); one it wouldn't do anyway is dropped, so it doesn't hog a slot.
 - **Point refills.** If you want, it uses Gate Keys and Mobilisations you already own when your
   points run out, up to a daily limit.
 - **Small stuff.** Grabs the daily login bonus and closes pop-ups.
@@ -95,7 +97,9 @@ cost rubies.
 A few extras if you want them:
 
 - **Enter automatically.** It takes the Hermit's offer again on Normal, Middle or Hard as soon as
-  you're allowed back, and waits out the trip.
+  you're allowed back, and waits out the trip. One exception: if you still have Dīs Pater's Armor
+  from that level waiting to be used, beating him again wouldn't give you another one, so Lanista
+  stays out and lets you know.
 - **Mobilisations.** Uses ones you own (+3 points each) when the points run out, up to a number per
   visit.
 - **100% Healing Potions.** Uses ones you own when HP gets really low, also up to a number per visit.
@@ -174,7 +178,7 @@ own tab. The green dots show what's switched on, and changes save and apply as y
 | Tab | What you'll find there |
 | --- | --- |
 | General | The main on/off switch, which activity goes first, what to do with enemy nests |
-| Expedition | Location, which enemy, learning bonuses before the boss, points to keep, Mobilisations per day |
+| Expedition | Location, which enemy, learning bonuses before the boss, an easier enemy after losses, points to keep, Mobilisations per day |
 | Dungeon | Location, Normal or Advanced, points to keep, skipping the boss, starting over after losses, Gate Keys per day |
 | Underworld | Fighting on/off, the HP limit, entering automatically, Mobilisations and healing potions per visit |
 | Arena / Circus Turma | Who to attack, level range, never-attack list, avoiding people who beat you, going back to people you beat |
@@ -188,10 +192,10 @@ own tab. The green dots show what's switched on, and changes save and apply as y
 | Quests | Which quest types, only quests that fit what you're doing |
 | Schedule | Active hours, random breaks |
 | Timing & safety | Click delays, how long to wait between checks, what to do when something keeps failing |
-| Notifications | Which desktop alerts you want |
+| Notifications | Which alerts you want, on the desktop and (if you like) on your phone |
 | Interface | Show the bar, floating or docked |
 | Statistics | Fights won and lost, loot, gold earned and spent, per-hour rates |
-| Log | What it's been up to |
+| Log | What it's been up to, a *Copy log* button and *Report a problem* |
 | Backup | Copy settings from another server, export, import, reset |
 
 Playing on more than one server? Each one gets its own settings and its own Start/Stop, so your
@@ -247,7 +251,9 @@ A few handy things to know:
 - **It doesn't get stuck in loops.** If something keeps failing (after a game update, say), that
   activity takes a break and the log tells you why.
 - **It can ping you** with a desktop notification when you're logged out, when something gets paused,
-  or when you're low on HP with no food left.
+  when you're low on HP with no food left, or when it skipped the Underworld because of unused armor.
+  Paste an [ntfy](https://ntfy.sh) topic or a Discord webhook under *Notifications* and the same
+  alerts reach your phone too.
 - **Older settings carry over.** Settings from older versions are moved over automatically, and each
   server gets its own copy.
 
@@ -256,8 +262,12 @@ A few handy things to know:
 Hit **Report a problem**: it's the little flag in the settings window and the popup, and there's a
 button in the *Log* tab too. It opens a new issue on
 [GitHub](https://github.com/czapencjusz/gbot/issues) with a short template and your Lanista
-version filled in. Tell us what happened and where, and paste a few lines from the log if you can.
-Nothing from your game or log is sent along unless you paste it in yourself.
+version filled in. In the game's settings window it also adds the last 30 lines of the log. Nothing
+is posted until you press the button on GitHub, so read it over and delete anything you'd rather
+keep to yourself (opponent names, gold amounts). Tell us what happened and where.
+
+Want the log somewhere else, like a chat? *Copy log* in the *Log* tab puts the lines on your
+clipboard.
 
 ## Under the hood
 

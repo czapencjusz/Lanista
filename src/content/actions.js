@@ -89,9 +89,13 @@
     const buttons = $$(SEL.expedition.attackButtons);
     if (!buttons.length) throw new ActionError('No expedition attack buttons on this page');
     const enemies = GBot.state.readExpeditionEnemies(document);
-    const target = brain.expeditionTarget(enemies, settings.expedition);
+    const chosen = brain.expeditionTarget(enemies, settings.expedition);
+    // An easier enemy for a while after too many losses in a row.
+    const easier = brain.easierEnemy(ctx.memory, state.page.loc, ctx.now());
+    const target = easier !== null && easier < chosen ? easier : chosen;
     const index = Math.min(Math.max(target, 0), buttons.length - 1);
-    if (index !== settings.expedition.enemy - 1) {
+    if (ctx.memory.pending) Object.assign(ctx.memory.pending, { enemy: index, loc: state.page.loc, easierAfter: settings.expedition.easierAfterLosses });
+    if (target === chosen && index !== settings.expedition.enemy - 1) {
       // Log the bonus hunt when it moves on (a new enemy, or a bonus learned).
       const enemy = enemies[index];
       const progress = `${state.page.loc}:${index}:${enemy.learnable}`;
@@ -99,14 +103,14 @@
         ctx.memory.bonusHunt = progress;
         const chance = enemy.chance !== null ? ` (${enemy.chance}% per win)` : '';
         ctx.log('info', `Expedition: ${enemy.name || `enemy #${index + 1}`} has ${enemy.learnable} bonus${enemy.learnable === 1 ? '' : 'es'} left to learn${chance}, fighting it before the boss`);
-        // Save now: the attack below leaves the page before the runner saves.
-        await ctx.persist();
       }
     }
     const button = buttons[index];
     if (button.disabled || button.classList.contains(SEL.expedition.disabledClass)) {
       throw new ActionError(`Expedition enemy #${index + 1} cannot be attacked right now`);
     }
+    // Save now: the attack below leaves the page before the runner saves.
+    await ctx.persist();
     await click(ctx, button, `attack expedition enemy #${index + 1}`);
     if (await expectNavigation(ctx)) return { navigated: true };
     throw new ActionError('Expedition attack did not open a combat report');
@@ -217,13 +221,47 @@
       ctx.log('info', 'Underworld: not enough gold for the journey (8,000)');
       return { refresh: true };
     }
+    if (armorHeld(difficulty)) return keepArmor(ctx, difficulty, label);
+    memory.underworldArmor = null;
     // If the click does not go through, try again in an hour, not at once.
     memory.nextUnderworldCheck = ctx.now() + 3600 * 1000;
     ctx.log('info', `Underworld: entering on ${label} (8,000 gold)`);
     await ctx.persist();
     await click(ctx, button, `enter the Underworld (${label})`);
-    if (await expectNavigation(ctx)) return { navigated: true };
+    const popup = () => {
+      const el = $(SEL.underworld.armorPopup);
+      return el && isVisible(el) ? el : null;
+    };
+    await waitFor(() => ctx.isUnloading() || popup(), 12000, 100);
+    if (ctx.isUnloading()) return { navigated: true };
+    // The armor popup after all: answer No, never Yes.
+    if (popup()) {
+      const no = $(SEL.underworld.armorPopupNo);
+      if (no) await click(ctx, no, 'keep the armor: do not enter');
+      return keepArmor(ctx, difficulty, label);
+    }
     throw new ActionError('Entering the Underworld did not reload the page');
+  }
+
+  // True when the page asks for a confirmation before entering this level,
+  // which it does while the player still holds its Dīs Pater's Armor.
+  function armorHeld(difficulty) {
+    const name = `difficulty_${difficulty}`;
+    return $$('script').some((s) => s.textContent.includes(SEL.underworld.armorPopupName) && s.textContent.includes(name));
+  }
+
+  // Beating Dīs Pater again would not give the armor a second time, so the
+  // bot stays out until it is used up, and tells the player once.
+  function keepArmor(ctx, difficulty, label) {
+    const { memory } = ctx;
+    memory.nextUnderworldCheck = ctx.now() + 24 * 3600 * 1000;
+    const message = `Underworld: not entering on ${label}. You still have Dīs Pater's Armor from it, and beating him there again would not give another. Use the armor up, or pick another level under Settings > Underworld.`;
+    ctx.log('warn', message);
+    if (memory.underworldArmor !== difficulty) {
+      memory.underworldArmor = difficulty;
+      if (ctx.notify) ctx.notify('underworld', `Lanista: ${message}`);
+    }
+    return { refresh: true };
   }
 
   // ---------------------------------------------------------------- dungeon
@@ -677,6 +715,11 @@
 
   // ----------------------------------------------------------------- quests
 
+  function slotTitle(slot) {
+    const title = slot.querySelector(SEL.quests.title);
+    return title ? title.textContent.trim() : '';
+  }
+
   function questType(slot) {
     const icon = slot.querySelector(SEL.quests.icon);
     if (!icon) return null;
@@ -722,24 +765,58 @@
       throw new ActionError('Collecting the quest reward did not reload the page');
     }
 
+    // The quest given up on the last visit was started again so that it
+    // can be cancelled now.
+    if (memory.questDrop) {
+      const title = memory.questDrop;
+      memory.questDrop = null;
+      const slot = $$(SEL.quests.activeSlots).find((s) => slotTitle(s) === title);
+      const cancel = slot && slot.querySelector(SEL.quests.cancelInSlot);
+      if (cancel && isVisible(cancel)) {
+        await ctx.persist();
+        await click(ctx, cancel, `cancel quest "${title}"`);
+        if (await expectNavigation(ctx)) return { navigated: true };
+        throw new ActionError('Cancelling the quest did not reload the page');
+      }
+    }
+
+    const places = {
+      location: fightLocationName(state, settings, memory),
+      dungeon: memory.gameInfo.dungeonName,
+    };
+
+    // A failed quest blocks its slot until it is started again.
+    const restart = $$(SEL.quests.restart).find(isVisible);
+    if (restart) {
+      const slot = restart.closest(SEL.quests.slot);
+      const quest = { type: questType(slot), title: slotTitle(slot) };
+      const { step, why } = brain.failedQuestStep(quest, settings, places, memory, now);
+      if (step === 'drop') {
+        memory.questDrop = quest.title;
+        ctx.log('info', `Quests: giving up the failed quest "${quest.title}" (${why})`);
+      } else {
+        ctx.log('info', `Quests: starting the failed quest "${quest.title}" again`);
+      }
+      await ctx.persist();
+      await click(ctx, restart, `start quest "${quest.title}" again`);
+      if (await expectNavigation(ctx)) return { navigated: true };
+      throw new ActionError('Starting the failed quest again did not reload the page');
+    }
+
     const accepted = acceptedQuests();
     if (!accepted || accepted.count < accepted.max) {
       const offers = $$(SEL.quests.openSlots)
         .map((slot) => {
-          const title = slot.querySelector(SEL.quests.title);
           const reward = slot.querySelector(SEL.quests.reward);
           return {
             type: questType(slot),
-            title: title ? title.textContent.trim() : '',
+            title: slotTitle(slot),
             reward: reward ? parseNumber(reward.textContent) : null,
             accept: slot.querySelector(SEL.quests.acceptInSlot),
           };
         })
         .filter((q) => q.accept && isVisible(q.accept));
-      const quest = brain.chooseQuest(offers, settings, {
-        location: fightLocationName(state, settings, memory),
-        dungeon: memory.gameInfo.dungeonName,
-      });
+      const quest = brain.chooseQuest(offers, settings, places);
       if (quest) {
         await click(ctx, quest.accept, `accept ${quest.type} quest "${quest.title}"`);
         if (await expectNavigation(ctx)) return { navigated: true };
