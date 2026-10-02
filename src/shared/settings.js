@@ -44,6 +44,10 @@
       // After some wins the game offers to search the enemy's nest:
       // 'off' (leave the dialog alone) | 'return' | 'quick' | 'thorough'.
       nestSearch: 'quick',
+      // When the game logs the player out: open the Gladiatus lobby in the
+      // tab and press Play for this server's account (no password). Needs
+      // a lobby session, and pop-ups allowed for the lobby.
+      rejoin: false,
     },
 
     expedition: {

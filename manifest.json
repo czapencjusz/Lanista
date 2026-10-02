@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Lanista",
   "short_name": "Lanista",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Automates Gladiatus: expeditions, dungeons, Underworld, arena, circus, healing, quests, work, repair, smelting, packages, auctions.",
   "minimum_chrome_version": "121",
   "icons": {
@@ -62,6 +62,15 @@
         "src/content/main.js"
       ],
       "run_at": "document_end"
+    },
+    {
+      "matches": [
+        "https://lobby.gladiatus.gameforge.com/*"
+      ],
+      "js": [
+        "src/content/lobby.js"
+      ],
+      "run_at": "document_idle"
     }
   ],
   "browser_specific_settings": {

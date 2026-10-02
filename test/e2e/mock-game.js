@@ -46,6 +46,8 @@ function defaultState() {
     circusActive: false,
     // Food in the General goods merchant's second tab (container 305).
     shopFood: [],
+    // Logged out: game pages show no game until the lobby logs back in.
+    loggedOut: false,
     // Accepted quests: { pos, type, title, failed }. A failed one only offers
     // "Start quest again" (it runs again), a running one "Cancel quest".
     quests: [],
@@ -316,6 +318,54 @@ class MockGame {
     return this.render('questsPage', finished + accepted + open);
   }
 
+  // The Gladiatus lobby (lobby.gladiatus.gameforge.com), as on 2026-10-02:
+  // "/" moves to /en_GB/hub without a reload; /en_GB/accounts lists the game
+  // accounts (react-table markup), its data comes from the API (bearer
+  // token from the gf-token-production cookie), and Play opens a window,
+  // asks for a login link and loads the game there. This server is called
+  // "Aurora" in the lobby; a decoy account sits on s1-pl.
+  async handleLobby(route) {
+    const request = route.request();
+    const url = new URL(request.url());
+    const json = (data, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data) });
+    const html = (body) => route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><meta charset="utf-8"><title>Lobby</title></head><body>${body}</body></html>` });
+    const authed = request.headers().authorization === 'Bearer tok';
+    const row = (province, player) =>
+      `<div class="rt-tr-group"><div class="rt-tr"><div class="rt-td"></div><div class="rt-td">${province}</div><div class="rt-td">${player}</div>
+         <div class="rt-td action-cell"><button class="btn btn-primary" onclick="play()">Play</button></div></div></div>`;
+    switch (url.pathname) {
+      case '/':
+        return html(`<p>Welcome</p><script>setTimeout(function () { history.replaceState(null, '', '/en_GB/hub'); }, 300);</script>`);
+      case '/en_GB/hub':
+        return html('<a href="/en_GB/accounts">Play</a>');
+      case '/en_GB/accounts':
+        return html(`<div class="ReactTable"><div class="rt-tbody" id="rows"></div></div>
+          <script>
+            setTimeout(function () { document.getElementById('rows').innerHTML = ${JSON.stringify(row('1', 'Decoy') + row('Aurora', 'Hero'))}; }, 500);
+            function play() {
+              var w = window.open('/loading');
+              fetch('/api/users/me/loginLink', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (j) { w.location.href = j.url; });
+            }
+          </script>`);
+      case '/loading':
+        return html('Loading...');
+      case '/api/users/me/accounts':
+        if (!authed) return json({ error: 'unauthorized' }, 401);
+        return json([
+          { server: { language: 'pl', number: 1 }, name: 'Decoy', lastPlayed: '2026-10-02T10:00:00+0200' },
+          { server: { language: 'en', number: 1 }, name: 'Hero', lastPlayed: '2026-10-01T10:00:00+0200' },
+        ]);
+      case '/api/servers':
+        if (!authed) return json({ error: 'unauthorized' }, 401);
+        return json([{ language: 'pl', number: 1, name: '1' }, { language: 'en', number: 1, name: 'Aurora' }]);
+      case '/api/users/me/loginLink':
+        this.record('lobbyLogin');
+        return json({ url: `${GAME}index.php?mod=overview&sh=${SH}&login=1` });
+      default:
+        return route.fulfill({ status: 404, body: '' });
+    }
+  }
+
   // ---------------------------------------------------------------- routing
 
   async handle(route) {
@@ -331,6 +381,11 @@ class MockGame {
     if (!url.pathname.startsWith('/game/')) return route.fulfill({ status: 404, body: '' });
     if (url.pathname === '/game/' || url.pathname === '/game/index.php') {
       if (q.sh !== SH) return page('<html><body><h1>Session expired</h1></body></html>');
+      if (q.login === '1' && s.loggedOut) {
+        s.loggedOut = false;
+        this.record('login');
+      }
+      if (s.loggedOut) return page('<html><body><h1>You have been logged out</h1></body></html>');
     }
 
     if (url.pathname === '/game/ajax.php') {

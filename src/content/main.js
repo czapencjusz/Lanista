@@ -28,6 +28,15 @@
   window.addEventListener('beforeunload', () => {
     unloading = true;
   });
+  // Pressing the game's own Logout: no logging back in after that.
+  document.addEventListener(
+    'click',
+    (e) => {
+      const link = e.isTrusted && e.target && e.target.closest ? e.target.closest('a[href*="submod=logout"]') : null;
+      if (link) send({ type: 'userLogout', host: HOST });
+    },
+    true
+  );
   window.addEventListener('pageshow', (e) => {
     // Restored from the back/forward cache: start over.
     if (e.persisted) {
@@ -390,9 +399,16 @@
       await send({ type: 'heartbeat', host: location.host, nextAt: null, enabled: false });
       // Another tab owns the bot: check again later in case it gets closed.
       if (decision.retryMs) schedule(tick, decision.retryMs);
-      if (settings.enabled && !state.inGame && now - lastAlertAt > 30 * 60 * 1000) {
-        lastAlertAt = now;
-        notify('loggedOut', 'Lanista is on but this is not an in-game page. Are you logged out?');
+      if (settings.enabled && !state.inGame) {
+        // Logged out: log back in through the lobby, if that is switched on
+        // (the background decides; it also keeps the number of tries down).
+        const rejoin = settings.general.rejoin ? await send({ type: 'rejoin', host: HOST }) : null;
+        if (rejoin && rejoin.ok) return;
+        if (now - lastAlertAt > 30 * 60 * 1000) {
+          lastAlertAt = now;
+          const why = rejoin && rejoin.reason ? ` (not logging back in: ${rejoin.reason})` : '';
+          notify('loggedOut', `Lanista is on but this is not an in-game page. Are you logged out?${why}`);
+        }
       }
       return;
     }

@@ -112,6 +112,12 @@
           ],
           help: 'After some wins the game offers to search the enemy nest for extra loot.',
         },
+        {
+          path: 'general.rejoin',
+          type: 'toggle',
+          label: 'Log back in through the lobby when the game logs you out',
+          help: "Lanista opens the Gladiatus lobby in the game tab and presses Play for this server's account; it never types a password, so you must still be logged in to the lobby. Play opens a new window, so allow pop-ups for lobby.gladiatus.gameforge.com in your browser. At most 3 tries in 6 hours, never after you press Logout yourself, and only while Lanista is running. Gameforge can see that the login was automatic.",
+        },
       ],
     },
     {

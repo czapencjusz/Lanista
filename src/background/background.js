@@ -5,6 +5,7 @@
 //    hung, or the browser froze its timers)
 //  - shows desktop notifications for problems that need the user, and
 //    sends them to the phone (Discord webhook or ntfy topic) if set up
+//  - logs back in through the lobby after a logout, if switched on
 'use strict';
 
 // Firefox loads settings.js from the manifest's background scripts.
@@ -69,7 +70,97 @@ async function claim(host, tabId) {
   }
   owners[host] = { tabId, at: now, nextAt: owner && owner.tabId === tabId ? owner.nextAt : null };
   await setOwners(owners);
+  await rejoined(host, tabId);
   return { ok: true };
+}
+
+// ---------------------------------------------------------------- rejoin
+//
+// After a logout the game tab is sent to the lobby; lobby.js presses Play
+// for the server's account there, and the lobby opens the game in a new
+// window. Once that one claims the server, the lobby tab is closed.
+
+const LOBBY_URL = 'https://lobby.gladiatus.gameforge.com/';
+const REJOIN_MAX = 3;
+const REJOIN_WINDOW_MS = 6 * 3600 * 1000;
+const REJOIN_TIMEOUT_MS = 3 * 60 * 1000;
+const USER_LOGOUT_MS = 12 * 3600 * 1000;
+
+// { jobs: { tabId: { host, at, clicked } }, tries: { host: [times] },
+//   userLogout: { host: time } }
+async function getRejoin() {
+  const { rejoin } = await ext.storage.session.get('rejoin');
+  return { jobs: {}, tries: {}, userLogout: {}, ...(rejoin || {}) };
+}
+
+const setRejoin = (rejoin) => ext.storage.session.set({ rejoin });
+
+// Sends `tabId` to the lobby to log back in to `host`, when the player
+// wants that and it has not been tried too often. Returns { ok, reason }.
+async function startRejoin(host, tabId) {
+  const settings = await S.loadSettings(host);
+  if (!settings.enabled || !settings.general.rejoin) return { ok: false, reason: null };
+  const r = await getRejoin();
+  const now = Date.now();
+  if (now - (r.userLogout[host] || 0) < USER_LOGOUT_MS) return { ok: false, reason: 'you logged out yourself' };
+  if (Object.values(r.jobs).some((j) => j.host === host && now - j.at < REJOIN_TIMEOUT_MS)) return { ok: true, reason: 'already under way' };
+  const tries = (r.tries[host] || []).filter((t) => now - t < REJOIN_WINDOW_MS);
+  if (tries.length >= REJOIN_MAX) return { ok: false, reason: `already tried ${REJOIN_MAX} times in 6 hours` };
+  r.tries[host] = tries.concat(now);
+  r.jobs[tabId] = { host, at: now };
+  await setRejoin(r);
+  console.info(`[Lanista] ${host}: logged out, logging back in through the lobby`);
+  await ext.tabs.update(tabId, { url: LOBBY_URL });
+  return { ok: true, reason: null };
+}
+
+// A game tab claimed `host`: a rejoin for it is done.
+async function rejoined(host, tabId) {
+  const r = await getRejoin();
+  const done = Object.entries(r.jobs).filter(([, j]) => j.host === host);
+  if (!done.length) return;
+  for (const [lobbyTab] of done) {
+    delete r.jobs[lobbyTab];
+    if (Number(lobbyTab) !== tabId) ext.tabs.remove(Number(lobbyTab)).catch(() => {});
+  }
+  await setRejoin(r);
+  await alert('loggedOut', `Lanista logged back in to ${S.serverName(host)} through the lobby.`, host);
+}
+
+// What lobby.js found: the button pressed, or why it could not.
+async function rejoinResult(tabId, result) {
+  const r = await getRejoin();
+  const job = r.jobs[tabId];
+  if (!job) return;
+  if (result.ok) {
+    job.clicked = Date.now();
+  } else {
+    delete r.jobs[tabId];
+    await alert('loggedOut', `Lanista could not log back in to ${S.serverName(job.host)}: ${result.reason}. Please log in yourself.`, job.host);
+  }
+  await setRejoin(r);
+}
+
+// Rejoins that did not bring the game back in time.
+async function expireRejoins(now) {
+  const r = await getRejoin();
+  let changed = false;
+  for (const [tabId, job] of Object.entries(r.jobs)) {
+    if (now - job.at < REJOIN_TIMEOUT_MS) continue;
+    delete r.jobs[tabId];
+    changed = true;
+    const why = job.clicked
+      ? 'Play was pressed in the lobby but no game window came up. Allow pop-ups for lobby.gladiatus.gameforge.com, or log in yourself.'
+      : 'the lobby did not get as far as Play. Please log in yourself.';
+    await alert('loggedOut', `Lanista could not log back in to ${S.serverName(job.host)}: ${why}`, job.host);
+  }
+  if (changed) await setRejoin(r);
+}
+
+async function userLogout(host) {
+  const r = await getRejoin();
+  r.userLogout[host] = Date.now();
+  await setRejoin(r);
 }
 
 async function heartbeat(host, tabId, nextAt, enabled) {
@@ -137,6 +228,7 @@ async function alert(kind, message, host) {
 async function watchdog() {
   const owners = await getOwners();
   const now = Date.now();
+  await expireRejoins(now);
   let changed = false;
   for (const [host, owner] of Object.entries(owners)) {
     if (ownerAlive(owner, now)) continue;
@@ -154,7 +246,11 @@ async function watchdog() {
       // Reloading would not help (logged out, or the user browsed away).
       delete owners[host];
       changed = true;
-      await alert('loggedOut', `The ${host} tab left the game (logged out?). Lanista is waiting until you log back in.`, host);
+      const rejoin = await startRejoin(host, owner.tabId);
+      if (!rejoin.ok) {
+        const why = rejoin.reason ? ` (not logging back in: ${rejoin.reason})` : '';
+        await alert('loggedOut', `The ${host} tab left the game (logged out?). Lanista is waiting until you log back in.${why}`, host);
+      }
       continue;
     }
     console.warn(`[Lanista] tab ${owner.tabId} (${host}) stopped reporting, reloading it`);
@@ -177,12 +273,21 @@ ext.runtime.onMessage.addListener((message, sender, sendResponse) => {
     work = heartbeat(message.host, tabId, message.nextAt, message.enabled).then(() => ({ ok: true }));
   } else if (message.type === 'alert') work = alert(message.kind, message.message, message.host).then(() => ({ ok: true }));
   else if (message.type === 'pushTest') work = push(message.url, pushText('Test message. Alerts will arrive here.', message.host));
+  else if (message.type === 'rejoin' && tabId !== undefined) work = startRejoin(message.host, tabId);
+  else if (message.type === 'rejoinJob' && tabId !== undefined) work = getRejoin().then((r) => r.jobs[tabId] || null);
+  else if (message.type === 'rejoinResult' && tabId !== undefined) work = rejoinResult(tabId, message).then(() => ({ ok: true }));
+  else if (message.type === 'userLogout') work = userLogout(message.host).then(() => ({ ok: true }));
   else return false;
   work.then(sendResponse, (e) => sendResponse({ ok: true, error: String(e) }));
   return true; // async response
 });
 
 ext.tabs.onRemoved.addListener(async (tabId) => {
+  const r = await getRejoin();
+  if (r.jobs[tabId]) {
+    delete r.jobs[tabId];
+    await setRejoin(r);
+  }
   const owners = await getOwners();
   let changed = false;
   for (const [host, owner] of Object.entries(owners)) {

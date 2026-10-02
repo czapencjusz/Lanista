@@ -188,7 +188,7 @@ apply as you go.
 | Tab | What you'll find there |
 | --- | --- |
 | Overview | Everything at a glance, with a switch for each feature |
-| General | The main on/off switch, which activity goes first, what to do with enemy nests |
+| General | The main on/off switch, which activity goes first, what to do with enemy nests, logging back in through the lobby |
 | **Fights** | |
 | Expedition | Location, which enemy, learning bonuses before the boss, an easier enemy after losses, points to keep, Mobilisations per day |
 | Dungeon | Location, Normal or Advanced, points to keep, skipping the boss, starting over after losses, Gate Keys per day |
@@ -253,8 +253,20 @@ npm run build        # -> dist/lanista-chrome.zip and dist/lanista-firefox.zip
 2. Switch on the activities you want with the tiles, and fine-tune them in the settings.
 3. Hit **Start**.
 
-That's it. Keep the game tab open (a background tab is fine). Lanista never logs in for you, so if
-your session runs out, just log back in and it picks up where it left off.
+That's it. Keep the game tab open (a background tab is fine). If your session runs out, log back in
+and it picks up where it left off.
+
+Or let it do that: switch on *Log back in through the lobby* under *General*. When the game logs you
+out, Lanista opens the Gladiatus lobby in the game tab, finds this server's account (the lobby gives
+some servers names, like Vulcan, and Lanista knows which is which) and presses its **Play** button.
+The game opens in a new window and Lanista carries on there. A few things to know:
+
+- It never types a password. You have to be logged in to the lobby itself, or it tells you to log in.
+- **Play** opens a new window, so allow pop-ups for `lobby.gladiatus.gameforge.com` in your browser,
+  or the window gets blocked.
+- It tries at most 3 times in 6 hours, never after you press *Logout* yourself, and only while
+  Lanista is running.
+- Gameforge can tell the login was automatic, so it adds to the risk mentioned at the top.
 
 A few handy things to know:
 

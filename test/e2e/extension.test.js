@@ -88,6 +88,8 @@ test.describe('Lanista against a mock Gladiatus server', { skip: !executablePath
       args: [`--disable-extensions-except=${EXTENSION}`, `--load-extension=${EXTENSION}`, '--no-sandbox'],
     });
     await context.route(`${ORIGIN}/**`, (route) => game.handle(route));
+    await context.route('https://lobby.gladiatus.gameforge.com/**', (route) => game.handleLobby(route));
+    await context.addCookies([{ name: 'gf-token-production', value: 'tok', domain: 'lobby.gladiatus.gameforge.com', path: '/', secure: true }]);
     worker = context.serviceWorkers()[0] || (await context.waitForEvent('serviceworker'));
     page = context.pages()[0] || (await context.newPage());
     page.on('console', (msg) => {
@@ -443,5 +445,22 @@ test.describe('Lanista against a mock Gladiatus server', { skip: !executablePath
     assert.equal((await storageGet(SETTINGS)).enabled, false);
     await options.close();
     await worker.evaluate(async (key) => chrome.storage.local.remove(key), `settings:${OTHER}`);
+  });
+
+  // Last: the game tab is closed by the end of it.
+  test('logged out: logs back in through the lobby, and the lobby tab closes', { timeout: 90000 }, async () => {
+    await scenario({ expPoints: 0, dunPoints: 0 }, { expedition: { enabled: true }, general: { rejoin: true } });
+    await page.waitForTimeout(1500);
+    game.state.loggedOut = true;
+    const lobbyTab = page;
+    await page.goto(`${GAME}index.php?mod=overview&sh=${SH}`);
+    await waitUntil(() => game.events('login').length, 60000, 'the login through the lobby');
+    assert.equal(game.events('lobbyLogin').length, 1, 'Play pressed once');
+    await waitUntil(() => lobbyTab.isClosed(), 20000, 'the lobby tab to close');
+    page = await waitUntil(() => context.pages().find((p) => !p.isClosed() && p.url().startsWith(GAME)), 10000, 'the new game tab');
+    page.on('pageerror', (e) => pageErrors.push(e.message));
+    const session = await worker.evaluate(async () => (await chrome.storage.session.get('rejoin')).rejoin);
+    assert.deepEqual(session.jobs, {});
+    assert.equal(session.tries[HOST].length, 1);
   });
 });

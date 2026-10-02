@@ -11,6 +11,10 @@ const store = {};
 const listeners = {};
 const notifications = [];
 const fetched = [];
+const session = {};
+const tabUrls = {};
+const tabMoves = [];
+const tabsClosed = [];
 const on = (name) => ({ addListener: (fn) => (listeners[name] = fn) });
 globalThis.chrome = {
   storage: {
@@ -24,12 +28,22 @@ globalThis.chrome = {
       remove: async (keys) => [].concat(keys).forEach((k) => delete store[k]),
     },
     onChanged: on('storage'),
+    session: {
+      get: async (key) => (key in session ? { [key]: session[key] } : {}),
+      set: async (items) => Object.assign(session, items),
+    },
   },
   alarms: { get: async () => ({}), create: () => {}, clear: () => {}, onAlarm: on('alarm') },
   runtime: { onMessage: on('message'), onInstalled: on('installed'), onStartup: on('startup'), getURL: (p) => p },
   notifications: { create: async (o) => notifications.push(o.message) },
   action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
-  tabs: { onRemoved: on('tabRemoved'), get: async () => ({}), reload: async () => {} },
+  tabs: {
+    onRemoved: on('tabRemoved'),
+    get: async (id) => ({ id, url: tabUrls[id] || '' }),
+    reload: async () => {},
+    update: async (id, props) => tabMoves.push([id, props.url]),
+    remove: async (id) => tabsClosed.push(id),
+  },
 };
 globalThis.fetch = async (url, init) => {
   fetched.push({ url, ...init });
@@ -98,4 +112,54 @@ test('the address must be https; anything else is dropped', () => {
   assert.equal(S.sanitizeSettings({ notifications: { pushUrl: 'http://ntfy.sh/x' } }).notifications.pushUrl, '');
   assert.equal(S.sanitizeSettings({ notifications: { pushUrl: 'javascript:alert(1)' } }).notifications.pushUrl, '');
   assert.equal(S.DEFAULT_SETTINGS.notifications.pushUrl, '');
+});
+
+function from(tabId, msg) {
+  return new Promise((resolve) => listeners.message(msg, { tab: { id: tabId } }, resolve));
+}
+
+test('rejoin: off by default; when on, the tab goes to the lobby, at most 3 times in 6 hours', async () => {
+  await S.saveSettings(S.sanitizeSettings({ enabled: true }), HOST);
+  assert.deepEqual(await from(21, { type: 'rejoin', host: HOST }), { ok: false, reason: null }, 'switched off');
+  assert.equal(tabMoves.length, 0);
+
+  await S.saveSettings(S.sanitizeSettings({ enabled: true, general: { rejoin: true } }), HOST);
+  notifications.length = 0;
+  assert.deepEqual(await from(21, { type: 'rejoin', host: HOST }), { ok: true, reason: null });
+  assert.deepEqual(tabMoves, [[21, 'https://lobby.gladiatus.gameforge.com/']]);
+  assert.deepEqual(await from(21, { type: 'rejoin', host: HOST }), { ok: true, reason: 'already under way' }, 'no second trip while one runs');
+  assert.deepEqual(await from(21, { type: 'rejoinJob' }), { host: HOST, at: session.rejoin.jobs[21].at });
+  assert.equal(await from(99, { type: 'rejoinJob' }), null, 'other lobby visits are left alone');
+
+  // The lobby pressed Play; the game window claims the server: done, and
+  // the lobby tab is closed.
+  await from(21, { type: 'rejoinResult', ok: true, clicked: 'Vulcan · [PG] DaddyCzapo' });
+  assert.ok(session.rejoin.jobs[21].clicked);
+  await from(22, { type: 'claim', host: HOST });
+  assert.deepEqual(tabsClosed, [21]);
+  assert.deepEqual(session.rejoin.jobs, {});
+  assert.match(notifications.at(-1), /logged back in to Server 303 \(EN\) through the lobby/);
+
+  await from(22, { type: 'rejoin', host: HOST });
+  await from(22, { type: 'claim', host: HOST });
+  await from(22, { type: 'rejoin', host: HOST });
+  await from(22, { type: 'claim', host: HOST });
+  assert.deepEqual(await from(22, { type: 'rejoin', host: HOST }), { ok: false, reason: 'already tried 3 times in 6 hours' });
+});
+
+test('rejoin: never after the player pressed Logout; failures are reported', async () => {
+  session.rejoin = undefined;
+  await S.saveSettings(S.sanitizeSettings({ enabled: true, general: { rejoin: true } }), HOST);
+  await from(30, { type: 'userLogout', host: HOST });
+  assert.deepEqual(await from(30, { type: 'rejoin', host: HOST }), { ok: false, reason: 'you logged out yourself' });
+
+  session.rejoin = undefined;
+  notifications.length = 0;
+  await from(31, { type: 'rejoin', host: HOST });
+  await from(31, { type: 'rejoinResult', ok: false, reason: 'you are not logged in to the Gladiatus lobby' });
+  assert.match(notifications.at(-1), /could not log back in to Server 303 \(EN\): you are not logged in to the Gladiatus lobby/);
+  assert.deepEqual(session.rejoin.jobs, {});
+
+  await S.saveSettings(S.sanitizeSettings({ enabled: false, general: { rejoin: true } }), HOST);
+  assert.deepEqual(await from(31, { type: 'rejoin', host: HOST }), { ok: false, reason: null }, 'not while Lanista is stopped');
 });
