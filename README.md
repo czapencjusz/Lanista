@@ -179,24 +179,32 @@ covering it:
 
 ### Settings
 
-Open them with the gear on the bar, the *Settings* tile, or a tile's own gear. Every feature has its
-own tab. The green dots show what's switched on, and changes save and apply as you go.
+Open them with the gear on the bar, the *Settings* tile, or a tile's own gear. They open on the
+**Overview**: every feature with its on/off switch and a line about how it's set up, for example
+*Koman Mountain · the boss (bonuses first) · 1 Mobilisation a day*. Click a name to jump to its
+tab. The tabs on the left are grouped, the green dots show what's switched on, and changes save and
+apply as you go.
 
 | Tab | What you'll find there |
 | --- | --- |
+| Overview | Everything at a glance, with a switch for each feature |
 | General | The main on/off switch, which activity goes first, what to do with enemy nests |
+| **Fights** | |
 | Expedition | Location, which enemy, learning bonuses before the boss, an easier enemy after losses, points to keep, Mobilisations per day |
 | Dungeon | Location, Normal or Advanced, points to keep, skipping the boss, starting over after losses, Gate Keys per day |
 | Underworld | Fighting on/off, the HP limit, entering automatically, Mobilisations and healing potions per visit |
 | Arena / Circus Turma | Provinciarum or your own server, who to attack, level range, never-attack list, avoiding people who beat you, going back to people you beat |
+| **Character** | |
 | Health | Eating on/off, when to eat, when to stop fighting, which bags hold food, plain food only, buying food from the merchants |
+| Quests | Which quest types, only quests that fit what you're doing |
 | Stable work | Which job, how many hours |
 | Training | Gold to keep, which stats |
+| **Items** | |
 | Repair | When to repair, the *Repair all* cutoff, best materials to use, whose gear to look after |
 | Smelting | On/off, where the resources go, automatic smelting rules |
 | Packages | Gold packages, resources, selling rules, packages about to expire |
 | Auction house | Bidding on/off, price per HP, how late to bid, budget, gold to keep, how much food is enough |
-| Quests | Which quest types, only quests that fit what you're doing |
+| **Lanista** | |
 | Schedule | Active hours, random breaks |
 | Timing & safety | Click delays, how long to wait between checks, what to do when something keeps failing |
 | Notifications | Which alerts you want, on the desktop and (if you like) on your phone |

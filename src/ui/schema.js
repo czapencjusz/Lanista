@@ -2,8 +2,14 @@
 // field per setting. The renderer (settings-ui.js) turns this into forms, and
 // number limits come from GBot.settings.CONSTRAINTS so validation and UI agree.
 //
+// Tabs: id, title, icon, description, group (sidebar heading, from LAYOUT
+// below), enable (path of the tab's main switch, shown in its header),
+// toggle (an on/off path for the sidebar dot and the Overview without a
+// header switch), summary(settings, info) (one line for the Overview),
+// custom (a pane drawn by settings-ui.js) or fields.
+//
 // Field types: toggle, number, select, location, text, textarea, time, order,
-// checks. Optional field keys: help, unit, step, base (display offset, e.g. 1
+// checks, push. Optional field keys: help, unit, step, base (display offset, e.g. 1
 // to show a 0-based index as 1-based), dependsOn (path of a toggle that must
 // be on for the field to be editable), placeholder.
 (function (root) {
@@ -12,8 +18,8 @@
   const ui = (GBot.ui = GBot.ui || {});
 
   const TARGETS = [
-    { value: 'lowest', label: 'Lowest level first' },
-    { value: 'highest', label: 'Highest level first' },
+    { value: 'lowest', label: 'Weakest first' },
+    { value: 'highest', label: 'Strongest first' },
     { value: 'random', label: 'Random' },
   ];
 
@@ -73,7 +79,14 @@
     },
   ];
 
-  const TABS = [
+  const ALL_TABS = [
+    {
+      id: 'overview',
+      title: 'Overview',
+      icon: 'overview',
+      custom: 'overview',
+      description: 'Everything at a glance: switch features on and off here, or click a name for its settings.',
+    },
     {
       id: 'general',
       title: 'General',
@@ -243,6 +256,7 @@
       id: 'heal',
       title: 'Health',
       icon: 'heal',
+      toggle: 'heal.enabled',
       description: 'Eat food from your bags when HP gets low, and stop fighting before it gets dangerous.',
       fields: [
         { path: 'heal.enabled', type: 'toggle', label: 'Eat food when HP is low' },
@@ -560,6 +574,141 @@
   ];
 
   // Labels/icons for the priority list and the control bar tiles.
+  // ---------------------------------------------------------------- overview
+
+  const fmt = (n) => Number(n).toLocaleString();
+  const QUALITY_NAMES = ['Standard', 'Ceres', 'Neptun', 'Mars', 'Jupiter', 'Olymp'];
+  const quality = (q) => QUALITY_NAMES[q + 1] || String(q);
+  const line = (parts) => parts.filter(Boolean).join(' · ');
+  const times = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const ENEMIES = ['1st enemy', '2nd enemy', '3rd enemy', 'the boss'];
+  const TARGET_WORDS = { lowest: 'weakest first', highest: 'strongest first', random: 'random opponents' };
+  const ENTER_LEVELS = { normal: 'Normal', medium: 'Middle', hard: 'Hard' };
+  const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
+
+  // A location id as its name, when the game menu has been seen.
+  function placeName(id, info, fallback) {
+    if (id === 'auto') return fallback;
+    const known = ((info && info.locations) || []).find((l) => String(l.id) === String(id));
+    return known ? known.name : `location #${id}`;
+  }
+
+  function opponentSummary(c) {
+    const ignored = String(c.ignorePlayers || '')
+      .split(/[\n,;]+/)
+      .filter((n) => n.trim()).length;
+    return line([
+      c.where === 'local' ? 'on this server' : 'Provinciarum',
+      TARGET_WORDS[c.target],
+      c.where !== 'local' && c.limitLevels && `levels −${c.maxBelow} to +${c.maxAbove}`,
+      c.preferBeaten && 'beaten ones first',
+      ignored && `${times(ignored, 'name', 'names')} never attacked`,
+    ]);
+  }
+
+  // One line per feature for the Overview tab.
+  const SUMMARIES = {
+    expedition: (s, info) => {
+      const e = s.expedition;
+      return line([
+        placeName(e.location, info, 'the last visited location'),
+        ENEMIES[e.enemy - 1] + (e.enemy === 4 && e.bonusesFirst ? ' (bonuses first)' : ''),
+        e.keepPoints && `keeps ${times(e.keepPoints, 'point', 'points')}`,
+        e.easierAfterLosses && `easier enemy after ${times(e.easierAfterLosses, 'loss', 'losses')}`,
+        e.mobilisationsPerDay && `${times(e.mobilisationsPerDay, 'Mobilisation', 'Mobilisations')} a day`,
+      ]);
+    },
+    dungeon: (s, info) => {
+      const d = s.dungeon;
+      return line([
+        placeName(d.location, info, 'the last visited dungeon'),
+        d.difficulty === 'advanced' ? 'Advanced' : 'Normal',
+        d.skipBoss && 'skips the boss',
+        d.restartAfterLosses && `starts over after ${times(d.restartAfterLosses, 'loss', 'losses')}`,
+        d.keepPoints && `keeps ${times(d.keepPoints, 'point', 'points')}`,
+        d.gateKeysPerDay && `${times(d.gateKeysPerDay, 'Gate Key', 'Gate Keys')} a day`,
+      ]);
+    },
+    underworld: (s) => {
+      const u = s.underworld;
+      return line([
+        `fights above ${u.minHpPercent}% HP`,
+        u.enter === 'off' ? 'you go in yourself' : `goes in on ${ENTER_LEVELS[u.enter]}`,
+        u.mobilisations && `${times(u.mobilisations, 'Mobilisation', 'Mobilisations')} a visit`,
+        u.potions && `${times(u.potions, 'healing potion', 'healing potions')} a visit`,
+      ]);
+    },
+    arena: (s) => opponentSummary(s.arena),
+    circus: (s) => opponentSummary(s.circus),
+    heal: (s) => {
+      const h = s.heal;
+      const bags = ROMAN.filter((_, i) => h.bags[`b${i + 1}`]);
+      return line([
+        `eats below ${h.eatBelowPercent}%`,
+        `stops fighting below ${h.minHpPercent}%`,
+        bags.length && bags.length < 8 ? `${bags.length === 1 ? 'bag' : 'bags'} ${bags.join(', ')}` : 'all bags',
+        h.plainOnly && 'plain food only',
+        h.buy && `buys food (up to ${fmt(h.buyMaxGoldPerDay)} gold a day)`,
+      ]);
+    },
+    quests: (s) => {
+      const on = ['combat', 'arena', 'circus', 'expedition', 'dungeon', 'items', 'work'].filter((k) => s.quests.types[k]);
+      return line([on.length ? on.join(', ') : 'no quest types ticked', s.quests.matchLocation && 'only where it fights']);
+    },
+    work: (s) => line([`job ${s.work.job + 1}`, times(s.work.hours, 'hour', 'hours'), 'once the points run out']),
+    training: (s) => {
+      const stats = Object.keys(s.training.stats).filter((k) => s.training.stats[k]);
+      return line([`keeps ${fmt(s.training.keepGold)} gold`, stats.length ? stats.join(', ') : 'no stats ticked']);
+    },
+    repair: (s) => {
+      const r = s.repair;
+      const whose = ['you', 'tab X', 'mercenary I', 'mercenary II', 'mercenary III', 'mercenary IV'].filter((_, i) => r.dolls[`d${i + 1}`]);
+      return line([`below ${r.belowPercent}%`, `materials up to ${quality(r.maxQuality)}`, whose.length ? whose.join(', ') : 'you']);
+    },
+    smelting: (s) => {
+      const m = s.smelting;
+      return line([`resources to the ${m.storeIn === 'horreum' ? 'Horreum' : 'packages'}`, m.auto ? `picks items up to ${quality(m.autoUpTo)}` : 'only what you tick']);
+    },
+    packages: (s) => {
+      const p = s.packages;
+      return (
+        line([
+          p.collectGold && 'opens gold',
+          p.storeResources && 'stores resources',
+          p.sell && `sells up to ${quality(p.sellUpTo)}`,
+          p.expiring === 'bag' ? 'rescues expiring ones' : p.expiring === 'sell' ? 'sells expiring ones' : null,
+        ]) || 'no rules switched on'
+      );
+    },
+    auction: (s) => {
+      const a = s.auction;
+      return line([`at least ${a.minHpPerGold} HP per gold`, `up to ${fmt(a.maxPerRound)} gold a round`, `keeps ${fmt(a.keepGold)} gold`]);
+    },
+  };
+
+  // Not features with a switch, but worth seeing on the Overview.
+  SUMMARIES.schedule = (s) => {
+    const c = s.schedule;
+    return line([c.activeHours ? `plays ${c.start}–${c.end}` : 'plays around the clock', c.breaks && `a break of about ${c.breakLength} min every ${c.breakEvery} min`]);
+  };
+  SUMMARIES.notifications = (s) => {
+    const n = s.notifications;
+    const kinds = ['loggedOut', 'activityPaused', 'noFood', 'underworld'].filter((k) => n[k]).length;
+    return kinds ? line([`${times(kinds, 'kind of alert', 'kinds of alert')} on`, n.pushUrl ? 'desktop and phone' : 'desktop only']) : 'all alerts off';
+  };
+
+  // Sidebar order, under group headings.
+  const LAYOUT = [
+    [null, ['overview', 'general']],
+    ['Fights', ['expedition', 'dungeon', 'underworld', 'arena', 'circus']],
+    ['Character', ['heal', 'quests', 'work', 'training']],
+    ['Items', ['repair', 'smelting', 'packages', 'auction']],
+    ['Lanista', ['schedule', 'safety', 'notifications', 'interface', 'stats', 'log', 'profile']],
+  ];
+  const byId = Object.fromEntries(ALL_TABS.map((t) => [t.id, t]));
+  const TABS = LAYOUT.flatMap(([group, ids]) => ids.map((id) => ({ ...byId[id], group, summary: SUMMARIES[id] || null })));
+  if (TABS.length !== ALL_TABS.length || TABS.some((t) => !t.id)) throw new Error('schema.js: LAYOUT and the tabs do not match');
+
   const ACTIVITIES = {
     expedition: { label: 'Expedition', icon: 'expedition', tab: 'expedition', path: 'expedition.enabled' },
     dungeon: { label: 'Dungeon', icon: 'dungeon', tab: 'dungeon', path: 'dungeon.enabled' },

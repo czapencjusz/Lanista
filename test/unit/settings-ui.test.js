@@ -38,12 +38,16 @@ function mount(overrides = {}, extra = {}) {
   return { view, saved, $, change };
 }
 
-test('renders every tab and starts on General', () => {
+test('renders every tab under its group heading and starts on the Overview', () => {
   const { view, $ } = mount({ enabled: true, expedition: { enabled: true }, arena: { enabled: false } });
   const tabs = [...view.element.querySelectorAll('.gb-tab')].map((t) => t.dataset.tab);
   assert.deepEqual(tabs, GBot.ui.TABS.map((t) => t.id));
-  assert.equal($('.gb-tab.active').dataset.tab, 'general');
+  const nav = [...view.element.querySelector('.gb-tabs').children].map((el) => (el.classList.contains('gb-tab-group') ? `# ${el.textContent}` : el.dataset.tab));
+  assert.deepEqual(nav.slice(0, 5), ['overview', 'general', '# Fights', 'expedition', 'dungeon']);
+  assert.deepEqual(nav.filter((n) => n.startsWith('#')), ['# Fights', '# Character', '# Items', '# Lanista']);
+  assert.equal($('.gb-tab.active').dataset.tab, 'overview');
   assert.equal($('[data-path="enabled"]').checked, true);
+  assert.equal($('[data-tab="heal"] .gb-dot').classList.contains('on'), true, 'Health shows whether eating is on');
   assert.equal($('[data-tab="expedition"] .gb-dot').classList.contains('on'), true);
   assert.equal($('[data-tab="arena"] .gb-dot').classList.contains('on'), false);
 });
@@ -138,7 +142,8 @@ test('job number is shown 1-based and saved 0-based', async () => {
 });
 
 test('priority list moves items', async () => {
-  const { saved, $ } = mount();
+  const { view, saved, $ } = mount();
+  view.showTab('general');
   $('[data-item="expedition"] button[title="Move Expedition up"]').click();
   await new Promise((r) => setTimeout(r, 0));
   assert.deepEqual(saved.at(-1).general.order.slice(0, 2), ['expedition', 'quests']);
@@ -221,4 +226,40 @@ test('statistics: a row per day with fights, wins, gold in and out', () => {
   assert.equal(rows[1][2], '100%');
   assert.equal(rows[1][3], n(7000));
   assert.ok($('.gb-card') && [...view.element.querySelectorAll('.gb-card-label')].some((l) => l.textContent === 'Food bought'));
+});
+
+test('the Overview: a switch and a line per feature, the name opens its tab', async () => {
+  const memory = GBot.brain.createMemory(Date.now());
+  memory.gameInfo.locations = [{ id: '7', name: 'Koman Mountain' }];
+  const { view, saved, $, change } = mount(
+    {
+      enabled: false,
+      expedition: { enabled: true, location: '7', enemy: 4, bonusesFirst: true, mobilisationsPerDay: 1 },
+      dungeon: { enabled: true, difficulty: 'advanced', skipBoss: true },
+      arena: { enabled: true, where: 'local', target: 'lowest' },
+      heal: { bags: { b1: true, b2: false, b3: false, b4: false, b5: false, b6: false, b7: false, b8: false } },
+      repair: { enabled: false },
+      notifications: { pushUrl: 'https://ntfy.sh/x' },
+    },
+    { memory }
+  );
+  const card = (id) => $(`[data-card="${id}"]`);
+  const sum = (id) => card(id).querySelector('.gb-overview-sum').textContent;
+  assert.equal($('.gb-overview-state').textContent, 'Paused');
+  assert.equal(sum('expedition'), 'Koman Mountain · the boss (bonuses first) · 1 Mobilisation a day');
+  assert.equal(sum('dungeon'), 'the last visited dungeon · Advanced · skips the boss');
+  assert.equal(sum('arena'), 'on this server · weakest first');
+  assert.equal(sum('heal'), 'eats below 30% · stops fighting below 20% · bag I · plain food only');
+  assert.equal(sum('notifications'), '4 kinds of alert on · desktop and phone');
+  assert.ok(card('repair').classList.contains('off'));
+  assert.equal(card('notifications').querySelector('input'), null, 'no switch where there is no single one');
+  assert.deepEqual([...view.element.querySelectorAll('.gb-pane h3')].map((h3) => h3.textContent), ['Fights', 'Character', 'Items', 'Lanista']);
+
+  change(card('repair').querySelector('input'), true);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(saved.at(-1).repair.enabled, true);
+  assert.ok(!card('repair').classList.contains('off'));
+
+  card('dungeon').querySelector('.gb-overview-open').click();
+  assert.equal(view.getTab(), 'dungeon');
 });

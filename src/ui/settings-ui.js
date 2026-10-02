@@ -33,21 +33,27 @@
     const view = {
       settings: S.sanitizeSettings(opts.settings || {}),
       memory: opts.memory || null,
-      tab: ui.TABS.some((t) => t.id === opts.initialTab) ? opts.initialTab : 'general',
+      tab: ui.TABS.some((t) => t.id === opts.initialTab) ? opts.initialTab : 'overview',
     };
 
     const nav = h('nav', { class: 'gb-tabs', role: 'tablist', 'aria-label': 'Settings sections' });
     const pane = h('section', { class: 'gb-pane', role: 'tabpanel' });
     const element = h('div', { class: `gb-settings${opts.compact ? ' gb-compact' : ''}` }, nav, pane);
 
+    // The on/off path a tab's dot shows: its header switch, or another one.
+    const onPath = (tab) => tab.enable || tab.toggle || null;
+
     const tabButtons = new Map();
+    let group = null;
     for (const tab of ui.TABS) {
+      if (tab.group && tab.group !== group) nav.appendChild(h('div', { class: 'gb-tab-group', role: 'presentation' }, tab.group));
+      group = tab.group;
       const button = h(
         'button',
         { type: 'button', class: 'gb-tab', role: 'tab', title: tab.title, dataset: { tab: tab.id }, onclick: () => showTab(tab.id) },
-        icon(tab.icon),
+        icon(tab.icon, 16),
         h('span', { class: 'gb-tab-label' }, tab.title),
-        tab.enable ? h('span', { class: 'gb-dot', 'aria-hidden': 'true' }) : null
+        onPath(tab) ? h('span', { class: 'gb-dot', 'aria-hidden': 'true' }) : null
       );
       tabButtons.set(tab.id, button);
       nav.appendChild(button);
@@ -434,6 +440,51 @@
       return h('div', { class: 'gb-table-wrap' }, h('table', { class: 'gb-table gb-days' }, h('thead', {}, h('tr', {}, head)), h('tbody', {}, rows)));
     }
 
+    // Every feature on one page: its switch and a line about its settings;
+    // the name opens its tab.
+    function overviewPane() {
+      const master = switchControl('enabled', 'Lanista is running');
+      master.el.classList.add('gb-switch-lg');
+      const state = h('span', { class: 'gb-overview-state' });
+      syncers.push(() => {
+        master.sync();
+        state.textContent = get('enabled') ? 'Running' : 'Paused';
+        state.classList.toggle('on', !!get('enabled'));
+      });
+      const out = [h('div', { class: 'gb-overview-master' }, h('span', { class: 'gb-label' }, 'Lanista'), state, master.el)];
+      let grid = null;
+      let group = null;
+      for (const tab of ui.TABS) {
+        if (!tab.summary) continue;
+        if (!grid || tab.group !== group) {
+          group = tab.group;
+          grid = h('div', { class: 'gb-overview-grid' });
+          out.push(h('h3', {}, group), grid);
+        }
+        const path = onPath(tab);
+        const control = path ? switchControl(path, `${tab.title} on or off`) : null;
+        const summary = h('div', { class: 'gb-overview-sum' });
+        const card = h(
+          'div',
+          { class: 'gb-overview-card', dataset: { card: tab.id } },
+          h(
+            'div',
+            { class: 'gb-overview-card-head' },
+            h('button', { type: 'button', class: 'gb-overview-open', title: `${tab.title} settings`, onclick: () => showTab(tab.id) }, icon(tab.icon, 16), h('span', {}, tab.title)),
+            control ? control.el : null
+          ),
+          summary
+        );
+        syncers.push(() => {
+          if (control) control.sync();
+          card.classList.toggle('off', !!path && !get(path));
+          summary.textContent = tab.summary(view.settings, view.memory && view.memory.gameInfo);
+        });
+        grid.appendChild(card);
+      }
+      return out;
+    }
+
     function statsPane() {
       const cards = h('div', { class: 'gb-cards' });
       const daysBox = h('div', {});
@@ -713,7 +764,8 @@
       }
 
       let body;
-      if (tab.custom === 'stats') body = statsPane();
+      if (tab.custom === 'overview') body = overviewPane();
+      else if (tab.custom === 'stats') body = statsPane();
       else if (tab.custom === 'log') body = logPane();
       else if (tab.custom === 'profile') body = profilePane();
       else body = tab.fields.map(renderField);
@@ -728,9 +780,9 @@
 
     function sync() {
       for (const tab of ui.TABS) {
-        if (!tab.enable) continue;
+        if (!onPath(tab)) continue;
         const dot = tabButtons.get(tab.id).querySelector('.gb-dot');
-        dot.classList.toggle('on', !!get(tab.enable));
+        dot.classList.toggle('on', !!get(onPath(tab)));
       }
       for (const fn of syncers) fn();
     }

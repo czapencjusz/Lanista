@@ -113,6 +113,12 @@
     down: [['path', { d: 'M6 9l6 6 6-6' }]],
     grip: [['path', { d: 'M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01', 'stroke-width': 3 }]],
     report: [['path', { d: 'M5.5 21V4M5.5 4.5h12l-2.5 4 2.5 4h-12' }]],
+    overview: [
+      ['rect', { x: 4, y: 4, width: 7, height: 7, rx: 1.5 }],
+      ['rect', { x: 13, y: 4, width: 7, height: 7, rx: 1.5 }],
+      ['rect', { x: 4, y: 13, width: 7, height: 7, rx: 1.5 }],
+      ['rect', { x: 13, y: 13, width: 7, height: 7, rx: 1.5 }],
+    ],
   };
 
   function icon(name, size = 18) {

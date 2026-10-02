@@ -66,8 +66,12 @@ a.gb-btn, a.gb-icon-btn { text-decoration: none; }
 }
 .gb-tab {
   position: relative; display: flex; align-items: center; gap: 9px; width: 100%;
-  padding: 4px 12px; border: 0; border-left: 3px solid transparent; background: none;
+  padding: 3px 12px; border: 0; border-left: 3px solid transparent; background: none;
   color: #e8d5a8; font: 700 12px/1.2 var(--gb-font); text-align: left; cursor: pointer;
+}
+.gb-tab-group {
+  padding: 5px 12px 1px 15px; color: #b99a63;
+  font: 700 9.5px/1.2 var(--gb-font); letter-spacing: .9px; text-transform: uppercase;
 }
 .gb-tab:hover { background: rgba(255,255,255,.07); }
 .gb-tab.active { background: var(--gb-parchment); color: var(--gb-ink); border-left-color: var(--gb-gold); }
@@ -78,9 +82,27 @@ a.gb-btn, a.gb-icon-btn { text-decoration: none; }
 .gb-compact .gb-tabs { width: 46px; padding: 4px 0; }
 .gb-compact .gb-tab { justify-content: center; padding: 7px 0; }
 .gb-compact .gb-tab-label { display: none; }
+.gb-compact .gb-tab-group { margin: 4px 9px; padding: 0; height: 0; overflow: hidden; border-top: 1px solid rgba(232, 213, 168, .25); }
 .gb-compact .gb-dot { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; margin: 0; }
 
 .gb-pane { flex: 1; min-width: 0; overflow-y: auto; padding: 14px 18px 18px; }
+.gb-overview-master {
+  display: flex; align-items: center; gap: 10px; margin: 4px 0 2px; padding: 9px 12px;
+  background: var(--gb-parchment-2); border: 1px solid var(--gb-line); border-radius: 7px;
+}
+.gb-overview-master .gb-label { flex: none; }
+.gb-overview-state { flex: 1; color: var(--gb-muted); font-weight: 700; }
+.gb-overview-state.on { color: var(--gb-green); }
+.gb-overview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.gb-overview-card { padding: 8px 10px; background: var(--gb-parchment-2); border: 1px solid var(--gb-line); border-radius: 7px; }
+.gb-overview-card-head { display: flex; align-items: center; gap: 8px; min-height: 21px; }
+.gb-overview-open {
+  flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; padding: 0; border: 0; background: none;
+  color: var(--gb-blood); font: 700 12.5px/1.2 var(--gb-font); text-align: left; cursor: pointer;
+}
+.gb-overview-open:hover span, .gb-overview-open:focus-visible span { text-decoration: underline; }
+.gb-overview-sum { margin-top: 4px; color: var(--gb-muted); font-size: 11px; line-height: 1.35; }
+.gb-overview-card.off .gb-overview-sum, .gb-overview-card.off .gb-overview-open { opacity: .55; }
 .gb-compact .gb-pane { padding: 12px 12px 16px; }
 .gb-pane-head { display: flex; align-items: center; gap: 10px; color: var(--gb-blood); }
 .gb-pane-head h2 { margin: 0; font: 700 15px/1.2 var(--gb-heading); color: var(--gb-blood); flex: 1; }
