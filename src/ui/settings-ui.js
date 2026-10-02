@@ -451,7 +451,7 @@
         if (days.length) {
           daysBox.appendChild(h('h3', {}, 'Per day'));
           daysBox.appendChild(daysTable(days));
-          daysBox.appendChild(h('p', { class: 'gb-help' }, 'Gold in: looted, sold and taken from gold packages. Gold spent: training, repairs and food. The last 30 days are kept.'));
+          daysBox.appendChild(h('p', { class: 'gb-help' }, 'Gold in: looted, sold and taken from gold packages. Gold spent: training, repairs, smelting, auction bids and food. The last 30 days are kept.'));
         }
         const hours = Math.max((Date.now() - stats.since) / 3600000, 1 / 60);
         const card = (label, value, sub) =>
