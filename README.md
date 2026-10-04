@@ -284,6 +284,71 @@ A few handy things to know:
 - **Older settings carry over.** Settings from older versions are moved over automatically, and each
   server gets its own copy.
 
+## Running it around the clock
+
+Lanista only plays while its browser is open, and phones put browsers to sleep. If you have a
+computer that's always on, like a home server or a NAS (OpenMediaVault, Unraid, Synology and the
+like), you can give Lanista a browser of its own there and check in from your phone or PC whenever
+you like. The [linuxserver.io Chromium](https://docs.linuxserver.io/images/docker-chromium/)
+Docker image does the job: a full Chromium that you open in any browser.
+
+**1. Get Lanista onto the server.** Over SSH, clone it into a folder for app data:
+
+```sh
+git clone https://github.com/czapencjusz/gbot.git /path/to/appdata/lanista/gbot
+```
+
+**2. Start the container.** With Docker Compose (on OpenMediaVault that's the *compose* plugin from
+omv-extras: add a file under *Services → Compose → Files* and press *Up*):
+
+```yaml
+services:
+  lanista:
+    image: lscr.io/linuxserver/chromium:latest
+    container_name: lanista
+    environment:
+      - PUID=1000                 # your user on the server (check with: id yourname)
+      - PGID=100                  # its group
+      - TZ=Europe/Warsaw          # your time zone; daily limits and stats use it
+      - CUSTOM_USER=lanista
+      - PASSWORD=choose-your-own  # without it there is no login at all
+      - DISABLE_SUDO=true
+      - DISABLE_TERMINALS=true
+      - RESTART_APP=true          # Chromium comes back if it closes
+      - CHROME_CLI=--restore-last-session
+    volumes:
+      - /path/to/appdata/lanista/config:/config
+      - /path/to/appdata/lanista/gbot:/lanista:ro
+    ports:
+      - 3001:3001
+    shm_size: "1gb"
+    restart: unless-stopped
+```
+
+**3. Set it up once.** Open `https://<server-address>:3001` (accept the self-signed certificate
+warning) and log in with the user and password from above. In the Chromium that shows up:
+
+1. Go to `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick
+   `/lanista`. The browser profile is kept in the config folder, so this sticks.
+2. Log in to the Gladiatus lobby and open your server.
+3. Bring your settings along: *Backup → Download settings file* in your usual browser, then
+   *Import from file…* here. Or just set it up from scratch.
+4. Press **Start**. If you use *Log back in through the lobby*, allow pop-ups for
+   `lobby.gladiatus.gameforge.com` in this Chromium too.
+
+A few things worth knowing:
+
+- **One Lanista per server.** Press *Stop* in your everyday browser for the servers the home server
+  plays, and don't log in to the same account somewhere else while it runs: that can end the home
+  server's game session.
+- **Keep it at home.** Whoever reaches that page controls the browser and your game login. To check
+  in while you're out, use a VPN to your home network (WireGuard, Tailscale) instead of opening the
+  port on your router.
+- **It needs some room:** Chromium wants about 1.5–2 GB of free memory.
+- **Your phone still hears about it.** Alerts sent to ntfy or Discord work from there too.
+- **Updating:** run `git -C /path/to/appdata/lanista/gbot pull`, then press reload on Lanista's card
+  in `chrome://extensions` (or restart the container).
+
 ## Found a problem?
 
 Hit **Report a problem**: it's the little flag in the settings window and the popup, and there's a
