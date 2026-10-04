@@ -420,13 +420,19 @@
     return { type: 'wait', until, reason: 'Waiting', next };
   }
 
-  // Gold to hide, or packs to list again, and the time has come to look.
+  // Gold packs held that wait to be listed: bought, or back from a listing
+  // after its 24 hours. They hold the player's gold, so they are listed
+  // again even after gold hiding is switched off.
+  const goldPacksDue = (memory, now) => (memory.goldPacks || []).some((p) => p.state === 'bought' || now - p.at > 24 * 3600 * 1000);
+
+  // Packs to list again, or (when hiding is on) gold to hide, and the time
+  // has come to look.
   function wantsGold(state, settings, memory, now) {
     const cfg = settings.gold;
-    if (!cfg.hide || isBlocked(memory, 'gold', now) || (memory.nextGoldCheck || 0) > now) return false;
-    const packsDue = (memory.goldPacks || []).some((p) => p.state === 'bought' || now - p.at > 24 * 3600 * 1000);
+    if (isBlocked(memory, 'gold', now) || (memory.nextGoldCheck || 0) > now) return false;
+    if (goldPacksDue(memory, now)) return true;
     const spare = state.gold === null || state.gold === undefined ? 0 : state.gold - cfg.keep;
-    return packsDue || spare >= cfg.minPack;
+    return cfg.hide && spare >= cfg.minPack;
   }
 
   // The guild market gold pack to buy: the dearest that `spare` pays for,
@@ -1110,6 +1116,7 @@
     pickTraining,
     wantsTraining,
     wantsGold,
+    goldPacksDue,
     pickGoldPack,
     conditionOf,
     pickRepair,

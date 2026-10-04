@@ -468,7 +468,7 @@
       icon: 'gold',
       enable: 'gold.hide',
       description:
-        "Gold on hand can be stolen by anyone who beats you in the arena. Lanista keeps what's above your limit in your guild's market as \"gold packs\": it buys the dearest pack a guildmate listed that your spare gold pays for, and lists it again at the same price for 24 hours. When a guildmate buys it, your gold comes back as a gold package, safe in the packages (leave Packages > Gold packages off to keep it there). Only listings far above the item's worth count as packs; your own are never bought.",
+        "Gold on hand can be stolen by anyone who beats you in the arena. Lanista keeps what's above your limit in your guild's market as \"gold packs\": it buys the dearest pack a guildmate listed that your spare gold pays for, and lists it again at the same price for 24 hours. When a guildmate buys it, your gold comes back as a gold package, safe in the packages (leave Packages > Gold packages off to keep it there). Only listings far above the item's worth count as packs; your own are never bought. Packs Lanista holds are listed again until they sell, even with this switched off.",
       fields: [
         { path: 'gold.keep', type: 'number', label: 'Keep on hand', unit: 'gold', help: 'Training, repairs and food are paid from this.' },
         { path: 'gold.minPack', type: 'number', label: 'Smallest pack', unit: 'gold', help: 'Listings cheaper than this are left alone.' },

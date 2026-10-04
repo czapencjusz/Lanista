@@ -61,9 +61,13 @@ test('when to look: spare gold above a pack, or packs to list again', () => {
   assert.equal(brain.wantsGold(state(0), settings, m, NOW), false, 'listed an hour ago: nothing to do');
   m.goldPacks = [{ state: 'bought', at: NOW, price: 300000 }];
   assert.equal(brain.wantsGold(state(0), settings, m, NOW), true, 'a bought pack waits to be listed');
+  const off = S.sanitizeSettings({});
+  assert.equal(brain.wantsGold(state(0), off, m, NOW), true, 'packs bought earlier are still listed with hiding off');
+  m.goldPacks = [{ state: 'listed', at: NOW - 25 * 3600 * 1000, price: 300000 }];
+  assert.equal(brain.wantsGold(state(0), off, m, NOW), true, 'and listed again once their 24 hours are up');
   m.nextGoldCheck = NOW + 1000;
   assert.equal(brain.wantsGold(state(1e6), settings, m, NOW), false, 'not before the next look');
-  assert.equal(brain.wantsGold(state(1e6), S.sanitizeSettings({}), brain.createMemory(NOW), NOW), false, 'off by default');
+  assert.equal(brain.wantsGold(state(1e6), off, brain.createMemory(NOW), NOW), false, 'no new packs with hiding off (the default)');
 });
 
 // A fake game for the whole round: market, buying, packages, moving and
@@ -154,8 +158,8 @@ test('hiding gold: buys the dearest pack that fits, then lists it again at the s
   assert.equal(memory.nextGoldCheck, later + 15 * 60 * 1000);
 });
 
-test('a pack waiting to be listed keeps the resources out of the Horreum', async () => {
-  const settings = S.sanitizeSettings({ gold: { hide: true }, packages: { enabled: true, storeResources: true } });
+test('a pack waiting to be listed keeps the resources out of the Horreum, hiding on or off', async () => {
+  const settings = S.sanitizeSettings({ gold: { hide: false }, packages: { enabled: true, storeResources: true } });
   const memory = brain.createMemory(NOW);
   memory.goldPacks = [{ type: 32768, amount: 3, basis: '18-27', price: 300000, state: 'bought', at: NOW }];
   const game = fakeGame();
@@ -165,4 +169,24 @@ test('a pack waiting to be listed keeps the resources out of the Horreum', async
   await withGame(game, () => GBot.actions.packages(ctx));
   assert.ok(logs.includes('debug: Packages: not storing resources while a gold pack waits to be listed'));
   assert.deepEqual(game.s.requests, [], 'nothing stored or moved');
+});
+
+test('with hiding off, a pack back from an expired listing is listed again, and nothing is bought', async () => {
+  const game = fakeGame({ goldOnHand: 5000000 });
+  game.s.packaged = [{ cn: -9, amount: 3 }];
+  const memory = brain.createMemory(NOW);
+  memory.goldPacks = [{ type: 32768, amount: 3, basis: '18-27', price: 300000, state: 'listed', at: NOW - 25 * 3600 * 1000 }];
+  const ctx = {
+    state: { sh: 'abc', gold: 5000000 },
+    settings: S.sanitizeSettings({ enabled: true, gold: { hide: false } }),
+    memory,
+    log: () => {},
+    humanDelay: async () => {},
+    persist: async () => {},
+    now: () => NOW,
+  };
+  await withGame(game, () => GBot.actions.gold(ctx));
+  assert.deepEqual(game.s.requests, ['move -9 -> 512 x3', 'sell 777 for 300000 (3) Offer']);
+  assert.equal(game.s.gold, 5000000, 'no new pack bought');
+  assert.deepEqual(memory.goldPacks, [{ type: 32768, amount: 3, basis: '18-27', price: 300000, state: 'listed', at: NOW }]);
 });

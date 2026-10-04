@@ -177,7 +177,7 @@
       const gold = await goldNow(sh);
       const spare = gold === null ? 0 : gold - cfg.keep;
       let bought = false;
-      if (spare >= cfg.minPack) {
+      if (cfg.hide && spare >= cfg.minPack) {
         const me = await playerName(ctx);
         const { offers } = await marketPages(sh);
         const pack = brain.pickGoldPack(offers, { spare, minPack: cfg.minPack, me });

@@ -165,8 +165,9 @@
       if (p.enabled && p.collectGold) await collectGold(ctx);
       let items = await listPackages(sh);
 
-      // Gold packs are resources too: never store one before it is listed.
-      const packsWaiting = settings.gold.hide && memory.goldPacks.some((g) => g.state === 'bought');
+      // Gold packs are resources too: never store one before it is listed
+      // (again).
+      const packsWaiting = brain.goldPacksDue(memory, ctx.now());
       if (packsWaiting && p.storeResources) ctx.log('debug', 'Packages: not storing resources while a gold pack waits to be listed');
       if (p.enabled && p.storeResources && !packsWaiting && items.some((i) => i.type === RESOURCE_TYPE)) {
         await ctx.humanDelay();
