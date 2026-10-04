@@ -18,6 +18,14 @@
     hpPercent: '#header_values_hp_percent',
     level: '#header_values_level',
     gold: '#sstat_gold_val',
+    // Header menu: unread messages show as a count on Messages, like the
+    // count on Packages.
+    messagesMenu: '#menue_messages',
+    messagesCount: '#menue_messages .menue_new_count',
+    // The overview's stat boxes: strength, dexterity, agility,
+    // constitution, charisma, intelligence; the tooltip says "Agility: 1112
+    // | Basic: 535 | Maximum: 1180 | ...".
+    statTooltip: (i) => `#char_f${i}_tt`,
 
     points: {
       expedition: {
@@ -210,6 +218,43 @@
     },
     // The character's name on the overview.
     playerName: '.playername_achievement',
+
+    // Villa Medici (mod=guild_medic, a guild building): a row per doctor
+    // with "Heal now!" (a plain link, s=<doctor>) or, while he rests after
+    // a treatment (about 2 hours), a countdown (ms).
+    medic: {
+      rows: '#guild_medicus_heal tr',
+      heal: 'a[href*="mod=guild_medic"]',
+      resting: '[data-ticker-time-left]',
+    },
+
+    // Gods (mod=gods): a box per god (its id is the god's name) with the
+    // favour ("164 / 722") and an image map, one area per rank whose
+    // tooltip names it and its cost ("Cost: 20 Favor"). Only a rank that
+    // can be bought has an onclick, which confirms a plain link
+    // (submod=activateBlessing&god=<1-6>&rank=<1-3>).
+    gods: {
+      box: '#gods .god_box',
+      points: '.god_points',
+      ranks: 'map area',
+    },
+
+    // Costumes (mod=costumes): sections under h1 headings (Everywear,
+    // Underworld, the costume festival, Temporary), a box per costume whose
+    // tooltip starts "Name (pieces/needed)". Its buttons confirm a plain
+    // link, submod=changeCostume&doll=<1|2>&setId=<costume>; setId=0 takes
+    // the costume off (so that one is worn). Disabled buttons show the
+    // cooldown (ms).
+    costumes: {
+      heading: '#content h1',
+      box: '#content .costumes_box',
+      buttons: 'input',
+      ticker: '[data-ticker-time-left]',
+      tooltip: '[data-tooltip]',
+    },
+    // The header buff of the costume worn ("Dīs Pater`s Armour can still be
+    // worn"), ending data-effect-end seconds from now.
+    costumeBuff: '#buffbar .buff[data-link*="mod=costumes"]',
     // The forge's lists of known prefixes and suffixes (mod=forge&submod=forge).
     forgeAffixes: '#content select[name^="prefix"] option, #content select[name^="suffix"] option',
 

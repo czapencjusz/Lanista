@@ -130,6 +130,49 @@
       buyAtOnce: 3,
       buyMaxGoldPerDay: 50000,
       buyKeepGold: 100000,
+      // ...and from other players on the public market first, when a lot
+      // heals at least marketMinHpPerGold HP per gold (same daily budget).
+      market: false,
+      marketMinHpPerGold: 1,
+      // The guild's Villa Medici heals a share of your HP per doctor for
+      // free; each doctor then rests for about two hours. 'off' |
+      // 'underworld' (only there, where food cannot be eaten) | 'always'
+      // (before eating food too). At most medicMax doctors a day (a visit,
+      // in the Underworld); 0 = no limit.
+      medic: 'off',
+      medicMax: 0,
+    },
+
+    gods: {
+      // Spend the gods' favour (never rubies) on these, whenever one is
+      // off cooldown and its god has the favour: rank 1 blessings (an hour
+      // of a small bonus), rank 2 holy oils, rank 3 blessings (half an hour
+      // of a strong one).
+      enabled: false,
+      blessings: { minerva: false, diana: false, mars: false, merkur: false, apollo: false, vulcanus: false },
+      oils: { minerva: false, diana: false, mars: false, merkur: false, apollo: false, vulcanus: false },
+      rank3: { minerva: false, diana: false, mars: false, merkur: false, apollo: false, vulcanus: false },
+      // Only spend a god's favour once it has at least this share of its
+      // maximum (0 = whenever there is enough).
+      minPercent: 0,
+    },
+
+    boosts: {
+      // Use boost potions from the bags and packages for these, one at a
+      // time per kind, while the stat is below its maximum for your level
+      // (boosts above it are wasted).
+      enabled: false,
+      stats: { strength: false, dexterity: false, agility: false, constitution: false, charisma: false, intelligence: false, health: false },
+    },
+
+    costumes: {
+      // Put on Dīs Pater's Armour won on these Underworld levels as soon as
+      // it can be worn (it is used up when it ends, and taking it off early
+      // destroys it, so nothing else is put on meanwhile).
+      enabled: false,
+      armour: { normal: false, medium: false, hard: false },
+      // Otherwise wear this costume ('' = leave the costume as it is).
+      everyday: '',
     },
 
     work: {
@@ -302,9 +345,24 @@
       noFood: true,
       // The Underworld was not entered (Dīs Pater's Armor still held).
       underworld: true,
-      // Also send the alerts above to this address: a Discord webhook or an
-      // ntfy topic (https://ntfy.sh/<topic>). Empty = desktop only.
+      levelUp: true,
+      // New in-game messages (players, guild, auction wins).
+      messages: false,
+      // Yesterday's statistics, once a day.
+      dailySummary: false,
+      // A costume was put on, or Dīs Pater's Armour ran out.
+      costume: true,
+      // Show the alerts on this computer.
+      desktop: true,
+      // Also send the alerts above to these addresses, one per line: ntfy
+      // topics, Discord or Slack webhooks, a Telegram bot, Pushover, Gotify.
+      // Empty = desktop only.
       pushUrl: '',
+      // Hold phone alerts between quietStart and quietEnd and send them
+      // together afterwards.
+      quiet: false,
+      quietStart: '23:00',
+      quietEnd: '07:00',
     },
 
     ui: {
@@ -341,6 +399,11 @@
     'heal.buyAtOnce': { int: true, min: 1, max: 20 },
     'heal.buyMaxGoldPerDay': { int: true, min: 0, max: 2000000000 },
     'heal.buyKeepGold': { int: true, min: 0, max: 2000000000 },
+    'heal.marketMinHpPerGold': { min: 0.01, max: 1000 },
+    'heal.medic': { enum: ['off', 'underworld', 'always'] },
+    'heal.medicMax': { int: true, min: 0, max: 50 },
+    'gods.minPercent': { int: true, min: 0, max: 100 },
+    'costumes.everyday': { maxLength: 80 },
     'quests.rankBy': { enum: ['gold', 'honour', 'xp'] },
     'gold.keep': { int: true, min: 0, max: 2000000000 },
     'gold.minPack': { int: true, min: 1000, max: 2000000000 },
@@ -360,7 +423,9 @@
     'packages.sellUpTo': { int: true, min: -1, max: 4 },
     'packages.expiring': { enum: ['off', 'bag', 'sell'] },
     'packages.expiringHours': { int: true, min: 1, max: 168 },
-    'notifications.pushUrl': { pattern: /^(https:\/\/[^\s]+)?$/i, keepCase: true, maxLength: 500 },
+    'notifications.pushUrl': { pattern: /^(https:\/\/\S+(\s+https:\/\/\S+)*)?$/i, keepCase: true, maxLength: 2000 },
+    'notifications.quietStart': { pattern: TIME },
+    'notifications.quietEnd': { pattern: TIME },
     'auction.minHpPerGold': { min: 0.1, max: 1000 },
     'auction.bidWhen': { enum: ['short', 'medium', 'any'] },
     'auction.maxPerRound': { int: true, min: 0, max: 2000000000 },
@@ -537,6 +602,25 @@
     return area ? serversIn(await area.get(null)) : [];
   }
 
+  // True when `now` (local time) is inside the daily window start-end
+  // ("HH:MM"; it may run past midnight). An empty window (start = end) is
+  // never on.
+  function inTimeWindow(start, end, now) {
+    const minutes = (t) => {
+      const [h, m] = String(t).split(':').map(Number);
+      return h * 60 + m;
+    };
+    const s = minutes(start);
+    const e = minutes(end);
+    if (s === e) return false;
+    const d = new Date(now);
+    const m = d.getHours() * 60 + d.getMinutes();
+    return s < e ? m >= s && m < e : m >= s || m < e;
+  }
+
+  // The phone alert addresses: one per line (or separated by spaces).
+  const pushUrls = (notifications) => String((notifications && notifications.pushUrl) || '').split(/\s+/).filter(Boolean);
+
   // "s303-en.gladiatus.gameforge.com" -> "Server 303 (EN)".
   const serverName = (host) => {
     const m = String(host).match(/^s(\d+)-(\w+)\./);
@@ -558,6 +642,8 @@
     serversIn,
     listServers,
     serverName,
+    inTimeWindow,
+    pushUrls,
     getPath,
     setPath,
     mergeSettings,

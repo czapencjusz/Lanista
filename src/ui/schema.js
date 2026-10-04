@@ -11,7 +11,8 @@
 // Field types: toggle, number, select, location, text, textarea, time, order,
 // checks, push. Optional field keys: help, unit, step, base (display offset, e.g. 1
 // to show a 0-based index as 1-based), dependsOn (path of a toggle that must
-// be on for the field to be editable), placeholder.
+// be on for the field to be editable, or a list of paths of which one must
+// be on), placeholder.
 (function (root) {
   'use strict';
   const GBot = (root.GBot = root.GBot || {});
@@ -26,6 +27,44 @@
   // Item and material qualities, as the game's "Minimum quality" filter.
   const QUALITIES = ['Standard (white)', 'Ceres (green)', 'Neptun (blue)', 'Mars (purple)', 'Jupiter (orange)', 'Olymp (red)'];
   const qualityOptions = (lowest) => QUALITIES.map((q, i) => ({ value: i - 1, label: i === 0 ? lowest : `Up to ${q}` }));
+
+  const GOD_NAMES = [
+    ['minerva', 'Minerva'],
+    ['diana', 'Diana'],
+    ['mars', 'Mars'],
+    ['merkur', 'Mercury'],
+    ['apollo', 'Apollo'],
+    ['vulcanus', 'Vulcan'],
+  ];
+  const godChecks = (key) => GOD_NAMES.map(([id, label]) => ({ path: `gods.${key}.${id}`, label }));
+
+  const BOOST_NAMES = [
+    ['strength', 'Strength'],
+    ['dexterity', 'Dexterity'],
+    ['agility', 'Agility'],
+    ['constitution', 'Constitution'],
+    ['charisma', 'Charisma'],
+    ['intelligence', 'Intelligence'],
+    ['health', 'Health (max HP)'],
+  ];
+
+  // Costumes that can be worn outside the Underworld, as the game names
+  // them (festival ones only during the festival).
+  const COSTUMES = [
+    'Vulcanus Forge',
+    "Feronia's Earthen Shield",
+    "Neptune's Fluid Might",
+    "Aeolus' Aerial Freedom",
+    "Pluto's Deadly Mist",
+    "Juno's Breath of Life",
+    "Wrath Mountain's Scale Armour",
+    'Eagle Eyes',
+    "Saturn's Winter Garment",
+    "Bubona's Bull Armour",
+    "Mercurius' Robber's Garments",
+    "Ra's Light Robe",
+    'Defender of the Empire',
+  ];
 
   const GEAR_KINDS = [
     ['weapons', 'Weapons'],
@@ -302,15 +341,112 @@
           help: 'Skip food that does something besides healing: eggs that give rubies, points or cooldown skips, Cervisia that activates Centurio, and the like. The auction house does not bid on those either.',
         },
         {
+          path: 'heal.market',
+          type: 'toggle',
+          label: 'Buy food on the market when none is left',
+          dependsOn: 'heal.enabled',
+          help: "Only when the food bags and the packages hold no food: other players' food on the public market, best HP per gold first and never your own listings. It arrives as a package, which the next meal takes out. Gold only.",
+        },
+        { path: 'heal.marketMinHpPerGold', type: 'number', label: 'Only market food that heals at least', unit: 'HP per gold', step: 0.1, dependsOn: 'heal.market', help: 'Heal amount divided by the price. 1 means a 9,000 HP cake may cost up to 9,000 gold.' },
+        {
           path: 'heal.buy',
           type: 'toggle',
           label: 'Buy food from the merchants when none is left',
           dependsOn: 'heal.enabled',
-          help: "Only when the food bags and the packages hold no food. The merchants' food (General goods sells it) costs more than the auction house, so the best HP per gold goes first. It goes into a food bag. Gold only, never rubies.",
+          help: "Only when the food bags and the packages hold no food (and the market had none, if that is on). The merchants' food (General goods sells it) costs more than the auction house, so the best HP per gold goes first. It goes into a food bag. Gold only, never rubies.",
         },
-        { path: 'heal.buyAtOnce', type: 'number', label: 'Items to buy per trip', dependsOn: 'heal.buy' },
-        { path: 'heal.buyMaxGoldPerDay', type: 'number', label: 'Spend at most', unit: 'gold a day', dependsOn: 'heal.buy' },
-        { path: 'heal.buyKeepGold', type: 'number', label: 'Never let gold drop below', dependsOn: 'heal.buy' },
+        { path: 'heal.buyAtOnce', type: 'number', label: 'Items to buy per trip', dependsOn: ['heal.buy', 'heal.market'] },
+        { path: 'heal.buyMaxGoldPerDay', type: 'number', label: 'Spend at most', unit: 'gold a day', dependsOn: ['heal.buy', 'heal.market'], help: 'Market and merchants together.' },
+        { path: 'heal.buyKeepGold', type: 'number', label: 'Never let gold drop below', dependsOn: ['heal.buy', 'heal.market'] },
+        {
+          path: 'heal.medic',
+          type: 'select',
+          label: "The guild's doctors (Villa Medici)",
+          options: [
+            { value: 'off', label: 'Not used' },
+            { value: 'underworld', label: 'In the Underworld' },
+            { value: 'always', label: 'Always, before food' },
+          ],
+          help: "Free: each doctor heals a share of your HP (the page says how much; it grows with the building), then rests for about 2 hours. In the Underworld, where food cannot be eaten, a doctor is seen when HP is below the Underworld's fighting limit, instead of waiting for HP to come back; elsewhere when it is below the eating limit above. Needs a guild with the Villa Medici.",
+        },
+        { path: 'heal.medicMax', type: 'number', label: 'See at most', unit: 'doctors a day (a visit, in the Underworld)', help: '0 = no limit.' },
+      ],
+    },
+    {
+      id: 'gods',
+      title: 'Gods',
+      icon: 'gods',
+      enable: 'gods.enabled',
+      description:
+        "Spend the gods' favour (from quests with a god reward and the daily login bonus) instead of letting it pile up: each ticked blessing or oil is bought whenever it is off its cooldown and its god has the favour. Favour only; rubies are never spent. Lanista looks every 30 minutes.",
+      fields: [
+        {
+          path: 'gods.blessings',
+          type: 'checks',
+          label: 'Blessings (rank 1, 20 favour, every 6 h)',
+          help: 'An hour of: Minerva +25 intelligence, Diana +840 armour, Mars +12 damage per hit, Mercury +25 charisma, Apollo +25 agility, Vulcan +25 dexterity (stats only up to their maximum for your level).',
+          items: godChecks('blessings'),
+        },
+        {
+          path: 'gods.oils',
+          type: 'checks',
+          label: 'Holy oils (rank 2, 60 favour, every 18 h)',
+          help: 'An oil to put on an item, raising one of its stats to the most possible for your level: Minerva charisma, Diana dexterity, Mars agility, Mercury intelligence, Apollo damage, Vulcan armour. It needs a free spot in your bags.',
+          items: godChecks('oils'),
+        },
+        {
+          path: 'gods.rank3',
+          type: 'checks',
+          label: 'Great blessings (rank 3, 150 favour, every 42 h)',
+          help: "Half an hour of: Minerva no double hits (either side), Diana +15% hit chance, Mars no critical hits (either side), Mercury weaker enemy healing, Apollo more blocking, Vulcan +15% armour (you and your mercenaries).",
+          items: godChecks('rank3'),
+        },
+        { path: 'gods.minPercent', type: 'number', label: 'Only once a god has at least', unit: '% of its maximum favour', help: '0 = whenever there is enough. A god at its maximum gains nothing more, so 90 only spends what would go to waste.' },
+      ],
+    },
+    {
+      id: 'boosts',
+      title: 'Boosts',
+      icon: 'boosts',
+      enable: 'boosts.enabled',
+      description:
+        "Use boost potions (Flask of Strength, Bottle of agility, Hawthorn and the like) from your bags or packages, one at a time per stat: the longest-lasting first, the next once it runs out. A stat already at its maximum for your level gains nothing from a boost, so none is used while it has less room than half the boost.",
+      fields: [
+        {
+          path: 'boosts.stats',
+          type: 'checks',
+          label: 'Keep boosted',
+          help: 'Health boosts raise your maximum HP. Lanista looks again every hour for stats it could not boost.',
+          items: BOOST_NAMES.map(([id, label]) => ({ path: `boosts.stats.${id}`, label })),
+        },
+      ],
+    },
+    {
+      id: 'costumes',
+      title: 'Costumes',
+      icon: 'costumes',
+      enable: 'costumes.enabled',
+      description:
+        "Beating Dīs Pater in the Underworld gives Dīs Pater's Armour for that level, a costume with big bonuses that lasts a while once put on. Lanista can put it on as soon as it may, which also lets you enter the Underworld on that level again. Taking it off early destroys it, so nothing else is put on while it lasts. The rest of the time it can wear a costume of your choice. Changing costumes has a cooldown; Lanista waits for it.",
+      fields: [
+        {
+          path: 'costumes.armour',
+          type: 'checks',
+          label: "Put on Dīs Pater's Armour from",
+          help: 'Normal: expedition points, gold and items. Medium: the same for dungeons. Hard: arena and Circus Turma cooldowns and prize money. When you hold several, the one from the level set under Underworld goes first.',
+          items: [
+            { path: 'costumes.armour.normal', label: 'Normal' },
+            { path: 'costumes.armour.medium', label: 'Medium' },
+            { path: 'costumes.armour.hard', label: 'Hard' },
+          ],
+        },
+        {
+          path: 'costumes.everyday',
+          type: 'select',
+          label: 'Otherwise wear',
+          options: [{ value: '', label: 'Leave the costume as it is' }, ...COSTUMES.map((name) => ({ value: name, label: name }))],
+          help: 'Only a costume you have at least one piece of. Its bonuses come with the number of pieces you have.',
+        },
       ],
     },
     {
@@ -639,13 +775,21 @@
         { path: 'notifications.activityPaused', type: 'toggle', label: 'An activity was paused after repeated failures' },
         { path: 'notifications.noFood', type: 'toggle', label: 'HP is low and there is no food left' },
         { path: 'notifications.underworld', type: 'toggle', label: 'The Underworld was not entered: Dīs Pater\'s Armor from that level is still unused' },
+        { path: 'notifications.levelUp', type: 'toggle', label: 'You reached a new level' },
+        { path: 'notifications.messages', type: 'toggle', label: 'Unread messages in the game', help: 'From players, your guild and the game (auction wins and the like). Lanista does not open them.' },
+        { path: 'notifications.costume', type: 'toggle', label: "A costume was put on, or Dīs Pater's Armour ran out", help: 'Needs Costumes switched on.' },
+        { path: 'notifications.dailySummary', type: 'toggle', label: "Yesterday's statistics, once a day", help: 'Fights, gold, experience, honour and fame, sent after midnight.' },
+        { path: 'notifications.desktop', type: 'toggle', label: 'Show them on this computer' },
         {
           path: 'notifications.pushUrl',
           type: 'push',
           label: 'Also send them to your phone',
-          placeholder: 'https://ntfy.sh/your-topic or a Discord webhook',
-          help: 'An ntfy topic (install the free ntfy app, subscribe to a long, hard-to-guess topic name and paste https://ntfy.sh/that-name) or a Discord webhook (channel settings > Integrations > Webhooks > Copy Webhook URL). The alerts switched on above go there too. Anyone with the address can post to it (and read an ntfy topic), so keep it to yourself; exported settings include it. Empty = desktop only.',
+          placeholder: 'One address per line',
+          help: 'Any of these, one per line:\n• ntfy: install the free ntfy app, subscribe to a long, hard-to-guess topic name, paste https://ntfy.sh/that-name\n• Discord: channel settings > Integrations > Webhooks > Copy Webhook URL\n• Slack: an incoming webhook (https://hooks.slack.com/services/...)\n• Telegram: make a bot with @BotFather, send it a message, then paste https://api.telegram.org/bot<token>/sendMessage?chat_id=<your chat id>\n• Pushover: https://api.pushover.net/1/messages.json?token=<app token>&user=<user key>\n• Gotify: https://<your server>/message?token=<app token>\nAnyone with an address can post to it (and read an ntfy topic), so keep them to yourself; exported settings include them.',
         },
+        { path: 'notifications.quiet', type: 'toggle', label: 'Quiet hours for the phone', help: 'Phone alerts wait until the quiet hours end, then come together in one message. Desktop alerts still show.' },
+        { path: 'notifications.quietStart', type: 'time', label: 'Quiet from', dependsOn: 'notifications.quiet' },
+        { path: 'notifications.quietEnd', type: 'time', label: 'Quiet until', dependsOn: 'notifications.quiet' },
       ],
     },
     {
@@ -748,6 +892,8 @@
         `stops fighting below ${h.minHpPercent}%`,
         bags.length && bags.length < 8 ? `${bags.length === 1 ? 'bag' : 'bags'} ${bags.join(', ')}` : 'all bags',
         h.plainOnly && 'plain food only',
+        h.medic !== 'off' && (h.medic === 'always' ? 'sees the guild doctors first' : 'sees the guild doctors in the Underworld'),
+        h.market && 'buys food on the market',
         h.buy && `buys food (up to ${fmt(h.buyMaxGoldPerDay)} gold a day)`,
       ]);
     },
@@ -813,15 +959,36 @@
   };
   SUMMARIES.notifications = (s) => {
     const n = s.notifications;
-    const kinds = ['loggedOut', 'activityPaused', 'noFood', 'underworld'].filter((k) => n[k]).length;
-    return kinds ? line([`${times(kinds, 'kind of alert', 'kinds of alert')} on`, n.pushUrl ? 'desktop and phone' : 'desktop only']) : 'all alerts off';
+    const kinds = ['loggedOut', 'activityPaused', 'noFood', 'underworld', 'levelUp', 'messages', 'costume', 'dailySummary'].filter((k) => n[k]).length;
+    const phones = GBot.settings.pushUrls(n).length;
+    const where = [n.desktop && 'desktop', phones && (phones === 1 ? 'phone' : `${phones} phone addresses`)].filter(Boolean).join(' and ') || 'shown nowhere';
+    return kinds ? line([`${times(kinds, 'kind of alert', 'kinds of alert')} on`, where, phones && n.quiet && `phone quiet ${n.quietStart}–${n.quietEnd}`]) : 'all alerts off';
+  };
+  SUMMARIES.gods = (s) => {
+    const g = s.gods;
+    const count = (key) => Object.values(g[key]).filter(Boolean).length;
+    return line([
+      count('blessings') && times(count('blessings'), 'blessing', 'blessings'),
+      count('oils') && times(count('oils'), 'holy oil', 'holy oils'),
+      count('rank3') && times(count('rank3'), 'great blessing', 'great blessings'),
+      g.minPercent && `once favour is ${g.minPercent}% full`,
+    ]) || 'nothing ticked';
+  };
+  SUMMARIES.boosts = (s) => {
+    const on = BOOST_NAMES.filter(([id]) => s.boosts.stats[id]).map(([, label]) => label.replace(/ \(.*\)$/, '').toLowerCase());
+    return on.length ? `keeps ${on.join(', ')} boosted` : 'nothing ticked';
+  };
+  SUMMARIES.costumes = (s) => {
+    const c = s.costumes;
+    const levels = ['normal', 'medium', 'hard'].filter((l) => c.armour[l]);
+    return line([levels.length && `Dīs Pater's Armour (${levels.join(', ')})`, c.everyday ? `otherwise ${c.everyday}` : 'otherwise leaves it']);
   };
 
   // Sidebar order, under group headings.
   const LAYOUT = [
     [null, ['overview', 'general']],
     ['Fights', ['expedition', 'dungeon', 'underworld', 'arena', 'circus']],
-    ['Character', ['heal', 'quests', 'work', 'training']],
+    ['Character', ['heal', 'quests', 'work', 'training', 'gods', 'boosts', 'costumes']],
     ['Items', ['gold', 'repair', 'smelting', 'packages', 'auction']],
     ['Lanista', ['schedule', 'safety', 'notifications', 'interface', 'stats', 'log', 'profile']],
   ];

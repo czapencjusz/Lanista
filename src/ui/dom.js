@@ -117,6 +117,12 @@
       ['ellipse', { cx: 12, cy: 6.5, rx: 7, ry: 2.8 }],
       ['path', { d: 'M5 6.5v5c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-5M5 11.5v5c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-5' }],
     ],
+    // A temple: the gods.
+    gods: [['path', { d: 'M3.5 9L12 4l8.5 5zM4.5 20h15M6 9v8.5M10 9v8.5M14 9v8.5M18 9v8.5M3.5 17.5h17' }]],
+    // A potion flask: boosts.
+    boosts: [['path', { d: 'M9.5 3.5h5M10.5 3.5v5L5.6 17a2.3 2.3 0 0 0 2 3.5h8.8a2.3 2.3 0 0 0 2-3.5l-4.9-8.5v-5M7.7 14h8.6' }]],
+    // A tunic: costumes.
+    costumes: [['path', { d: 'M9 3.5L4 6.5l1.8 4 2.2-1V20.5h8V9.5l2.2 1 1.8-4-5-3c-.5 1.4-1.6 2.2-3 2.2s-2.5-.8-3-2.2z' }]],
     overview: [
       ['rect', { x: 4, y: 4, width: 7, height: 7, rx: 1.5 }],
       ['rect', { x: 13, y: 4, width: 7, height: 7, rx: 1.5 }],

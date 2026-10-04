@@ -217,6 +217,8 @@
       hp: readHp(doc),
       level: parseNumber(text(doc, SEL.level)),
       gold: parseNumber(text(doc, SEL.gold)),
+      // Unread messages (0 when the menu shows no count), null off the game.
+      messages: doc.querySelector(SEL.messagesMenu) ? parseNumber(text(doc, SEL.messagesCount)) || 0 : null,
       expedition,
       dungeon,
       arena: readCooldown(doc, loc, SEL.cooldowns.arena),

@@ -21,8 +21,9 @@
 
   const fmt = (n) => Number(n).toLocaleString('en-US');
 
-  // The listings on a guild market page: [{ buyid, seller, price, value,
-  // amount, basis, type, canBuy, buyLabel }]. The listing id is its item's id.
+  // The listings on a guild market (or public market) page: [{ buyid,
+  // seller, price, value, amount, basis, type, level, canBuy, buyLabel,
+  // el }]. The listing id is its item's id.
   function readMarket(doc) {
     const table = doc.querySelector(SEL.market.table);
     if (!table) return null;
@@ -39,8 +40,10 @@
           amount: Number(item.getAttribute('data-amount')) || 1,
           basis: item.getAttribute('data-basis'),
           type: Number(item.getAttribute('data-content-type')) || 0,
+          level: Number(item.getAttribute('data-level')) || 0,
           canBuy: !!buy,
           buyLabel: buy ? buy.value : null,
+          el: item,
         };
       })
       .filter(Boolean);
@@ -71,15 +74,16 @@
 
   const goldOf = (html) => parseNumber((new DOMParser().parseFromString(html, 'text/html').querySelector(SEL.gold) || {}).textContent);
 
-  const marketUrl = (sh) => new URL(`index.php?mod=guildMarket&sh=${encodeURIComponent(sh)}`, location.href).href;
+  const marketUrl = (sh, mod = 'guildMarket') => new URL(`index.php?mod=${mod}&sh=${encodeURIComponent(sh)}`, location.href).href;
 
-  // Buys a pack: 'bought', 'refused', or 'unknown' when the gold could not
-  // be read afterwards (then it counts as bought, so it gets listed and is
+  // Buys a listing (a pack, or food on the public market with mod
+  // 'market'): 'bought', 'refused', or 'unknown' when the gold could not be
+  // read afterwards (then a pack counts as bought, so it gets listed and is
   // not stored in the Horreum with the other resources).
-  async function buy(ctx, pack, goldBefore) {
+  async function buy(ctx, pack, goldBefore, mod = 'guildMarket') {
     const body = new URLSearchParams({ buyid: pack.buyid, qry: '', seller: '', buy: pack.buyLabel || 'Buy' }).toString();
     await ctx.humanDelay();
-    const html = await GBot.forge.post(marketUrl(ctx.state.sh), body);
+    const html = await GBot.forge.post(marketUrl(ctx.state.sh, mod), body);
     let after = goldOf(html);
     if (after === null) after = await goldNow(ctx.state.sh);
     if (after === null) return 'unknown';
@@ -205,7 +209,7 @@
 
   GBot.actions = GBot.actions || {};
   GBot.actions.gold = goldAction;
-  GBot.gold = { readMarket, findPack };
+  GBot.gold = { readMarket, findPack, buy, playerName };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = GBot.gold;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

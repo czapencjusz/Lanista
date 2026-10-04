@@ -233,11 +233,65 @@
     return { bought: [], reason: 'no merchant has food right now' };
   }
 
+  // Food other players sell on the public market, for food the bags and
+  // packages no longer have: plain food (as set) at most the character's
+  // level, healing at least heal.marketMinHpPerGold HP per gold, within the
+  // same daily food budget as the merchants. It arrives as a package.
+  // Returns { bought: [names], gold } or { bought: [], reason }.
+  const MARKET_PAGES = 5;
+
+  async function buyMarketFood(ctx) {
+    const { settings, memory, state } = ctx;
+    const sh = state.sh;
+    const { today, budget, byDay } = brain.foodBudget(settings, memory, state.gold, ctx.now());
+    if (budget <= 0) return { bought: [], reason: byDay ? 'the daily food budget is spent' : 'gold is at the reserve you set' };
+    const me = String((await GBot.gold.playerName(ctx)) || '').toLowerCase();
+    const listings = [];
+    for (let p = 1; p <= MARKET_PAGES; p++) {
+      const { doc } = await GBot.forge.getDoc(sh, { mod: 'market', f: USABLES, fl: 0, fq: -1, qry: '', seller: '', s: 'p', p });
+      const page = GBot.gold.readMarket(doc);
+      // No table: nothing listed (in this category).
+      if (!page) break;
+      listings.push(...page);
+      const more = Array.from(doc.querySelectorAll('#content a')).some((a) => new RegExp(`[?&]p=${p + 1}(&|$)`).test(a.getAttribute('href') || ''));
+      if (!more) break;
+    }
+    const min = settings.heal.marketMinHpPerGold;
+    const food = listings
+      .filter((o) => o.type === FOOD_TYPE && o.canBuy && o.price > 0 && o.seller.toLowerCase() !== me && edible(o.el, settings))
+      .filter((o) => !state.level || !o.level || o.level <= state.level)
+      .map((o) => ({ ...o, name: GBot.forge.tooltipLines(o.el)[0] || 'food', heal: healOf(o.el) }))
+      .filter((o) => o.heal > 0 && o.heal / o.price >= min);
+    if (!food.length) return { bought: [], reason: `nothing on the market heals ${min} HP per gold or more` };
+    const plan = brain.planFoodPurchase(food, settings.heal.buyAtOnce, budget);
+    if (!plan.length) return { bought: [], reason: `the market's food costs more than the ${fmt(budget)} gold left to spend` };
+    const bought = [];
+    let gold = 0;
+    let goldNow = state.gold;
+    for (const item of plan) {
+      const outcome = await GBot.gold.buy(ctx, item, goldNow, 'market');
+      if (outcome === 'refused') {
+        ctx.log('warn', `Market: ${item.seller}'s ${item.name} for ${fmt(item.price)} gold was not sold to you (gone already?)`);
+        continue;
+      }
+      goldNow -= item.price;
+      bought.push(`${item.name} (${fmt(item.heal)} HP, ${fmt(item.price)} gold, from ${item.seller})`);
+      gold += item.price;
+      today.gold += item.price;
+      today.items += 1;
+      memory.foodBought = today;
+      memory.stats.foodBought = (memory.stats.foodBought || 0) + 1;
+      memory.stats.goldSpent = (memory.stats.goldSpent || 0) + item.price;
+      await ctx.persist();
+    }
+    return bought.length ? { bought, gold } : { bought, reason: 'the market did not sell the food picked' };
+  }
+
   const fmt = (n) => Number(n).toLocaleString('en-US');
 
   GBot.actions = GBot.actions || {};
   GBot.actions.auction = auction;
-  GBot.auction = { readAuction, timeRank, bidBody, takeFoodFromPackages, countFood, readShopFood, buyFood, FOOD_TYPE };
+  GBot.auction = { readAuction, timeRank, bidBody, takeFoodFromPackages, countFood, readShopFood, buyFood, buyMarketFood, FOOD_TYPE };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = GBot.auction;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

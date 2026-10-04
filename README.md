@@ -53,9 +53,15 @@ it. (It used to be called GBot.)
   round when you're least likely to be outbid, within a budget you set. Heads-up: the game keeps
   your gold if someone outbids you, so it bids once per item and never early. It can bid on gear
   too: the kinds you pick, from a minimum quality, up to a price per lot.
-- **Food from the merchants.** When the food bags and the packages are both empty, it can buy a few
-  pieces from the General goods merchant, best HP per gold first, within a daily budget and never
-  below the gold you want to keep. It's pricier than the auction house, so think of it as a backup.
+- **Food from the market and the merchants.** When the food bags and the packages are both empty,
+  it can buy a few pieces from other players on the public market (only ones that heal enough HP per
+  gold) and then from the General goods merchant, best HP per gold first, within a daily budget and
+  never below the gold you want to keep. The merchants are pricier than the auction house, so think
+  of them as a backup.
+- **The guild doctors.** If your guild has the Villa Medici, Lanista can see its doctors for free
+  heals: in the Underworld (where you can't eat) instead of waiting for HP to come back, or anywhere
+  before eating food. Each doctor rests a couple of hours afterwards, and you can cap how many it
+  sees a day.
 
 ### Gear and loot
 
@@ -76,6 +82,15 @@ it. (It used to be called GBot.)
 
 - **Training.** Spends gold above a reserve on stats, always the cheapest of the ones you pick, so
   they grow evenly. Spent gold can't be stolen in the arena, either.
+- **The gods' favour.** Instead of letting favour pile up, it buys the blessings and holy oils you
+  tick whenever they're off cooldown, optionally only once a god's favour is nearly full. Favour
+  only, never rubies.
+- **Boosts.** Keeps the stats you pick boosted with potions from your bags and packages, the
+  longest-lasting first. A stat already at its maximum for your level gains nothing, so no potion
+  is wasted on it.
+- **Costumes.** Puts on Dīs Pater's Armour as soon as it may (which also lets it go back into the
+  Underworld on that level), never touches it while it lasts, and otherwise wears the costume you
+  pick.
 - **Keeping gold safe.** Gold on hand gets stolen when someone beats you in the arena. Lanista can
   keep everything above a limit in your guild's market as *gold packs*: it buys the dearest pack a
   guildmate listed that your spare gold covers and lists it again at the same price. When a
@@ -205,10 +220,13 @@ apply as you go.
 | Underworld | Fighting on/off, the HP limit, entering automatically, Mobilisations and healing potions per visit |
 | Arena / Circus Turma | Provinciarum or your own server, who to attack, level range, never-attack list, avoiding people who beat you, going back to people you beat, limits per player and per day |
 | **Character** | |
-| Health | Eating on/off, when to eat, when to stop fighting, which bags hold food, plain food only, buying food from the merchants |
+| Health | Eating on/off, when to eat, when to stop fighting, which bags hold food, plain food only, buying food on the market and from the merchants, the guild doctors |
 | Quests | Which quest types, only quests that fit what you're doing, skipping time limits and food rewards, gold, honour or experience first |
 | Stable work | Which job, how many hours |
 | Training | Gold to keep, which stats |
+| Gods | Which blessings, holy oils and great blessings to buy with favour, and how full a god's favour must be first |
+| Boosts | Which stats to keep boosted |
+| Costumes | Which Dīs Pater's Armour to put on, and the costume to wear otherwise |
 | **Items** | |
 | Gold | Keeping gold above a limit in guild market gold packs |
 | Repair | When to repair, the *Repair all* cutoff, best materials to use, whose gear to look after |
@@ -218,7 +236,7 @@ apply as you go.
 | **Lanista** | |
 | Schedule | Active hours, random breaks |
 | Timing & safety | Click delays, how long to wait between checks, what to do when something keeps failing |
-| Notifications | Which alerts you want, on the desktop and (if you like) on your phone |
+| Notifications | Which alerts you want, on the desktop and (if you like) on your phone, quiet hours for the phone |
 | Interface | Show the bar, floating or docked |
 | Statistics | Fights won and lost, loot, gold earned and spent, per-hour rates, and a table per day for the last 30 days |
 | Log | What it's been up to, a *Copy log* button and *Report a problem* |
@@ -289,9 +307,12 @@ A few handy things to know:
 - **It doesn't get stuck in loops.** If something keeps failing (after a game update, say), that
   activity takes a break and the log tells you why.
 - **It can ping you** with a desktop notification when you're logged out, when something gets paused,
-  when you're low on HP with no food left, or when it skipped the Underworld because of unused armor.
-  Paste an [ntfy](https://ntfy.sh) topic or a Discord webhook under *Notifications* and the same
-  alerts reach your phone too.
+  when you're low on HP with no food left, when it skipped the Underworld because of unused armor,
+  when you level up, when unread messages arrive, when a costume goes on or Dīs Pater's Armour runs
+  out, and once a day with yesterday's numbers. Pick the ones you want under *Notifications*.
+  Paste one or more addresses there and the same alerts reach your phone too: an
+  [ntfy](https://ntfy.sh) topic, a Discord or Slack webhook, a Telegram bot, Pushover or Gotify.
+  Quiet hours hold the phone alerts overnight and send them together in the morning.
 - **Older settings carry over.** Settings from older versions are moved over automatically, and each
   server gets its own copy.
 
@@ -356,7 +377,7 @@ A few things worth knowing:
   in while you're out, use a VPN to your home network (WireGuard, Tailscale) instead of opening the
   port on your router.
 - **It needs some room:** Chromium wants about 1.5–2 GB of free memory.
-- **Your phone still hears about it.** Alerts sent to ntfy or Discord work from there too.
+- **Your phone still hears about it.** Alerts sent to ntfy, Discord, Telegram and the rest work from there too.
 - **Updating:** run `git -C /path/to/appdata/lanista/gbot pull`, then press reload on Lanista's card
   in `chrome://extensions` (or restart the container).
 

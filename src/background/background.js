@@ -4,7 +4,8 @@
 //  - watchdog: reloads the bot's tab if it stops reporting in (e.g. the page
 //    hung, or the browser froze its timers)
 //  - shows desktop notifications for problems that need the user, and
-//    sends them to the phone (Discord webhook or ntfy topic) if set up
+//    sends them to the phone (ntfy, Discord, Slack, Telegram, Pushover,
+//    Gotify) if set up, holding them during the user's quiet hours
 //  - logs back in through the lobby after a logout, if switched on
 'use strict';
 
@@ -187,27 +188,93 @@ async function notify(message) {
   }
 }
 
-// Phone alerts: the text goes to a Discord webhook as a form field
-// ("content"), and to anything else (an ntfy topic) as the plain request
-// body, which is what ntfy publishes. Both are "simple" no-cors requests,
-// so no extra permission is needed; the reply cannot be read, only a
-// network failure shows.
-const DISCORD_WEBHOOK = /^https:\/\/(?:[\w-]+\.)?discord(?:app)?\.com\/api\/webhooks\//i;
+// Phone alerts, the way each service takes them. All are "simple" no-cors
+// POSTs, so no extra permission is needed; the reply cannot be read, only a
+// network failure shows. Values in the address's query (a Telegram chat id,
+// Pushover's keys) go into the form along with the text. Anything else (an
+// ntfy topic) gets the text as the plain body, which is what ntfy publishes.
+const SERVICES = [
+  { test: /^https:\/\/(?:[\w-]+\.)?discord(?:app)?\.com\/api\/webhooks\//i, multipart: true, form: (text) => ({ content: text }) },
+  { test: /^https:\/\/hooks\.slack\.com\//i, form: (text) => ({ payload: JSON.stringify({ text }) }) },
+  { test: /^https:\/\/api\.telegram\.org\/bot[^/]+\/sendMessage\b/i, query: true, form: (text) => ({ text }) },
+  { test: /^https:\/\/api\.pushover\.net\//i, query: true, form: (text) => ({ title: 'Lanista', message: text }) },
+  // Gotify: https://<server>/message?token=<app token>
+  { test: /^https:\/\/[^?#]+\/message\?(?:[^#]*&)?token=/i, form: (text) => ({ title: 'Lanista', message: text }) },
+];
+
+function pushRequest(url, text) {
+  const service = SERVICES.find((s) => s.test.test(url));
+  if (!service) return { url, body: text };
+  const fields = [];
+  let target = url;
+  if (service.query) {
+    const u = new URL(url);
+    fields.push(...u.searchParams);
+    u.search = '';
+    target = u.href;
+  }
+  fields.push(...Object.entries(service.form(text)));
+  const body = service.multipart ? new FormData() : new URLSearchParams();
+  for (const [k, v] of fields) body.append(k, v);
+  return { url: target, body };
+}
 
 async function push(url, message) {
   if (!/^https:\/\//i.test(url || '')) return { ok: false, error: 'not an https:// address' };
-  let body = message;
-  if (DISCORD_WEBHOOK.test(url)) {
-    body = new FormData();
-    body.append('content', message);
-  }
+  const request = pushRequest(url, message);
   try {
-    await fetch(url, { method: 'POST', mode: 'no-cors', credentials: 'omit', body });
+    await fetch(request.url, { method: 'POST', mode: 'no-cors', credentials: 'omit', body: request.body });
     return { ok: true };
   } catch (e) {
     console.warn('[Lanista] phone alert failed', e);
     return { ok: false, error: (e && e.message) || String(e) };
   }
+}
+
+const hostOf = (url) => {
+  try {
+    return new URL(url).host;
+  } catch (e) {
+    return url.slice(0, 20);
+  }
+};
+
+// Sends to every address (one per line); { ok } or { ok: false, error }.
+async function pushAll(addresses, message) {
+  const urls = S.pushUrls({ pushUrl: addresses });
+  if (!urls.length) return { ok: false, error: 'no address', sent: 0 };
+  let error = null;
+  for (const url of urls) {
+    const result = await push(url, message);
+    if (!result.ok && !error) error = urls.length > 1 ? `${hostOf(url)}: ${result.error}` : result.error;
+  }
+  return error ? { ok: false, error } : { ok: true };
+}
+
+// During the quiet hours phone alerts wait in storage ({ host: [texts] })
+// and go out together afterwards (the watchdog looks every minute).
+const HELD_KEY = 'heldAlerts';
+const HELD_MAX = 30;
+
+async function holdPush(host, text) {
+  const held = (await ext.storage.local.get(HELD_KEY))[HELD_KEY] || {};
+  held[host || ''] = (held[host || ''] || []).concat(text).slice(-HELD_MAX);
+  await ext.storage.local.set({ [HELD_KEY]: held });
+}
+
+async function sendHeld(now) {
+  const held = (await ext.storage.local.get(HELD_KEY))[HELD_KEY];
+  if (!held || !Object.keys(held).length) return;
+  const left = { ...held };
+  for (const [host, texts] of Object.entries(held)) {
+    const n = (await S.loadSettings(host || undefined)).notifications;
+    if (n.quiet && S.inTimeWindow(n.quietStart, n.quietEnd, now)) continue;
+    delete left[host];
+    if (!texts.length || !S.pushUrls(n).length) continue;
+    const text = texts.length === 1 ? texts[0] : `${texts.length} alerts during your quiet hours:\n${texts.join('\n')}`;
+    await pushAll(n.pushUrl, text);
+  }
+  await ext.storage.local.set({ [HELD_KEY]: left });
 }
 
 // "Lanista (Server 303): ..." for the phone, where the server is not obvious.
@@ -219,16 +286,20 @@ function pushText(message, host) {
 // Notification requested by a content script; respects the user's choice
 // for that server.
 async function alert(kind, message, host) {
-  const settings = await S.loadSettings(host);
-  if (kind && settings.notifications[kind] === false) return;
-  await notify(message);
-  if (settings.notifications.pushUrl) await push(settings.notifications.pushUrl, pushText(message, host));
+  const n = (await S.loadSettings(host)).notifications;
+  if (kind && n[kind] === false) return;
+  if (n.desktop) await notify(message);
+  if (!S.pushUrls(n).length) return;
+  const text = pushText(message, host);
+  if (n.quiet && S.inTimeWindow(n.quietStart, n.quietEnd, Date.now())) await holdPush(host, text);
+  else await pushAll(n.pushUrl, text);
 }
 
 async function watchdog() {
   const owners = await getOwners();
   const now = Date.now();
   await expireRejoins(now);
+  await sendHeld(now);
   let changed = false;
   for (const [host, owner] of Object.entries(owners)) {
     if (ownerAlive(owner, now)) continue;
@@ -272,7 +343,7 @@ ext.runtime.onMessage.addListener((message, sender, sendResponse) => {
   else if (message.type === 'heartbeat' && tabId !== undefined) {
     work = heartbeat(message.host, tabId, message.nextAt, message.enabled).then(() => ({ ok: true }));
   } else if (message.type === 'alert') work = alert(message.kind, message.message, message.host).then(() => ({ ok: true }));
-  else if (message.type === 'pushTest') work = push(message.url, pushText('Test message. Alerts will arrive here.', message.host));
+  else if (message.type === 'pushTest') work = pushAll(message.url, pushText('Test message. Alerts will arrive here.', message.host));
   else if (message.type === 'rejoin' && tabId !== undefined) work = startRejoin(message.host, tabId);
   else if (message.type === 'rejoinJob' && tabId !== undefined) work = getRejoin().then((r) => r.jobs[tabId] || null);
   else if (message.type === 'rejoinResult' && tabId !== undefined) work = rejoinResult(tabId, message).then(() => ({ ok: true }));

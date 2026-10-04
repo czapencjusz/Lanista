@@ -34,7 +34,9 @@ const OFFERS = [
 
 test('the guild market is read row by row; the listing id is the item id', () => {
   const offers = gold.readMarket(new window.DOMParser().parseFromString(marketPage(OFFERS), 'text/html'));
-  assert.deepEqual(offers[0], { buyid: '1', seller: 'WHINTERS', price: 300000, value: 525, amount: 3, basis: '18-27', type: 32768, canBuy: true, buyLabel: 'Buy' });
+  const { el, ...first } = offers[0];
+  assert.deepEqual(first, { buyid: '1', seller: 'WHINTERS', price: 300000, value: 525, amount: 3, basis: '18-27', type: 32768, level: 0, canBuy: true, buyLabel: 'Buy' });
+  assert.equal(el.getAttribute('data-item-id'), '1', 'the item itself comes along');
   assert.equal(offers[4].canBuy, false, 'no Buy on your own listing');
 });
 

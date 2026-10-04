@@ -336,7 +336,7 @@
 
   GBot.actions = GBot.actions || {};
   GBot.actions.packages = packagesAction;
-  GBot.packages = { readPackageItems, qualityOf, lastPage, listAll: listPackages, scrollKnown };
+  GBot.packages = { readPackageItems, qualityOf, lastPage, listAll: listPackages, scrollKnown, intoBag };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = GBot.packages;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

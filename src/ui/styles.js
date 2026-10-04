@@ -119,7 +119,7 @@ a.gb-btn, a.gb-icon-btn { text-decoration: none; }
 .gb-field.stack { grid-template-columns: minmax(0, 1fr); }
 .gb-field.disabled .gb-label, .gb-field.disabled .gb-control { opacity: .45; }
 .gb-label { font-weight: 700; }
-.gb-help { grid-column: 1 / -1; font-size: 11px; color: var(--gb-muted); }
+.gb-help { grid-column: 1 / -1; font-size: 11px; color: var(--gb-muted); white-space: pre-line; }
 .gb-inline { display: inline-flex; align-items: center; gap: 6px; }
 .gb-unit { color: var(--gb-muted); }
 
@@ -131,7 +131,8 @@ a.gb-btn, a.gb-icon-btn { text-decoration: none; }
 .gb-number { width: 76px; }
 .gb-select { min-width: 150px; max-width: 100%; }
 .gb-textarea { width: 100%; resize: vertical; min-height: 64px; }
-.gb-push { display: flex; width: 100%; }
+.gb-push { display: flex; width: 100%; align-items: flex-start; gap: 6px; }
+.gb-push textarea { min-height: 44px; }
 .gb-input-wide { flex: 1 1 auto; min-width: 0; }
 .gb-push-status { margin-top: 4px; }
 .gb-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; }

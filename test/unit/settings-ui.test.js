@@ -208,7 +208,29 @@ test('phone alerts: the address is saved as typed, and "Send a test" sends to it
   button.click();
   await new Promise((r) => setTimeout(r, 0));
   assert.equal(sent.length, 1, 'not sent without https://');
+  assert.equal($('.gb-push-status').textContent, 'Every address has to start with https://.');
+
+  input.value = '';
+  button.click();
+  await new Promise((r) => setTimeout(r, 0));
   assert.equal($('.gb-push-status').textContent, 'Enter an https:// address first.');
+});
+
+test('phone alerts: several addresses, one per line, all get the test', async () => {
+  const sent = [];
+  const { view, saved, $, change } = mount({}, { onTestPush: async (url) => (sent.push(url), { ok: true }) });
+  view.showTab('notifications');
+  const input = $('[data-path="notifications.pushUrl"]');
+  assert.equal(input.tagName, 'TEXTAREA');
+  change(input, 'https://ntfy.sh/Lanista-Ab12\n\n  https://api.telegram.org/bot1:AA/sendMessage?chat_id=5 ');
+  await new Promise((r) => setTimeout(r, 0));
+  const both = 'https://ntfy.sh/Lanista-Ab12\nhttps://api.telegram.org/bot1:AA/sendMessage?chat_id=5';
+  assert.equal(saved.at(-1).notifications.pushUrl, both);
+  [...view.element.querySelectorAll('button')].find((b) => b.textContent === 'Send a test').click();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(sent, [both]);
+  assert.equal($('.gb-push-status').textContent, 'Sent. If nothing arrives, check the addresses.');
+  assert.equal(view.element.querySelector('[data-path="notifications.quietStart"]').disabled, true, 'quiet hours are off');
 });
 
 test('statistics: a row per day with fights, wins, gold in and out', () => {
@@ -250,7 +272,7 @@ test('the Overview: a switch and a line per feature, the name opens its tab', as
   assert.equal(sum('dungeon'), 'the last visited dungeon · Advanced · skips the boss');
   assert.equal(sum('arena'), 'on this server · weakest first');
   assert.equal(sum('heal'), 'eats below 30% · stops fighting below 20% · bag I · plain food only');
-  assert.equal(sum('notifications'), '4 kinds of alert on · desktop and phone');
+  assert.equal(sum('notifications'), '6 kinds of alert on · desktop and phone');
   assert.ok(card('repair').classList.contains('off'));
   assert.equal(card('notifications').querySelector('input'), null, 'no switch where there is no single one');
   assert.deepEqual([...view.element.querySelectorAll('.gb-pane h3')].map((h3) => h3.textContent), ['Fights', 'Character', 'Items', 'Lanista']);

@@ -313,16 +313,17 @@
         };
       },
 
-      // Address for phone alerts, with a button that sends a test message.
+      // Addresses for phone alerts (one per line), with a button that sends
+      // a test message to each.
       push(field) {
-        const input = h('input', {
-          type: 'url',
-          class: 'gb-input gb-input-wide',
+        const input = h('textarea', {
+          class: 'gb-input gb-input-wide gb-mono',
+          rows: 2,
           placeholder: field.placeholder,
           spellcheck: 'false',
           'aria-label': field.label,
           dataset: { path: field.path },
-          onchange: () => commit(field.path, input.value.trim()),
+          onchange: () => commit(field.path, input.value.split(/\s+/).filter(Boolean).join('\n')),
         });
         const status = h('div', { class: 'gb-help gb-push-status', role: 'status' });
         const test = h(
@@ -331,11 +332,12 @@
             type: 'button',
             class: 'gb-btn',
             onclick: async () => {
-              const url = input.value.trim();
-              if (!/^https:\/\//i.test(url)) {
-                status.textContent = 'Enter an https:// address first.';
+              const urls = input.value.split(/\s+/).filter(Boolean);
+              if (!urls.length || urls.some((u) => !/^https:\/\//i.test(u))) {
+                status.textContent = urls.length ? 'Every address has to start with https://.' : 'Enter an https:// address first.';
                 return;
               }
+              const url = urls.join('\n');
               status.textContent = 'Sending…';
               let result;
               try {
@@ -343,8 +345,9 @@
               } catch (e) {
                 result = { ok: false, error: e && e.message ? e.message : String(e) };
               }
+              const where = urls.length === 1 ? 'the address' : 'the addresses';
               status.textContent =
-                result && result.ok ? 'Sent. If nothing arrives, check the address.' : `Could not send: ${(result && result.error) || 'Lanista did not answer (reload the page?)'}`;
+                result && result.ok ? `Sent. If nothing arrives, check ${where}.` : `Could not send: ${(result && result.error) || 'Lanista did not answer (reload the page?)'}`;
             },
           },
           'Send a test'
@@ -388,7 +391,7 @@
       );
       syncers.push(() => {
         r.sync();
-        const enabled = !field.dependsOn || !!get(field.dependsOn);
+        const enabled = !field.dependsOn || [].concat(field.dependsOn).some((path) => !!get(path));
         row.classList.toggle('disabled', !enabled);
         for (const input of r.inputs) input.disabled = !enabled;
       });
@@ -514,6 +517,9 @@
           ['arena', 'Arena fights'],
           ['circus', 'Circus fights'],
           ['heal', 'Meals eaten'],
+          ['medic', 'Doctors seen'],
+          ['blessings', 'Blessings bought'],
+          ['boosts', 'Boosts used'],
           ['nest', 'Nests searched'],
           ['training', 'Stats trained'],
           ['repairs', 'Items repaired'],

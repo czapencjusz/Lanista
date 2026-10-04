@@ -634,7 +634,22 @@
       }
     }
 
-    // Still nothing: buy some from a merchant, if allowed.
+    // Still nothing: buy some from other players on the market, if allowed;
+    // it arrives as a package, taken out on the next look.
+    if (settings.heal.market && GBot.auction) {
+      try {
+        const result = await GBot.auction.buyMarketFood(ctx);
+        if (result.bought.length) {
+          ctx.log('info', `Bought food on the market for ${result.gold.toLocaleString('en-US')} gold: ${result.bought.join(', ')}`);
+          return { retick: true };
+        }
+        ctx.log('info', `Did not buy food on the market: ${result.reason}`);
+      } catch (e) {
+        ctx.log('warn', `Could not buy food on the market: ${e.message}`);
+      }
+    }
+
+    // ... or from a merchant.
     if (settings.heal.buy && GBot.auction) {
       try {
         const result = await GBot.auction.buyFood(ctx);
@@ -649,7 +664,7 @@
     }
 
     brain.markNoFood(ctx.memory, ctx.now());
-    ctx.log('warn', `No food in the food bags or the packages${settings.heal.buy ? ', and none bought' : ''}; waiting for HP to regenerate (looking again in 30 min, or as soon as food shows up in a food bag or you press Check now)`);
+    ctx.log('warn', `No food in the food bags or the packages${settings.heal.buy || settings.heal.market ? ', and none bought' : ''}; waiting for HP to regenerate (looking again in 30 min, or as soon as food shows up in a food bag or you press Check now)`);
     if (ctx.notify) ctx.notify('noFood', `Lanista: HP is ${state.hp.percent}% and there is no food left in your food bags. Put some in and press Check now.`);
     return { retick: true };
   }

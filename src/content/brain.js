@@ -76,6 +76,18 @@
       // ({ day, base }), and the finished days, newest first.
       today: null,
       history: [],
+      // Villa Medici: when a doctor is free again (0 = maybe now), and the
+      // doctors seen today outside the Underworld ({ day, used }).
+      medicNext: 0,
+      medicToday: null,
+      // Gods' favour, boosts and costumes: when to look again (boosts: per
+      // stat, until the one used runs out).
+      nextGodsCheck: 0,
+      boostNext: {},
+      nextCostumeCheck: 0,
+      // For alerts: the level and unread messages seen last.
+      lastLevel: null,
+      messagesSeen: 0,
       // Auction house: when to look again, and this round's bids
       // ({ rank, spent, bids: { lotId: amount } }).
       nextAuctionCheck: 0,
@@ -107,6 +119,9 @@
         soldGold: 0,
         foodBought: 0,
         goldHidden: 0,
+        medic: 0,
+        blessings: 0,
+        boosts: 0,
         goldCollected: 0,
         auctionBids: 0,
         goldSpent: 0,
@@ -146,6 +161,7 @@
       avoid: { arena: { ...((memory.avoid && memory.avoid.arena) || {}) }, circus: { ...((memory.avoid && memory.avoid.circus) || {}) } },
       beaten: { arena: { ...((memory.beaten && memory.beaten.arena) || {}) }, circus: { ...((memory.beaten && memory.beaten.circus) || {}) } },
       repairSkip: { ...(memory.repairSkip || {}) },
+      boostNext: { ...(memory.boostNext || {}) },
       smeltQueue: Array.isArray(memory.smeltQueue) ? memory.smeltQueue : [],
       history: Array.isArray(memory.history) ? memory.history : [],
       goldPacks: Array.isArray(memory.goldPacks) ? memory.goldPacks : [],
@@ -337,6 +353,9 @@
     const hpOk = !hpKnown(hp) || hp.percent >= minHp;
     const wantsHp = FIGHTS.some((t) => NEEDS_HP[t] && settings[t].enabled);
 
+    const medic = wantsHp && medicDecision(state, settings, memory, now);
+    if (medic) return medic;
+
     if (settings.heal.enabled && wantsHp && hpKnown(hp) && hp.percent < settings.heal.eatBelowPercent) {
       if (!isBlocked(memory, 'heal', now) && (memory.noFoodUntil || 0) <= now) {
         return { type: 'heal', reason: `HP ${hp.percent}% is below ${settings.heal.eatBelowPercent}%` };
@@ -348,6 +367,13 @@
 
     const repairing = repairDecision(settings, memory, now);
     if (repairing) return repairing;
+
+    // Costumes, the gods and boosts only send requests and look rarely.
+    if (settings.costumes.enabled && (memory.nextCostumeCheck || 0) <= now && !isBlocked(memory, 'costume', now)) {
+      return { type: 'costume', reason: 'Check the costumes' };
+    }
+    if (wantsGods(settings, memory, now)) return { type: 'gods', reason: "Spend the gods' favour" };
+    if (boostsDue(settings, memory, now).length && !isBlocked(memory, 'boosts', now)) return { type: 'boosts', reason: 'Use boosts' };
 
     if (settings.auction.enabled && (memory.nextAuctionCheck || 0) <= now && !isBlocked(memory, 'auction', now)) {
       return { type: 'auction', reason: 'Check the auction house' };
@@ -412,6 +438,12 @@
     if (settings.auction.enabled && memory.nextAuctionCheck > now) wake.push({ label: 'Auction house', at: memory.nextAuctionCheck });
     if (wantsPackages(settings) && memory.nextPackagesCheck > now) wake.push({ label: 'Packages', at: memory.nextPackagesCheck });
     if (settings.underworld.enter !== 'off' && !state.underworld && memory.nextUnderworldCheck > now) wake.push({ label: 'Underworld', at: memory.nextUnderworldCheck });
+    if (settings.costumes.enabled && memory.nextCostumeCheck > now) wake.push({ label: 'Costumes', at: memory.nextCostumeCheck });
+    if (settings.gods.enabled && memory.nextGodsCheck > now) wake.push({ label: 'Gods', at: memory.nextGodsCheck });
+    if (settings.boosts.enabled) {
+      const next = Math.min(...wantedBoosts(settings).map((stat) => (memory.boostNext && memory.boostNext[stat]) || 0));
+      if (next > now) wake.push({ label: 'Boosts', at: next });
+    }
 
     const maxIdleMs = settings.timing.maxIdle * 1000;
     let next = { label: 'Re-check', at: now + maxIdleMs };
@@ -898,18 +930,202 @@
   }
 
   // Called on every page: starts a new day's record when the date changes.
+  // Starts a new day's record when the day changed; returns the day that
+  // just ended ({ day, ...counters }), or null.
   function rollStatsDay(memory, now) {
     const day = dayKey(now);
     const t = memory.today;
-    if (t && t.day === day) return;
+    if (t && t.day === day) return null;
+    let finished = null;
     if (t) {
       const done = countersSince(counters(memory.stats), t.base);
       if (Object.keys(done).length) {
-        memory.history = [{ day: t.day, ...done }, ...(memory.history || []).filter((h) => h.day !== t.day)].slice(0, HISTORY_DAYS);
+        finished = { day: t.day, ...done };
+        memory.history = [finished, ...(memory.history || []).filter((h) => h.day !== t.day)].slice(0, HISTORY_DAYS);
       }
     }
     memory.today = { day, base: counters(memory.stats) };
+    return finished;
   }
+
+  // One line about a day's record, for the daily summary alert.
+  function daySummary(d) {
+    const n = (v) => (typeof v === 'number' ? v : 0);
+    const types = ['expedition', 'dungeon', 'arena', 'circus'];
+    const results = d.results || {};
+    const fights = types.reduce((sum, t) => sum + n(d[t]), 0);
+    const won = types.reduce((sum, t) => sum + n(results[t] && results[t].won), 0);
+    const lost = types.reduce((sum, t) => sum + n(results[t] && results[t].lost), 0);
+    const loot = d.loot || {};
+    const goldIn = n(loot.gold) + n(d.soldGold) + n(d.goldCollected);
+    const parts = [
+      `${fmt(fights)} fight${fights === 1 ? '' : 's'}${won + lost ? ` (${Math.round((100 * won) / (won + lost))}% won)` : ''}`,
+      goldIn && `+${fmt(goldIn)} gold`,
+      n(loot.xp) && `+${fmt(loot.xp)} XP`,
+      n(loot.honour) && `+${fmt(loot.honour)} honour`,
+      n(loot.fame) && `+${fmt(loot.fame)} fame`,
+      n(d.goldSpent) && `${fmt(d.goldSpent)} gold spent`,
+      n(d.quests) && `${fmt(d.quests)} quest${d.quests === 1 ? '' : 's'}`,
+    ].filter(Boolean);
+    return `Lanista, ${d.day}: ${parts.join(', ')}`;
+  }
+
+  // Alerts from what every game page shows: a new level, unread messages
+  // (only when there are more than last time). Returns [{ kind, message }].
+  function pageAlerts(state, memory) {
+    const out = [];
+    if (!state.inGame) return out;
+    if (state.level) {
+      if (memory.lastLevel && state.level > memory.lastLevel) out.push({ kind: 'levelUp', message: `Lanista: you reached level ${state.level}!` });
+      memory.lastLevel = state.level;
+    }
+    if (typeof state.messages === 'number') {
+      if (state.messages > (memory.messagesSeen || 0)) {
+        out.push({ kind: 'messages', message: `Lanista: ${state.messages === 1 ? 'an unread message' : `${state.messages} unread messages`} in the game` });
+      }
+      memory.messagesSeen = state.messages;
+    }
+    return out;
+  }
+
+  // ------------------------------------------------- Villa Medici, gods, boosts
+
+  // Doctors seen so far: per visit inside the Underworld, per day outside.
+  function medicUsed(state, memory, now) {
+    if (state.underworld) return (memory.underworldRun && memory.underworldRun.medic) || 0;
+    const t = memory.medicToday;
+    return t && t.day === dayOf(now) ? t.used : 0;
+  }
+
+  function countMedic(state, memory, now) {
+    if (state.underworld) {
+      if (memory.underworldRun) memory.underworldRun.medic = (memory.underworldRun.medic || 0) + 1;
+      return;
+    }
+    memory.medicToday = { day: dayOf(now), used: medicUsed(state, memory, now) + 1 };
+  }
+
+  // The guild's doctors heal for free: before food (Settings > Health), or
+  // in the Underworld, where food cannot be eaten, before the fights wait
+  // for HP to regenerate.
+  function medicDecision(state, settings, memory, now) {
+    const mode = settings.heal.medic;
+    if (mode === 'off' || (mode === 'underworld' && !state.underworld)) return null;
+    const hp = state.hp || {};
+    if (!hpKnown(hp)) return null;
+    const below = state.underworld ? settings.heal.minHpPercent : settings.heal.eatBelowPercent;
+    if (hp.percent >= below || (memory.medicNext || 0) > now || isBlocked(memory, 'medic', now)) return null;
+    if (settings.heal.medicMax > 0 && medicUsed(state, memory, now) >= settings.heal.medicMax) return null;
+    return { type: 'medic', reason: `HP ${hp.percent}% is below ${below}%: see a doctor in the Villa Medici` };
+  }
+
+  const GODS = ['minerva', 'diana', 'mars', 'merkur', 'apollo', 'vulcanus'];
+  const GOD_RANKS = { 1: 'blessings', 2: 'oils', 3: 'rank3' };
+  const GODS_CHECK_MS = 30 * 60 * 1000;
+
+  const wantsGods = (settings, memory, now) =>
+    settings.gods.enabled &&
+    Object.values(GOD_RANKS).some((key) => Object.values(settings.gods[key]).some(Boolean)) &&
+    (memory.nextGodsCheck || 0) <= now &&
+    !isBlocked(memory, 'gods', now);
+
+  // What to buy on the gods page ([{ god, points, max, ranks: [{ rank,
+  // name, cost, params }] }], params null while it cannot be bought): the
+  // ticked ones the god has favour for, dearest first.
+  function pickBlessings(gods, settings) {
+    const g = settings.gods;
+    const out = [];
+    for (const god of gods) {
+      let points = god.points;
+      if (typeof points !== 'number') continue;
+      if (g.minPercent > 0 && god.max && points < (god.max * g.minPercent) / 100) continue;
+      for (const r of god.ranks.slice().sort((a, b) => b.rank - a.rank)) {
+        const key = GOD_RANKS[r.rank];
+        if (!key || !g[key][god.god] || !r.params || !(r.cost > 0) || points < r.cost) continue;
+        out.push({ god: god.god, ...r });
+        points -= r.cost;
+      }
+    }
+    return out;
+  }
+
+  const BOOST_STATS = ['strength', 'dexterity', 'agility', 'constitution', 'charisma', 'intelligence', 'health'];
+  const BOOST_RECHECK_MS = 60 * 60 * 1000;
+
+  const wantedBoosts = (settings) => BOOST_STATS.filter((s) => settings.boosts.stats[s]);
+
+  // The ticked stats whose boost has run out (or that were last looked at
+  // long enough ago).
+  function boostsDue(settings, memory, now) {
+    if (!settings.boosts.enabled) return [];
+    return wantedBoosts(settings).filter((stat) => ((memory.boostNext && memory.boostNext[stat]) || 0) <= now);
+  }
+
+  // A boost potion from its tooltip lines ("Using: +17 Strength",
+  // "Duration: 02:00 h"): { stat, amount, durationMs }, or null.
+  function boostOf(lines) {
+    const text = lines.join(' | ');
+    const m = text.match(/Using:\s*\+\s*([\d.,]+)\s+([A-Za-z]+)/i);
+    if (!m || !BOOST_STATS.includes(m[2].toLowerCase())) return null;
+    const d = text.match(/Duration:\s*(\d+):(\d{2})\s*h/i);
+    return { stat: m[2].toLowerCase(), amount: parseInt(m[1].replace(/[.,]/g, ''), 10), durationMs: d ? (Number(d[1]) * 60 + Number(d[2])) * 60000 : 0 };
+  }
+
+  // Which boost to use for each due stat: the longest-lasting one, while
+  // the stat has room below its maximum for at least half of it (room:
+  // { stat: maximum - value }; none for health). Returns { use: [{ stat,
+  // item }], wait: { stat: reason } }.
+  function pickBoosts(items, room, due) {
+    const use = [];
+    const wait = {};
+    for (const stat of due) {
+      const options = items.filter((i) => i.boost && i.boost.stat === stat);
+      if (!options.length) {
+        wait[stat] = 'none left';
+        continue;
+      }
+      // Among equals, one already in a bag (no move needed).
+      options.sort((a, b) => b.boost.durationMs - a.boost.durationMs || b.boost.amount - a.boost.amount || (b.from === 'bag') - (a.from === 'bag'));
+      const item = options[0];
+      const left = room[stat];
+      if (typeof left === 'number' && left < Math.ceil(item.boost.amount / 2)) {
+        wait[stat] = left > 0 ? `only ${left} below its maximum` : 'at its maximum';
+        continue;
+      }
+      use.push({ stat, item });
+    }
+    return { use, wait };
+  }
+
+  // Costumes: [{ name, kind ('everywear' | 'underworld' | 'festival' |
+  // 'temporary'), level ('normal' | 'medium' | 'hard', armour only),
+  // owned, worn, wear (request params, or null while it cannot be put on),
+  // waitMs }]. Returns { wear: costume, why } or { wait: why }.
+  const ARMOUR_LEVELS = ['normal', 'medium', 'hard'];
+  const costumeName = (name) => String(name || '').replace(/\s*\(\d+\/\d+\)\s*$/, '').replace(/[`´’]/g, "'").trim().toLowerCase();
+
+  function costumePlan(costumes, settings) {
+    const c = settings.costumes;
+    const worn = costumes.find((x) => x.worn);
+    // Taking Dīs Pater's Armour off destroys it: nothing else meanwhile.
+    if (worn && worn.kind === 'underworld') return { wait: `${worn.name} is on` };
+    const entry = settings.underworld.enter;
+    const levels = ARMOUR_LEVELS.filter((l) => c.armour[l]).sort((a, b) => (b === entry) - (a === entry));
+    for (const level of levels) {
+      const armour = costumes.find((x) => x.kind === 'underworld' && x.level === level && x.owned);
+      if (armour && armour.wear) return { wear: armour, why: `Dīs Pater's Armour (${level}) can be worn` };
+    }
+    if (c.everyday) {
+      const want = costumeName(c.everyday);
+      const everyday = costumes.find((x) => costumeName(x.name) === want);
+      if (!everyday) return { wait: `no costume called "${c.everyday}"` };
+      if (everyday.worn) return { wait: `${everyday.name} is on` };
+      if (everyday.wear) return { wear: everyday, why: 'your everyday costume' };
+      return { wait: `${everyday.name} cannot be put on yet` };
+    }
+    return { wait: 'nothing to put on' };
+  }
+
 
   // The days to show, newest first: the current record (today so far, or a
   // day that ended before the next page load) and the finished ones.
@@ -1196,6 +1412,23 @@
     planFoodPurchase,
     foodBudget,
     rollStatsDay,
+    daySummary,
+    pageAlerts,
+    medicDecision,
+    medicUsed,
+    countMedic,
+    GODS,
+    GODS_CHECK_MS,
+    wantsGods,
+    pickBlessings,
+    BOOST_STATS,
+    BOOST_RECHECK_MS,
+    wantedBoosts,
+    boostsDue,
+    boostOf,
+    pickBoosts,
+    costumePlan,
+    costumeName,
     statsDays,
     dayKey,
     nextSmeltCheck,

@@ -163,3 +163,85 @@ test('rejoin: never after the player pressed Logout; failures are reported', asy
   await S.saveSettings(S.sanitizeSettings({ enabled: false, general: { rejoin: true } }), HOST);
   assert.deepEqual(await from(31, { type: 'rejoin', host: HOST }), { ok: false, reason: null }, 'not while Lanista is stopped');
 });
+
+test('Telegram, Slack, Pushover and Gotify get the text the way each takes it', async () => {
+  const text = `Lanista (${S.serverName(HOST)}): arena paused`;
+  await useSettings({
+    pushUrl: [
+      'https://api.telegram.org/bot123:AAbc/sendMessage?chat_id=4567',
+      'https://hooks.slack.com/services/T1/B2/xyz',
+      'https://api.pushover.net/1/messages.json?token=app1&user=usr2',
+      'https://push.example.org/message?token=Gt0k',
+      'https://ntfy.sh/Lanista-Ab12',
+    ].join('\n'),
+  });
+  await message({ type: 'alert', kind: 'activityPaused', message: 'Lanista: arena paused', host: HOST });
+  assert.deepEqual(
+    fetched.map((f) => [f.url, typeof f.body === 'string' ? f.body : Object.fromEntries(f.body)]),
+    [
+      ['https://api.telegram.org/bot123:AAbc/sendMessage', { chat_id: '4567', text }],
+      ['https://hooks.slack.com/services/T1/B2/xyz', { payload: JSON.stringify({ text }) }],
+      ['https://api.pushover.net/1/messages.json', { token: 'app1', user: 'usr2', title: 'Lanista', message: text }],
+      ['https://push.example.org/message?token=Gt0k', { title: 'Lanista', message: text }],
+      ['https://ntfy.sh/Lanista-Ab12', text],
+    ]
+  );
+  assert.ok(fetched.slice(0, 4).every((f) => f.body instanceof URLSearchParams && f.mode === 'no-cors'), 'simple form posts');
+});
+
+test('desktop alerts can be switched off; the phone still gets them', async () => {
+  await useSettings({ pushUrl: 'https://ntfy.sh/x', desktop: false });
+  await message({ type: 'alert', kind: 'levelUp', message: 'Lanista: you reached level 111!', host: HOST });
+  assert.equal(notifications.length, 0);
+  assert.equal(fetched.length, 1);
+});
+
+test('"Send a test" with several addresses names the one that failed', async () => {
+  await useSettings({});
+  const real = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (url.includes('bad.example')) throw new TypeError('Failed to fetch');
+    return {};
+  };
+  try {
+    assert.deepEqual(await message({ type: 'pushTest', url: 'https://ntfy.sh/x\nhttps://bad.example/hook', host: HOST }), { ok: false, error: 'bad.example: Failed to fetch' });
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test('quiet hours: phone alerts wait, then go out together; the desktop ones do not wait', async () => {
+  const hhmm = (ms) => {
+    const d = new Date(ms);
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  };
+  const now = Date.now();
+  const quiet = { pushUrl: 'https://ntfy.sh/x', quiet: true, quietStart: hhmm(now - 3600 * 1000), quietEnd: hhmm(now + 3600 * 1000) };
+  await useSettings(quiet);
+  await message({ type: 'alert', kind: 'noFood', message: 'Lanista: no food', host: HOST });
+  await message({ type: 'alert', kind: 'levelUp', message: 'Lanista: you reached level 111!', host: HOST });
+  assert.equal(fetched.length, 0, 'held');
+  assert.equal(notifications.length, 2);
+
+  listeners.alarm({ name: 'lanista-watchdog' });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(fetched.length, 0, 'still quiet');
+
+  await useSettings({ ...quiet, quietStart: hhmm(now + 3600 * 1000), quietEnd: hhmm(now + 2 * 3600 * 1000) });
+  listeners.alarm({ name: 'lanista-watchdog' });
+  await new Promise((r) => setTimeout(r, 20));
+  const server = S.serverName(HOST);
+  assert.deepEqual(fetched.map((f) => f.body), [`2 alerts during your quiet hours:\nLanista (${server}): no food\nLanista (${server}): you reached level 111!`]);
+  listeners.alarm({ name: 'lanista-watchdog' });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(fetched.length, 1, 'sent once');
+});
+
+test('the quiet window may run past midnight', () => {
+  const at = (h, m) => new Date(2026, 9, 4, h, m).getTime();
+  assert.equal(S.inTimeWindow('23:00', '07:00', at(23, 30)), true);
+  assert.equal(S.inTimeWindow('23:00', '07:00', at(6, 59)), true);
+  assert.equal(S.inTimeWindow('23:00', '07:00', at(7, 0)), false);
+  assert.equal(S.inTimeWindow('13:00', '15:00', at(14, 0)), true);
+  assert.equal(S.inTimeWindow('13:00', '13:00', at(13, 0)), false, 'an empty window');
+});
