@@ -94,7 +94,9 @@
     const easier = brain.easierEnemy(ctx.memory, state.page.loc, ctx.now());
     const target = easier !== null && easier < chosen ? easier : chosen;
     const index = Math.min(Math.max(target, 0), buttons.length - 1);
-    if (ctx.memory.pending) Object.assign(ctx.memory.pending, { enemy: index, loc: state.page.loc, easierAfter: settings.expedition.easierAfterLosses });
+    const place = (state.locations || []).find((l) => l.id === state.page.loc);
+    const area = { key: `expedition:${state.page.loc}`, name: place ? place.name : null };
+    if (ctx.memory.pending) Object.assign(ctx.memory.pending, { enemy: index, loc: state.page.loc, easierAfter: settings.expedition.easierAfterLosses, area });
     if (target === chosen && index !== settings.expedition.enemy - 1) {
       // Log the bonus hunt when it moves on (a new enemy, or a bonus learned).
       const enemy = enemies[index];
@@ -152,6 +154,9 @@
       throw new ActionError('Out of Underworld expedition points (attacks would cost rubies)');
     }
     const name = ((box.querySelector('.expedition_name') || {}).textContent || '').trim();
+    const place = (state.locations || []).find((l) => l.id === state.page.loc);
+    if (ctx.memory.pending) ctx.memory.pending.area = { key: `underworld:${state.page.loc}`, name: `Underworld: ${place ? place.name : state.page.loc}` };
+    await ctx.persist();
     await click(ctx, button, `attack Underworld enemy ${name || `#${next}`}`);
     if (await expectNavigation(ctx)) return { navigated: true };
     throw new ActionError('Underworld attack did not open a combat report');
@@ -300,6 +305,9 @@
       const choice = brain.dungeonChoice(targets, settings.dungeon, ctx.memory);
       if (choice.cancel) return cancelDungeon(ctx, choice.cancel);
       const target = targets.find((t) => t.position === choice.position);
+      const place = (state.locations || []).find((l) => l.id === state.page.loc);
+      if (ctx.memory.pending) ctx.memory.pending.area = { key: `dungeon:${state.page.loc}`, name: `Dungeon: ${state.dungeonName || (place ? place.name : state.page.loc)}` };
+      await ctx.persist();
       await click(ctx, target.el, `attack dungeon enemy #${target.position}${target.boss ? ' (boss)' : ''}`);
       if (await expectNavigation(ctx)) return { navigated: true };
       throw new ActionError('Dungeon attack did not open a combat report');
@@ -423,7 +431,8 @@
     if (settings[type].preferBeaten) order = brain.preferBeaten(order, ctx.memory.beaten[type], ctx.now());
     for (const opponent of order.slice(0, 3)) {
       // Remembered so the combat report can be tied to this opponent.
-      if (ctx.memory.pending) Object.assign(ctx.memory.pending, { opponent: opponent.name, avoidHours: settings[type].avoidLostHours });
+      const area = { key: `${type}:${local ? 'local' : 'provinciarum'}`, name: local ? (type === 'arena' ? 'Local arena' : 'Local Circus Turma') : type === 'arena' ? 'Arena Provinciarum' : 'Circus Provinciarum' };
+      if (ctx.memory.pending) Object.assign(ctx.memory.pending, { opponent: opponent.name, avoidHours: settings[type].avoidLostHours, area });
       await ctx.persist();
       const about = opponent.rank !== null && opponent.rank !== undefined ? `rank ${opponent.rank}` : `level ${opponent.level ?? '?'}`;
       await click(ctx, opponent.attack, `attack ${name} opponent ${opponent.name || ''} (${about})`);

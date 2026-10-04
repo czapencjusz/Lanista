@@ -352,6 +352,8 @@
       dailySummary: false,
       // A costume was put on, or Dīs Pater's Armour ran out.
       costume: true,
+      // A place turned up in the location menu (an event, or a new area).
+      newLocation: true,
       // Show the alerts on this computer.
       desktop: true,
       // Also send the alerts above to these addresses, one per line: ntfy
@@ -363,6 +365,15 @@
       quiet: false,
       quietStart: '23:00',
       quietEnd: '07:00',
+    },
+
+    remote: {
+      // Take commands from the phone (status, stop, start, check, stats,
+      // log): through the Telegram bot among the phone alert addresses, only
+      // from its chat, and/or from this ntfy topic. Answers go back the same
+      // way. Looked at once a minute.
+      enabled: false,
+      ntfyTopic: '',
     },
 
     ui: {
@@ -425,6 +436,7 @@
     'packages.expiringHours': { int: true, min: 1, max: 168 },
     'notifications.pushUrl': { pattern: /^(https:\/\/\S+(\s+https:\/\/\S+)*)?$/i, keepCase: true, maxLength: 2000 },
     'notifications.quietStart': { pattern: TIME },
+    'remote.ntfyTopic': { pattern: /^(https:\/\/[^\s?#]+)?$/i, keepCase: true, maxLength: 300 },
     'notifications.quietEnd': { pattern: TIME },
     'auction.minHpPerGold': { min: 0.1, max: 1000 },
     'auction.bidWhen': { enum: ['short', 'medium', 'any'] },

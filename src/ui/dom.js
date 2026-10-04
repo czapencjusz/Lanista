@@ -117,6 +117,8 @@
       ['ellipse', { cx: 12, cy: 6.5, rx: 7, ry: 2.8 }],
       ['path', { d: 'M5 6.5v5c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-5M5 11.5v5c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-5' }],
     ],
+    // A phone: remote control.
+    remote: [['rect', { x: 7, y: 2.5, width: 10, height: 19, rx: 2 }], ['path', { d: 'M11 18.5h2' }]],
     // A temple: the gods.
     gods: [['path', { d: 'M3.5 9L12 4l8.5 5zM4.5 20h15M6 9v8.5M10 9v8.5M14 9v8.5M18 9v8.5M3.5 17.5h17' }]],
     // A potion flask: boosts.

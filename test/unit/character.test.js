@@ -402,3 +402,40 @@ test('the daily summary: the day that just ended, in one line', () => {
   assert.equal(brain.daySummary(finished), `Lanista, ${brain.dayKey(NOW)}: 40 fights (88% won), +150,000 gold, +900 XP, +2,000 honour, 40,000 gold spent`);
   assert.equal(brain.rollStatsDay(memory, NOW + 24 * 3600 * 1000 + 60000), null);
 });
+
+// ----------------------------------------------------------- places, menu
+
+test('statistics per place: each fight counts for where it was fought', () => {
+  const memory = brain.createMemory(NOW);
+  memory.gameInfo.locations = [{ id: '3', name: 'Death Hill' }];
+  const fight = (type, area, report) => {
+    memory.pending = { type, at: NOW, attempts: 1, firstAt: NOW, area };
+    brain.resolvePending({ report: { gold: 0, xp: 0, renown: 0, ...report }, [type]: {}, hp: {} }, memory, NOW);
+  };
+  fight('expedition', { key: 'expedition:7', name: 'Koman Mountain' }, { win: true, gold: 26000, xp: 20, renown: 700 });
+  fight('expedition', { key: 'expedition:7', name: 'Koman Mountain' }, { win: false });
+  fight('dungeon', { key: 'dungeon:7', name: 'Dungeon: Temple of Doom' }, { win: true, gold: 7000, xp: 15, renown: 700 });
+  fight('expedition', { key: 'expedition:3' }, { win: true, gold: 100 });
+  fight('arena', null, { win: true, gold: 552 });
+  assert.deepEqual(
+    brain.areaStats(memory).map((a) => [a.name, a.fights, a.won, a.gold, a.xp, a.honour, a.fame]),
+    [
+      ['Koman Mountain', 2, 1, 26000, 20, 700, 0],
+      ['Dungeon: Temple of Doom', 1, 1, 7000, 15, 0, 700],
+      ['Death Hill', 1, 1, 100, 0, 0, 0],
+    ],
+    'named from the menu when the fight did not say; a fight without a place is left out'
+  );
+  assert.equal(memory.stats.results.expedition.won, 2, 'the totals still count');
+});
+
+test('a new place in the location menu is announced once; the Underworld menu does not count', () => {
+  const memory = brain.createMemory(NOW);
+  const alerts = (state) => brain.pageAlerts({ inGame: true, level: 110, ...state }, memory).filter((a) => a.kind === 'newLocation').map((a) => a.message);
+  const menu = [{ id: '0', name: 'Cave Temple' }, { id: '7', name: 'Koman Mountain' }];
+  assert.deepEqual(alerts({ locations: menu }), [], 'the first menu seen is just noted');
+  assert.deepEqual(alerts({ underworld: true, locations: [{ id: '20', name: 'Entrance' }] }), []);
+  assert.deepEqual(alerts({ locations: menu }), [], 'back from the Underworld');
+  assert.deepEqual(alerts({ locations: [...menu, { id: '1001', name: 'Bloodhunt' }] }), ['Lanista: a new place in the location menu: Bloodhunt. An event, or a newly opened area?']);
+  assert.deepEqual(alerts({ locations: [...menu, { id: '1001', name: 'Bloodhunt' }] }), [], 'once');
+});

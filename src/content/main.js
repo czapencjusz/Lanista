@@ -387,6 +387,10 @@
       if (settings.enabled) brain.updateBreaks(settings.schedule, memory, now);
 
       let decision = brain.decide(state, settings, memory, now);
+      // For the remote "status" command.
+      if (state.inGame) {
+        memory.snapshot = { at: now, hp: state.hp ? state.hp.percent : null, gold: state.gold, level: state.level, underworld: state.underworld, doing: decision.reason || null, next: decision.next || null };
+      }
       // A repair also runs while paused; it must not run in two tabs at once.
       if ((settings.enabled || repairRunning()) && state.inGame) {
         const claim = await send({ type: 'claim', host: location.host });
@@ -529,6 +533,17 @@
         m.log = [];
       }),
     onTestPush: (url) => send({ type: 'pushTest', url, host: HOST }),
+  });
+
+  // The remote "check" command: look at the game right away.
+  ext.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (!message || message.type !== 'checkNow') return false;
+    if (settings && settings.enabled && !running) {
+      cancel();
+      tick();
+    }
+    sendResponse({ ok: true });
+    return false;
   });
 
   ext.storage.onChanged.addListener((changes, area) => {

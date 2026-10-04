@@ -272,7 +272,7 @@ test('the Overview: a switch and a line per feature, the name opens its tab', as
   assert.equal(sum('dungeon'), 'the last visited dungeon · Advanced · skips the boss');
   assert.equal(sum('arena'), 'on this server · weakest first');
   assert.equal(sum('heal'), 'eats below 30% · stops fighting below 20% · bag I · plain food only');
-  assert.equal(sum('notifications'), '6 kinds of alert on · desktop and phone');
+  assert.equal(sum('notifications'), '7 kinds of alert on · desktop and phone');
   assert.ok(card('repair').classList.contains('off'));
   assert.equal(card('notifications').querySelector('input'), null, 'no switch where there is no single one');
   assert.deepEqual([...view.element.querySelectorAll('.gb-pane h3')].map((h3) => h3.textContent), ['Fights', 'Character', 'Items', 'Lanista']);
@@ -284,4 +284,26 @@ test('the Overview: a switch and a line per feature, the name opens its tab', as
 
   card('dungeon').querySelector('.gb-overview-open').click();
   assert.equal(view.getTab(), 'dungeon');
+});
+
+test('statistics by place, and the remote control tab', async () => {
+  const memory = GBot.brain.createMemory(Date.now());
+  memory.stats.areas = { 'expedition:7': { fights: 4, won: 3, gold: 40000, xp: 80, honour: 2800, fame: 0 }, 'arena:provinciarum': { fights: 10, won: 9, gold: 5520, xp: 18, honour: 150, fame: 0 } };
+  memory.areaNames = { 'arena:provinciarum': 'Arena Provinciarum' };
+  memory.gameInfo.locations = [{ id: '7', name: 'Koman Mountain' }];
+  const { view, saved, change } = mount({}, { memory });
+  view.showTab('stats');
+  const rows = [...view.element.querySelectorAll('.gb-places tbody tr')].map((r) => [...r.children].map((c) => c.textContent));
+  const n = (v) => Number(v).toLocaleString();
+  assert.deepEqual(rows, [
+    ['Arena Provinciarum', '10', '90%', n(5520), '552', '18', '150'],
+    ['Koman Mountain', '4', '75%', n(40000), n(10000), '80', n(2800)],
+  ]);
+
+  view.showTab('remote');
+  const topic = view.element.querySelector('[data-path="remote.ntfyTopic"]');
+  assert.ok(topic.classList.contains('gb-input-full'));
+  change(topic, 'https://ntfy.sh/Lanista-Cmd-9');
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(saved.at(-1).remote.ntfyTopic, 'https://ntfy.sh/Lanista-Cmd-9');
 });

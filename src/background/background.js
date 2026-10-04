@@ -7,13 +7,16 @@
 //    sends them to the phone (ntfy, Discord, Slack, Telegram, Pushover,
 //    Gotify) if set up, holding them during the user's quiet hours
 //  - logs back in through the lobby after a logout, if switched on
+//  - takes commands from the phone (Telegram, ntfy), if switched on
 'use strict';
 
-// Firefox loads settings.js from the manifest's background scripts.
+// Firefox loads these from the manifest's background scripts.
 if (typeof importScripts === 'function' && !(globalThis.GBot && globalThis.GBot.settings)) importScripts('../shared/settings.js');
+if (typeof importScripts === 'function' && !(globalThis.GBot && globalThis.GBot.remote)) importScripts('../content/brain.js', 'remote.js');
 
 const ext = globalThis.browser || globalThis.chrome;
 const S = globalThis.GBot.settings;
+const R = globalThis.GBot.remote;
 
 const WATCHDOG_ALARM = 'lanista-watchdog';
 const STALE_MS = 4 * 60 * 1000;
@@ -295,11 +298,134 @@ async function alert(kind, message, host) {
   else await pushAll(n.pushUrl, text);
 }
 
+// ---------------------------------------------------------- remote control
+//
+// Once a minute: new messages in the Telegram bot's chat (getUpdates) and
+// in the ntfy command topic (a poll), each read once (the offset / last id
+// is kept), carried out and answered the same way.
+
+const REMOTE_KEY = 'remoteState';
+
+async function sendToTab(tabId, message) {
+  try {
+    const reply = await ext.tabs.sendMessage(tabId, message);
+    return !!(reply && reply.ok);
+  } catch (e) {
+    return false;
+  }
+}
+
+// Carries out one command for the servers listening on its channel;
+// returns the answer, or null when the text is not a command.
+async function runCommand(text, hosts, now) {
+  const cmd = R.parseCommand(text);
+  if (!cmd) return null;
+  if (cmd.command === 'unknown') return `Lanista: "${cmd.word}" is not a command.\n${R.helpText()}`;
+  if (cmd.command === 'help') return R.helpText();
+  const targets = R.targetHosts(hosts, cmd.server);
+  if (!targets.length) return `Lanista: no server "${cmd.server}" listens here (${hosts.map(S.serverName).join(', ')})`;
+  const all = await ext.storage.local.get(null);
+  const owners = await getOwners();
+  const lines = [];
+  for (const host of targets) {
+    const settings = S.pickSettings(all, host);
+    const memory = globalThis.GBot.brain.normalizeMemory(all[`memory:${host}`], now);
+    const owner = owners[host];
+    const name = S.serverName(host);
+    if (cmd.command === 'stop' || cmd.command === 'start') {
+      const on = cmd.command === 'start';
+      if (settings.enabled !== on) await S.saveSettings({ ...settings, enabled: on }, host);
+      const note = on && !R.tabPlaying(owner, now) ? ' (no game tab is playing: open the game in that browser)' : '';
+      lines.push(`${name}: ${on ? 'started' : 'paused'}${note}`);
+    } else if (cmd.command === 'check') {
+      const asked = settings.enabled && owner && (await sendToTab(owner.tabId, { type: 'checkNow' }));
+      lines.push(`${name}: ${asked ? 'looking at the game now' : settings.enabled ? 'no game tab to ask' : 'paused'}`);
+    } else if (cmd.command === 'status') lines.push(R.statusLine(host, settings, memory, owner, now));
+    else if (cmd.command === 'stats') lines.push(R.statsLine(host, memory));
+    else if (cmd.command === 'log') lines.push(R.logLines(host, memory));
+  }
+  return `Lanista (${cmd.command}):\n${lines.join('\n')}`;
+}
+
+async function telegramCommands(channel, state, now) {
+  const s = state[channel.key] || {};
+  const query = `timeout=0&allowed_updates=${encodeURIComponent('["message"]')}${s.offset ? `&offset=${s.offset}` : ''}`;
+  const response = await fetch(`https://api.telegram.org/bot${channel.token}/getUpdates?${query}`, { credentials: 'omit' });
+  const data = await response.json();
+  if (!data.ok) throw new Error(data.description || `getUpdates answered ${response.status}`);
+  const texts = [];
+  for (const update of data.result || []) {
+    s.offset = update.update_id + 1;
+    const m = update.message;
+    if (!m || String(m.chat && m.chat.id) !== channel.chatId || typeof m.text !== 'string') continue;
+    if (now - m.date * 1000 > R.MAX_AGE_MS) continue;
+    texts.push(m.text);
+  }
+  state[channel.key] = s;
+  return texts;
+}
+
+async function ntfyCommands(channel, state, now) {
+  const s = state[channel.key] || { since: String(Math.floor((now - R.MAX_AGE_MS) / 1000)) };
+  const response = await fetch(`${channel.url}/json?poll=1&since=${encodeURIComponent(s.since)}`, { credentials: 'omit' });
+  const texts = [];
+  for (const line of (await response.text()).split('\n')) {
+    let m = null;
+    try {
+      m = JSON.parse(line);
+    } catch (e) {
+      continue;
+    }
+    if (!m || m.event !== 'message') continue;
+    s.since = m.id;
+    // Lanista's own answers and alerts.
+    if (/^Lanista\b/.test(m.message || '')) continue;
+    if (now - m.time * 1000 > R.MAX_AGE_MS) continue;
+    texts.push(m.message);
+  }
+  state[channel.key] = s;
+  return texts;
+}
+
+const answer = (channel, text) =>
+  channel.kind === 'telegram' ? push(`https://api.telegram.org/bot${channel.token}/sendMessage?chat_id=${channel.chatId}`, text) : push(channel.url, text);
+
+let polling = false;
+
+async function pollRemote(now) {
+  if (polling) return;
+  polling = true;
+  try {
+    const all = await ext.storage.local.get(null);
+    const list = R.channels(all);
+    if (!list.length) return;
+    const state = all[REMOTE_KEY] || {};
+    for (const channel of list) {
+      let texts = [];
+      try {
+        texts = channel.kind === 'telegram' ? await telegramCommands(channel, state, now) : await ntfyCommands(channel, state, now);
+      } catch (e) {
+        console.warn('[Lanista] remote control: could not read commands', e);
+        continue;
+      }
+      // Marked as read before carrying them out, so none runs twice.
+      await ext.storage.local.set({ [REMOTE_KEY]: state });
+      for (const text of texts) {
+        const reply = await runCommand(text, channel.hosts, now);
+        if (reply) await answer(channel, reply);
+      }
+    }
+  } finally {
+    polling = false;
+  }
+}
+
 async function watchdog() {
   const owners = await getOwners();
   const now = Date.now();
   await expireRejoins(now);
   await sendHeld(now);
+  await pollRemote(now).catch((e) => console.warn('[Lanista] remote control', e));
   let changed = false;
   for (const [host, owner] of Object.entries(owners)) {
     if (ownerAlive(owner, now)) continue;

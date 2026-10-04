@@ -183,7 +183,8 @@
       text(field) {
         const input = h('input', {
           type: 'text',
-          class: 'gb-input',
+          class: field.wide ? 'gb-input gb-input-full' : 'gb-input',
+          spellcheck: field.wide ? 'false' : null,
           placeholder: field.placeholder,
           'aria-label': field.label,
           dataset: { path: field.path },
@@ -443,6 +444,25 @@
       return h('div', { class: 'gb-table-wrap' }, h('table', { class: 'gb-table gb-days' }, h('thead', {}, h('tr', {}, head)), h('tbody', {}, rows)));
     }
 
+    // Fights per place: expedition locations, dungeons, the arenas.
+    function placesTable(places) {
+      const rows = places.map((p) =>
+        h(
+          'tr',
+          { dataset: { place: p.key } },
+          h('th', { scope: 'row' }, p.name),
+          h('td', {}, formatNumber(p.fights)),
+          h('td', {}, p.fights ? `${Math.round((100 * p.won) / p.fights)}%` : '–'),
+          h('td', {}, formatNumber(p.gold)),
+          h('td', {}, p.fights ? formatNumber(Math.round(p.gold / p.fights)) : '–'),
+          h('td', {}, formatNumber(p.xp)),
+          h('td', {}, formatNumber(p.honour + p.fame))
+        )
+      );
+      const head = ['Place', 'Fights', 'Won', 'Gold', 'Gold per fight', 'XP', 'Honour / fame'].map((t) => h('th', { scope: 'col' }, t));
+      return h('div', { class: 'gb-table-wrap' }, h('table', { class: 'gb-table gb-places' }, h('thead', {}, h('tr', {}, head)), h('tbody', {}, rows)));
+    }
+
     // Every feature on one page: its switch and a line about its settings;
     // the name opens its tab.
     function overviewPane() {
@@ -506,6 +526,12 @@
           daysBox.appendChild(h('h3', {}, 'Per day'));
           daysBox.appendChild(daysTable(days));
           daysBox.appendChild(h('p', { class: 'gb-help' }, 'Gold in: looted, sold and taken from gold packages. Gold spent: training, repairs, smelting, auction bids and food. The last 30 days are kept.'));
+        }
+        const places = GBot.brain && GBot.brain.areaStats ? GBot.brain.areaStats(view.memory) : [];
+        if (places.length) {
+          daysBox.appendChild(h('h3', {}, 'By place'));
+          daysBox.appendChild(placesTable(places));
+          daysBox.appendChild(h('p', { class: 'gb-help' }, 'Since the statistics were last reset. Honour comes from expeditions and the arena, fame from dungeons and the circus.'));
         }
         const hours = Math.max((Date.now() - stats.since) / 3600000, 1 / 60);
         const card = (label, value, sub) =>

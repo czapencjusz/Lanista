@@ -10,7 +10,8 @@
 //
 // Field types: toggle, number, select, location, text, textarea, time, order,
 // checks, push. Optional field keys: help, unit, step, base (display offset, e.g. 1
-// to show a 0-based index as 1-based), dependsOn (path of a toggle that must
+// to show a 0-based index as 1-based), wide (a text field across the pane),
+// dependsOn (path of a toggle that must
 // be on for the field to be editable, or a list of paths of which one must
 // be on), placeholder.
 (function (root) {
@@ -779,6 +780,7 @@
         { path: 'notifications.messages', type: 'toggle', label: 'Unread messages in the game', help: 'From players, your guild and the game (auction wins and the like). Lanista does not open them.' },
         { path: 'notifications.costume', type: 'toggle', label: "A costume was put on, or Dīs Pater's Armour ran out", help: 'Needs Costumes switched on.' },
         { path: 'notifications.dailySummary', type: 'toggle', label: "Yesterday's statistics, once a day", help: 'Fights, gold, experience, honour and fame, sent after midnight.' },
+        { path: 'notifications.newLocation', type: 'toggle', label: 'A new place in the location menu', help: "Events add their own place to the menu, and new areas open as you level up. The Underworld's menu does not count." },
         { path: 'notifications.desktop', type: 'toggle', label: 'Show them on this computer' },
         {
           path: 'notifications.pushUrl',
@@ -790,6 +792,24 @@
         { path: 'notifications.quiet', type: 'toggle', label: 'Quiet hours for the phone', help: 'Phone alerts wait until the quiet hours end, then come together in one message. Desktop alerts still show.' },
         { path: 'notifications.quietStart', type: 'time', label: 'Quiet from', dependsOn: 'notifications.quiet' },
         { path: 'notifications.quietEnd', type: 'time', label: 'Quiet until', dependsOn: 'notifications.quiet' },
+      ],
+    },
+    {
+      id: 'remote',
+      title: 'Remote control',
+      icon: 'remote',
+      enable: 'remote.enabled',
+      description:
+        'Send commands from your phone and get the answer back: status, stop, start, check (look at the game now), stats (today\'s numbers), log (the last 10 lines) and help. Add a server number to pick one server, like "stop 303"; without one, every server listening there does it. Lanista reads commands once a minute while the browser is open.\n\nTelegram: the bot you added under Notifications as a phone address. Only messages from that chat count. Don\'t use the bot with another program at the same time, or the two will take each other\'s messages.',
+      fields: [
+        {
+          path: 'remote.ntfyTopic',
+          type: 'text',
+          wide: true,
+          label: 'Commands from the ntfy topic',
+          placeholder: 'https://ntfy.sh/your-command-topic',
+          help: 'Publish a command to this topic in the ntfy app; the answer appears in the same topic. Anyone who knows the name can send commands, so make it long and hard to guess. Leave it empty to use only Telegram.',
+        },
       ],
     },
     {
@@ -959,10 +979,16 @@
   };
   SUMMARIES.notifications = (s) => {
     const n = s.notifications;
-    const kinds = ['loggedOut', 'activityPaused', 'noFood', 'underworld', 'levelUp', 'messages', 'costume', 'dailySummary'].filter((k) => n[k]).length;
+    const kinds = ['loggedOut', 'activityPaused', 'noFood', 'underworld', 'levelUp', 'messages', 'costume', 'dailySummary', 'newLocation'].filter((k) => n[k]).length;
     const phones = GBot.settings.pushUrls(n).length;
     const where = [n.desktop && 'desktop', phones && (phones === 1 ? 'phone' : `${phones} phone addresses`)].filter(Boolean).join(' and ') || 'shown nowhere';
     return kinds ? line([`${times(kinds, 'kind of alert', 'kinds of alert')} on`, where, phones && n.quiet && `phone quiet ${n.quietStart}–${n.quietEnd}`]) : 'all alerts off';
+  };
+  SUMMARIES.remote = (s) => {
+    const r = s.remote;
+    const telegram = GBot.settings.pushUrls(s.notifications).some((u) => /^https:\/\/api\.telegram\.org\/bot/i.test(u));
+    const from = [telegram && 'Telegram', r.ntfyTopic && 'ntfy'].filter(Boolean);
+    return from.length ? `commands from ${from.join(' and ')}` : 'no Telegram bot or ntfy topic set up';
   };
   SUMMARIES.gods = (s) => {
     const g = s.gods;
@@ -990,7 +1016,7 @@
     ['Fights', ['expedition', 'dungeon', 'underworld', 'arena', 'circus']],
     ['Character', ['heal', 'quests', 'work', 'training', 'gods', 'boosts', 'costumes']],
     ['Items', ['gold', 'repair', 'smelting', 'packages', 'auction']],
-    ['Lanista', ['schedule', 'safety', 'notifications', 'interface', 'stats', 'log', 'profile']],
+    ['Lanista', ['schedule', 'safety', 'notifications', 'remote', 'interface', 'stats', 'log', 'profile']],
   ];
   const byId = Object.fromEntries(ALL_TABS.map((t) => [t.id, t]));
   const TABS = LAYOUT.flatMap(([group, ids]) => ids.map((id) => ({ ...byId[id], group, summary: SUMMARIES[id] || null })));

@@ -85,9 +85,16 @@
       nextGodsCheck: 0,
       boostNext: {},
       nextCostumeCheck: 0,
-      // For alerts: the level and unread messages seen last.
+      // For alerts: the level and unread messages seen last, and the places
+      // ever seen in the location menu (outside the Underworld).
       lastLevel: null,
       messagesSeen: 0,
+      knownLocations: null,
+      // The places' names for the statistics (key -> name).
+      areaNames: {},
+      // What the game tab saw last ({ at, hp, gold, level, underworld,
+      // doing, next }), for the status command.
+      snapshot: null,
       // Auction house: when to look again, and this round's bids
       // ({ rank, spent, bids: { lotId: amount } }).
       nextAuctionCheck: 0,
@@ -122,6 +129,8 @@
         medic: 0,
         blessings: 0,
         boosts: 0,
+        // Fights per place: { key: { fights, won, gold, xp, honour, fame } }.
+        areas: {},
         goldCollected: 0,
         auctionBids: 0,
         goldSpent: 0,
@@ -157,7 +166,9 @@
         ...(memory.stats || {}),
         results: { ...((memory.stats && memory.stats.results) || {}) },
         loot: { ...base.stats.loot, ...((memory.stats && memory.stats.loot) || {}) },
+        areas: { ...((memory.stats && memory.stats.areas) || {}) },
       },
+      areaNames: { ...(memory.areaNames || {}) },
       avoid: { arena: { ...((memory.avoid && memory.avoid.arena) || {}) }, circus: { ...((memory.avoid && memory.avoid.circus) || {}) } },
       beaten: { arena: { ...((memory.beaten && memory.beaten.arena) || {}) }, circus: { ...((memory.beaten && memory.beaten.circus) || {}) } },
       repairSkip: { ...(memory.repairSkip || {}) },
@@ -840,6 +851,7 @@
       if (state.report) {
         success = true;
         message = recordFight(memory, type, state.report, pending.opponent, now);
+        recordArea(memory, type, pending.area, state.report);
         if (state.report.win && pending.opponent && memory.beaten && memory.beaten[type]) {
           const key = pending.opponent.toLowerCase();
           const prev = memory.beaten[type][key];
@@ -948,8 +960,9 @@
     return finished;
   }
 
-  // One line about a day's record, for the daily summary alert.
-  function daySummary(d) {
+  // One line about a day's record, for the daily summary alert (and the
+  // remote "stats" command, as "Server 303 (EN), today: ...").
+  function daySummary(d, who = 'Lanista', label = d.day) {
     const n = (v) => (typeof v === 'number' ? v : 0);
     const types = ['expedition', 'dungeon', 'arena', 'circus'];
     const results = d.results || {};
@@ -967,7 +980,7 @@
       n(d.goldSpent) && `${fmt(d.goldSpent)} gold spent`,
       n(d.quests) && `${fmt(d.quests)} quest${d.quests === 1 ? '' : 's'}`,
     ].filter(Boolean);
-    return `Lanista, ${d.day}: ${parts.join(', ')}`;
+    return `${who}, ${label}: ${parts.join(', ')}`;
   }
 
   // Alerts from what every game page shows: a new level, unread messages
@@ -984,6 +997,17 @@
         out.push({ kind: 'messages', message: `Lanista: ${state.messages === 1 ? 'an unread message' : `${state.messages} unread messages`} in the game` });
       }
       memory.messagesSeen = state.messages;
+    }
+    // A place new to the location menu: an event's, or a newly opened area.
+    // The Underworld has a menu of its own and does not count.
+    if (!state.underworld && !state.travel && Array.isArray(state.locations) && state.locations.length) {
+      const known = memory.knownLocations;
+      if (Array.isArray(known)) {
+        for (const place of state.locations) {
+          if (!known.includes(place.id)) out.push({ kind: 'newLocation', message: `Lanista: a new place in the location menu: ${place.name}. An event, or a newly opened area?` });
+        }
+      }
+      memory.knownLocations = Array.from(new Set([...(known || []), ...state.locations.map((l) => l.id)]));
     }
     return out;
   }
@@ -1182,6 +1206,36 @@
     if (report.renown) gains.push(`+${fmt(report.renown)} ${renownKind}`);
     const vs = opponent ? ` vs ${opponent}` : '';
     return `${LABELS[type]}${vs}: ${report.win ? 'won' : 'lost'}${gains.length ? `, ${gains.join(', ')}` : ''}`;
+  }
+
+  // A fight's result for the place it was fought at (pending.area = { key,
+  // name }): memory.stats.areas[key], and the name in memory.areaNames.
+  function recordArea(memory, type, area, report) {
+    if (!area || !area.key) return;
+    const areas = (memory.stats.areas = memory.stats.areas || {});
+    const a = (areas[area.key] = { fights: 0, won: 0, gold: 0, xp: 0, honour: 0, fame: 0, ...(areas[area.key] || {}) });
+    a.fights += 1;
+    if (report.win) a.won += 1;
+    a.gold += report.gold || 0;
+    a.xp += report.xp || 0;
+    a[type === 'dungeon' || type === 'circus' ? 'fame' : 'honour'] += report.renown || 0;
+    if (area.name) memory.areaNames = { ...(memory.areaNames || {}), [area.key]: area.name };
+  }
+
+  // The places for the statistics, most fights first: [{ key, name, fights,
+  // won, gold, xp, honour, fame }].
+  function areaStats(memory) {
+    const names = memory.areaNames || {};
+    const locations = (memory.gameInfo && memory.gameInfo.locations) || [];
+    const nameOf = (key) => {
+      if (names[key]) return names[key];
+      const [kind, id] = key.split(':');
+      const place = locations.find((l) => l.id === id);
+      return place ? place.name : `${LABELS[kind] || kind} ${id || ''}`.trim();
+    };
+    return Object.entries((memory.stats && memory.stats.areas) || {})
+      .map(([key, a]) => ({ key, name: nameOf(key), ...a }))
+      .sort((a, b) => b.fights - a.fights);
   }
 
   // Drops expired entries from the avoid lists; returns the active names of `type`.
@@ -1413,6 +1467,8 @@
     foodBudget,
     rollStatsDay,
     daySummary,
+    recordArea,
+    areaStats,
     pageAlerts,
     medicDecision,
     medicUsed,

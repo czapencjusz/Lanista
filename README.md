@@ -237,8 +237,9 @@ apply as you go.
 | Schedule | Active hours, random breaks |
 | Timing & safety | Click delays, how long to wait between checks, what to do when something keeps failing |
 | Notifications | Which alerts you want, on the desktop and (if you like) on your phone, quiet hours for the phone |
+| Remote control | Commands from your Telegram bot or an ntfy topic |
 | Interface | Show the bar, floating or docked |
-| Statistics | Fights won and lost, loot, gold earned and spent, per-hour rates, and a table per day for the last 30 days |
+| Statistics | Fights won and lost, loot, gold earned and spent, per-hour rates, a table per day for the last 30 days, and one per place (locations, dungeons, arenas) |
 | Log | What it's been up to, a *Copy log* button and *Report a problem* |
 | Backup | Copy settings from another server, export, import, reset |
 
@@ -309,10 +310,15 @@ A few handy things to know:
 - **It can ping you** with a desktop notification when you're logged out, when something gets paused,
   when you're low on HP with no food left, when it skipped the Underworld because of unused armor,
   when you level up, when unread messages arrive, when a costume goes on or Dīs Pater's Armour runs
-  out, and once a day with yesterday's numbers. Pick the ones you want under *Notifications*.
+  out, when a new place turns up in the location menu (that's how events show up), and once a day
+  with yesterday's numbers. Pick the ones you want under *Notifications*.
   Paste one or more addresses there and the same alerts reach your phone too: an
   [ntfy](https://ntfy.sh) topic, a Discord or Slack webhook, a Telegram bot, Pushover or Gotify.
   Quiet hours hold the phone alerts overnight and send them together in the morning.
+- **You can boss it around from your phone.** Switch on *Remote control* and send `status`,
+  `stop`, `start`, `check`, `stats` or `log` to your Telegram bot (the one you set up for alerts)
+  or to an ntfy topic of your own, and Lanista answers there within a minute. Add a server number,
+  like `stop 303`, to pick one server. Only your own Telegram chat is listened to.
 - **Older settings carry over.** Settings from older versions are moved over automatically, and each
   server gets its own copy.
 

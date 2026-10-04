@@ -107,7 +107,7 @@ a.gb-btn, a.gb-icon-btn { text-decoration: none; }
 .gb-pane-head { display: flex; align-items: center; gap: 10px; color: var(--gb-blood); }
 .gb-pane-head h2 { margin: 0; font: 700 15px/1.2 var(--gb-heading); color: var(--gb-blood); flex: 1; }
 .gb-pane h3 { margin: 16px 0 6px; font: 700 13px/1.2 var(--gb-heading); color: var(--gb-blood); }
-.gb-desc { margin: 4px 0 10px; color: var(--gb-muted); font-size: 12px; }
+.gb-desc { margin: 4px 0 10px; color: var(--gb-muted); font-size: 12px; white-space: pre-line; }
 .gb-saved { font-size: 11px; color: var(--gb-green); opacity: 0; transition: opacity .2s; font-weight: 600; }
 .gb-saved.show { opacity: 1; }
 .gb-saved.error { color: var(--gb-red); }
@@ -134,6 +134,7 @@ a.gb-btn, a.gb-icon-btn { text-decoration: none; }
 .gb-push { display: flex; width: 100%; align-items: flex-start; gap: 6px; }
 .gb-push textarea { min-height: 44px; }
 .gb-input-wide { flex: 1 1 auto; min-width: 0; }
+.gb-input-full { width: 100%; }
 .gb-push-status { margin-top: 4px; }
 .gb-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; }
 .gb-input:disabled { cursor: not-allowed; }
