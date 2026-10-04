@@ -327,7 +327,7 @@ Docker image does the job: a full Chromium that you open in any browser.
 **1. Get Lanista onto the server.** Over SSH, clone it into a folder for app data:
 
 ```sh
-git clone https://github.com/czapencjusz/gbot.git /path/to/appdata/lanista/gbot
+git clone https://github.com/czapencjusz/Lanista.git /path/to/appdata/lanista/gbot
 ```
 
 **2. Start the container.** With Docker Compose (on OpenMediaVault that's the *compose* plugin from
@@ -385,7 +385,7 @@ A few things worth knowing:
 
 Hit **Report a problem**: it's the little flag in the settings window and the popup, and there's a
 button in the *Log* tab too. It opens a new issue on
-[GitHub](https://github.com/czapencjusz/gbot/issues) with a short template and your Lanista
+[GitHub](https://github.com/czapencjusz/Lanista/issues) with a short template and your Lanista
 version filled in. In the game's settings window it also adds the last 30 lines of the log. Nothing
 is posted until you press the button on GitHub, so read it over and delete anything you'd rather
 keep to yourself (opponent names, gold amounts). Tell us what happened and where.

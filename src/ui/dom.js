@@ -161,7 +161,7 @@
   // short template, the version and (from the game's settings window) the
   // last log lines. GitHub shows it all for editing before anything is
   // posted.
-  const ISSUES_URL = 'https://github.com/czapencjusz/gbot/issues/new';
+  const ISSUES_URL = 'https://github.com/czapencjusz/Lanista/issues/new';
 
   // Log entries ({ t, level, message }) as plain text, oldest first. Game
   // session codes (sh=...) are blanked: a log may end up in a public issue.
