@@ -55,11 +55,24 @@
 
   async function loadMemory() {
     const data = await ext.storage.local.get(MEMORY_KEY);
-    return brain.normalizeMemory(data[MEMORY_KEY], Date.now());
+    const loaded = brain.normalizeMemory(data[MEMORY_KEY], Date.now());
+    queueBase = brain.smeltKeys(loaded.smeltQueue);
+    return loaded;
   }
 
+  // The smelting queue as this tab last read it. Another tab (ticking items
+  // on its packages page) may change the stored queue meanwhile: saving
+  // then merges both sides' changes instead of overwriting theirs.
+  let queueBase = null;
+
   async function persist() {
-    if (memory && extensionAlive()) await ext.storage.local.set({ [MEMORY_KEY]: memory });
+    if (!memory || !extensionAlive()) return;
+    if (queueBase) {
+      const stored = (await ext.storage.local.get(MEMORY_KEY))[MEMORY_KEY];
+      if (stored && Array.isArray(stored.smeltQueue)) memory.smeltQueue = brain.mergeSmeltQueue(queueBase, memory.smeltQueue, stored.smeltQueue);
+    }
+    queueBase = brain.smeltKeys(memory.smeltQueue);
+    await ext.storage.local.set({ [MEMORY_KEY]: memory });
   }
 
   // Read-modify-write of the stored memory from UI buttons (reset stats...).
@@ -520,6 +533,7 @@
     if (area !== 'local') return;
     if (changes[MEMORY_KEY] && !running && changes[MEMORY_KEY].newValue) {
       memory = brain.normalizeMemory(changes[MEMORY_KEY].newValue, Date.now());
+      queueBase = brain.smeltKeys(memory.smeltQueue);
       panel.update({ memory, status: statusFor(lastState) });
       renderPageButtons(lastState);
     }

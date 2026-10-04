@@ -629,6 +629,28 @@
     return plan;
   }
 
+  // Smelting queue entries by what identifies them: the package's
+  // container number, or the item id of an item in a smelt bin.
+  const smeltKey = (e) => (e.iid ? `iid:${e.iid}` : `cn:${e.cn}`);
+  const smeltKeys = (queue) => (queue || []).map(smeltKey);
+
+  // Three-way merge of the smelting queue: `base` (keys) as this tab read
+  // it, `mine` as it is now, `stored` as someone else saved it since.
+  // Entries this tab added or removed are added or removed; everything
+  // else is as stored.
+  function mergeSmeltQueue(base, mine, stored) {
+    const storedKeys = smeltKeys(stored);
+    // Nobody else changed it: keep this tab's queue as it is.
+    if (storedKeys.length === base.length && storedKeys.every((k, i) => k === base[i])) return mine;
+    const before = new Set(base);
+    const now = new Set(smeltKeys(mine));
+    const removed = new Set(base.filter((k) => !now.has(k)));
+    const merged = stored.filter((e) => !removed.has(smeltKey(e)));
+    const have = new Set(smeltKeys(merged));
+    for (const e of mine) if (!before.has(smeltKey(e)) && !have.has(smeltKey(e))) merged.push(e);
+    return merged;
+  }
+
   // Inventory bags set as smelt bins (512-519).
   const smeltBins = (settings) =>
     Array.from({ length: 8 }, (_, i) => i).filter((i) => settings.smelting.bins && settings.smelting.bins[`b${i + 1}`]).map((i) => FIRST_BAG + i);
@@ -1193,6 +1215,9 @@
     planAuctionBids,
     planGearBids,
     smeltBins,
+    smeltKey,
+    smeltKeys,
+    mergeSmeltQueue,
     keptByName,
     PICK_FILTERS,
     freeSpot,
