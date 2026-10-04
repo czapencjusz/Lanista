@@ -20,7 +20,8 @@
   const lasts = (ms) => (ms >= 3600000 && ms % 3600000 === 0 ? `${ms / 3600000} h` : `${Math.round(ms / 60000)} min`);
 
   // A tooltip as text lines; a line may be a [label, value] pair
-  // ("Maximum:", "215"), joined with a space.
+  // ("Maximum:", "215"), joined with a space. The game writes apostrophes
+  // as backticks ("Mars` Wrath").
   function tipLines(el) {
     try {
       return JSON.parse(el.getAttribute('data-tooltip'))[0].map((line) => {
@@ -28,6 +29,7 @@
         return String(Array.isArray(first) ? first.join(' ') : first)
           .replace(/<[^>]*>/g, ' ')
           .replace(/&nbsp;/g, ' ')
+          .replace(/`/g, "'")
           .replace(/\s+/g, ' ')
           .trim();
       });

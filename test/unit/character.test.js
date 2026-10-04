@@ -291,12 +291,13 @@ test('costumes: the page is read by section; worn = it offers to take it off', (
     costumes.map((c) => [c.name, c.kind, c.level, c.owned, c.worn, c.wear ? c.wear.setId : null, c.waitMs]),
     [
       ['Vulcanus Forge', 'everywear', null, true, false, null, 2280000],
-      ['Juno`s Breath of Life', 'everywear', null, true, false, null, 2280000],
-      ['Dīs Pater`s Armour', 'underworld', 'normal', true, true, null, null],
-      ['Dīs Pater`s Armour', 'underworld', 'medium', false, false, null, 2280000],
-      ['Dīs Pater`s Armour', 'underworld', 'hard', true, false, '24', null],
-      ['Ra`s Light Robe', 'festival', null, true, false, null, 2280000],
-    ]
+      ["Juno's Breath of Life", 'everywear', null, true, false, null, 2280000],
+      ["Dīs Pater's Armour", 'underworld', 'normal', true, true, null, null],
+      ["Dīs Pater's Armour", 'underworld', 'medium', false, false, null, 2280000],
+      ["Dīs Pater's Armour", 'underworld', 'hard', true, false, '24', null],
+      ["Ra's Light Robe", 'festival', null, true, false, null, 2280000],
+    ],
+    "the game's backticks (Juno`s) read as apostrophes"
   );
   assert.equal(character.costumeEndsIn(parse(costumesPage())), 23797000);
 });
@@ -304,12 +305,12 @@ test('costumes: the page is read by section; worn = it offers to take it off', (
 test('costumes: never anything else while an armour is on; then the armour held, then the everyday one', () => {
   const plan = (page, c, enter = 'off') => brain.costumePlan(character.readCostumes(parse(costumesPage(page))), S.sanitizeSettings({ costumes: { enabled: true, ...c }, underworld: { enter } }));
   const all = { normal: true, medium: true, hard: true };
-  assert.deepEqual(plan({}, { armour: all, everyday: "Juno's Breath of Life" }), { wait: 'Dīs Pater`s Armour is on' });
+  assert.deepEqual(plan({}, { armour: all, everyday: "Juno's Breath of Life" }), { wait: "Dīs Pater's Armour is on" });
   const next = plan({ normal: 'none', juno: 'free' }, { armour: all, everyday: "Juno's Breath of Life" });
   assert.equal(next.wear.level, 'hard');
-  assert.equal(plan({ normal: 'none', juno: 'free' }, { armour: { normal: true }, everyday: "Juno's Breath of Life" }).wear.name, 'Juno`s Breath of Life', 'the hard one is not ticked');
-  assert.deepEqual(plan({ normal: 'none', hard: 'none', juno: 'worn' }, { everyday: "Juno's Breath of Life" }), { wait: 'Juno`s Breath of Life is on' });
-  assert.deepEqual(plan({ normal: 'none', hard: 'none' }, { everyday: "Juno's Breath of Life" }), { wait: 'Juno`s Breath of Life cannot be put on yet' });
+  assert.equal(plan({ normal: 'none', juno: 'free' }, { armour: { normal: true }, everyday: "Juno's Breath of Life" }).wear.name, "Juno's Breath of Life", 'the hard one is not ticked');
+  assert.deepEqual(plan({ normal: 'none', hard: 'none', juno: 'worn' }, { everyday: "Juno's Breath of Life" }), { wait: "Juno's Breath of Life is on" });
+  assert.deepEqual(plan({ normal: 'none', hard: 'none' }, { everyday: "Juno's Breath of Life" }), { wait: "Juno's Breath of Life cannot be put on yet" });
   assert.deepEqual(plan({ normal: 'none', hard: 'none' }, {}), { wait: 'nothing to put on' });
 });
 
@@ -326,7 +327,7 @@ test('costumes: puts on the armour held once the worn one ran out, and says so',
   await withFetch(fetch, () => GBot.actions.costume(ctx));
   assert.deepEqual(calls, ['costumes'], 'the normal one is still on');
   assert.equal(ctx.memory.nextCostumeCheck, NOW + 23797000 + 30000, 'looked at again when it ends');
-  assert.deepEqual(logs, ['info: Costumes: Dīs Pater`s Armour is on; looking again in 6:37:07']);
+  assert.deepEqual(logs, ["info: Costumes: Dīs Pater's Armour is on; looking again in 6:37:07"]);
 
   page = { normal: 'none' };
   logs.length = 0;
