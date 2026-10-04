@@ -32,6 +32,9 @@
     avoidLostHours: 24,
     // Try opponents beaten in the last two weeks first (most wins first).
     preferBeaten: false,
+    // Attacks per local day: on one player, and in all (0 = no limit).
+    perPlayerPerDay: 5,
+    perDay: 0,
   });
 
   const DEFAULT_SETTINGS = {
@@ -199,6 +202,15 @@
       expiringHours: 24,
     },
 
+    gold: {
+      // Keep gold above `keep` out of raiders' reach: buy the dearest
+      // guild market gold pack the spare gold pays for and list it again at
+      // the same price (24 h). Listings below minPack are not packs.
+      hide: false,
+      keep: 100000,
+      minPack: 50000,
+    },
+
     auction: {
       // Bid on healing items in the auction house.
       enabled: false,
@@ -232,6 +244,12 @@
       // Skip quests for activities the bot is not doing (arena quests while
       // the arena is off, ...).
       onlyActive: true,
+      // Skip quests with a time limit (they fail when it runs out), and
+      // quests whose item reward is food.
+      skipTimed: false,
+      skipFoodReward: false,
+      // Which reward picks the best quest: 'gold' | 'honour' | 'xp'.
+      rankBy: 'gold',
     },
 
     schedule: {
@@ -305,8 +323,15 @@
     'heal.buyAtOnce': { int: true, min: 1, max: 20 },
     'heal.buyMaxGoldPerDay': { int: true, min: 0, max: 2000000000 },
     'heal.buyKeepGold': { int: true, min: 0, max: 2000000000 },
+    'quests.rankBy': { enum: ['gold', 'honour', 'xp'] },
+    'gold.keep': { int: true, min: 0, max: 2000000000 },
+    'gold.minPack': { int: true, min: 1000, max: 2000000000 },
     'arena.where': { enum: ['provinciarum', 'local'] },
     'circus.where': { enum: ['provinciarum', 'local'] },
+    'arena.perPlayerPerDay': { int: true, min: 0, max: 100 },
+    'circus.perPlayerPerDay': { int: true, min: 0, max: 100 },
+    'arena.perDay': { int: true, min: 0, max: 1000 },
+    'circus.perDay': { int: true, min: 0, max: 1000 },
     'work.job': { int: true, min: 0, max: 19 },
     'work.hours': { int: true, min: 1, max: 24 },
     'training.keepGold': { int: true, min: 0, max: 2000000000 },

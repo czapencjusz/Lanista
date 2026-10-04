@@ -196,6 +196,21 @@
     // Merchant shop grid (mod=inventory&sub=1..6); selling is a move into it.
     shop: '#shop[data-container-number]',
 
+    // Guild market (mod=guildMarket): one row per listing (item, seller,
+    // price, duration, level, Buy); the listing id is the item's id. The
+    // Sell form takes an item id from the bags (sellid), a price (preis)
+    // and a duration (dauer: 1 = 2 h, 2 = 8 h, 3 = 24 h).
+    market: {
+      table: '#market_item_table',
+      sellerCell: 1,
+      priceCell: 2,
+      buy: 'input[name="buy"]',
+      sellForm: '#sellForm',
+      sellButton: 'input[type="submit"], button[type="submit"]',
+    },
+    // The character's name on the overview.
+    playerName: '.playername_achievement',
+
     // Training ground: one button and one cost per stat, in stat order.
     training: {
       buttons: '#training_box .training_button',
@@ -222,6 +237,14 @@
       icon: '.quest_slot_icon',
       title: '.quest_slot_title',
       reward: '.quest_slot_reward',
+      // Rewards: gold as text; honour and experience in their tooltips
+      // ("1.039 Honor"); an item reward as an image with the item tooltip.
+      rewardGold: '.quest_slot_reward_gold',
+      rewardHonour: '.quest_slot_reward_honor [data-tooltip]',
+      rewardXp: '.quest_slot_reward_xp [data-tooltip]',
+      rewardItem: '.quest_slot_reward_item [data-tooltip]',
+      // "00:17:59" on a quest with a time limit ("Failed" once failed).
+      time: '.quest_slot_time',
       cooldown: '#quest_header_cooldown [data-ticker-time-left]',
       // "Accepted quests: 2 / 5"
       accepted: '#quest_header_accepted',

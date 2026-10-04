@@ -415,7 +415,8 @@
     if (!opponents.length) throw new ActionError(`No ${name} opponents can be attacked`);
 
     // Players on the buddy list are never attacked.
-    const avoided = brain.avoidedNames(ctx.memory, type, ctx.now());
+    // Players who beat us lately, and those attacked enough for today.
+    const avoided = brain.avoidedNames(ctx.memory, type, ctx.now()).concat(brain.cappedNames(ctx.memory, type, settings[type], ctx.now()));
     const allowed = brain.filterOpponents(opponents.filter((o) => !o.buddy), settings[type], state.level, avoided);
     if (!allowed.length) throw new ActionError(`None of the ${opponents.length} ${name} opponents match your filters (buddies are never attacked)`);
     let order = brain.pickOpponents(allowed, settings[type].target);
@@ -465,13 +466,13 @@
   };
 
   // Index of the heal line in an item tooltip ("Using: Heals 3960 of
-  // life"): a line with a number but no "+N" of its own, followed by the
-  // "+N" bonus line ("From intelligence: +2325 vitality point(s)"). Stat
-  // lines of scrolls ("Damage +5") and buffs ("Using: +1624 Health") are
-  // not heal lines. -1 if none.
+  // life"): a "label: ..." line with a number but no "+N" of its own,
+  // followed by the "+N" bonus line ("From intelligence: +2325 vitality
+  // point(s)"). Stat lines of scrolls ("Damage +5"), buffs ("Using: +1624
+  // Health") and gear ("Armour 120") are not heal lines. -1 if none.
   function healLine(lines) {
     for (let i = 1; i + 1 < lines.length; i++) {
-      if (/\+\d+/.test(lines[i + 1]) && /\d/.test(lines[i]) && !/\+\d/.test(lines[i])) return i;
+      if (/\+\d+/.test(lines[i + 1]) && /:.*\d/.test(lines[i]) && !/\+\d/.test(lines[i])) return i;
     }
     return -1;
   }
@@ -746,6 +747,26 @@
 
   // ----------------------------------------------------------------- quests
 
+  // A quest's rewards and limits: { reward (gold), honour, xp, foodReward,
+  // timed }.
+  function questRewards(slot) {
+    const gold = slot.querySelector(SEL.quests.rewardGold) || slot.querySelector(SEL.quests.reward);
+    const fromTooltip = (sel) => {
+      const el = slot.querySelector(sel);
+      const m = el && /([\d.,]+)/.exec(tooltipOf(el).join(' '));
+      return m ? parseNumber(m[1]) : null;
+    };
+    const item = slot.querySelector(SEL.quests.rewardItem);
+    const time = slot.querySelector(SEL.quests.time);
+    return {
+      reward: gold ? parseNumber(gold.textContent) : null,
+      honour: fromTooltip(SEL.quests.rewardHonour),
+      xp: fromTooltip(SEL.quests.rewardXp),
+      foodReward: !!item && foodHealAmount(item) > 0,
+      timed: !!time && /\d+:\d+/.test(time.textContent),
+    };
+  }
+
   function slotTitle(slot) {
     const title = slot.querySelector(SEL.quests.title);
     return title ? title.textContent.trim() : '';
@@ -837,15 +858,12 @@
     const accepted = acceptedQuests();
     if (!accepted || accepted.count < accepted.max) {
       const offers = $$(SEL.quests.openSlots)
-        .map((slot) => {
-          const reward = slot.querySelector(SEL.quests.reward);
-          return {
-            type: questType(slot),
-            title: slotTitle(slot),
-            reward: reward ? parseNumber(reward.textContent) : null,
-            accept: slot.querySelector(SEL.quests.acceptInSlot),
-          };
-        })
+        .map((slot) => ({
+          type: questType(slot),
+          title: slotTitle(slot),
+          ...questRewards(slot),
+          accept: slot.querySelector(SEL.quests.acceptInSlot),
+        }))
         .filter((q) => q.accept && isVisible(q.accept));
       const quest = brain.chooseQuest(offers, settings, places);
       if (quest) {
@@ -877,6 +895,6 @@
     work,
     quests,
     // Exposed for tests.
-    _internal: { foodHealAmount, isPlainFood, edible, dragAndDrop, readOpponents },
+    _internal: { foodHealAmount, isPlainFood, edible, dragAndDrop, readOpponents, questRewards },
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

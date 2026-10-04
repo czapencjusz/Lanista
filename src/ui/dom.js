@@ -113,6 +113,10 @@
     down: [['path', { d: 'M6 9l6 6 6-6' }]],
     grip: [['path', { d: 'M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01', 'stroke-width': 3 }]],
     report: [['path', { d: 'M5.5 21V4M5.5 4.5h12l-2.5 4 2.5 4h-12' }]],
+    gold: [
+      ['ellipse', { cx: 12, cy: 6.5, rx: 7, ry: 2.8 }],
+      ['path', { d: 'M5 6.5v5c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-5M5 11.5v5c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-5' }],
+    ],
     overview: [
       ['rect', { x: 4, y: 4, width: 7, height: 7, rx: 1.5 }],
       ['rect', { x: 13, y: 4, width: 7, height: 7, rx: 1.5 }],

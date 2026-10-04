@@ -77,6 +77,18 @@
       label: 'Prefer opponents I have beaten',
       help: 'Opponents beaten in the last two weeks are tried first, most wins first, before the choice above.',
     },
+    {
+      path: `${type}.perPlayerPerDay`,
+      type: 'number',
+      label: 'At most … attacks on one player a day',
+      help: 'Then that player is left alone until tomorrow. 0 = no limit.',
+    },
+    {
+      path: `${type}.perDay`,
+      type: 'number',
+      label: 'At most … attacks a day',
+      help: 'Then this waits for tomorrow (midnight, your time). 0 = no limit.',
+    },
   ];
 
   const ALL_TABS = [
@@ -451,6 +463,18 @@
       ],
     },
     {
+      id: 'gold',
+      title: 'Gold',
+      icon: 'gold',
+      enable: 'gold.hide',
+      description:
+        "Gold on hand can be stolen by anyone who beats you in the arena. Lanista keeps what's above your limit in your guild's market as \"gold packs\": it buys the dearest pack a guildmate listed that your spare gold pays for, and lists it again at the same price for 24 hours. When a guildmate buys it, your gold comes back as a gold package, safe in the packages (leave Packages > Gold packages off to keep it there). Only listings far above the item's worth count as packs; your own are never bought.",
+      fields: [
+        { path: 'gold.keep', type: 'number', label: 'Keep on hand', unit: 'gold', help: 'Training, repairs and food are paid from this.' },
+        { path: 'gold.minPack', type: 'number', label: 'Smallest pack', unit: 'gold', help: 'Listings cheaper than this are left alone.' },
+      ],
+    },
+    {
       id: 'auction',
       title: 'Auction house',
       icon: 'auction',
@@ -506,6 +530,23 @@
           type: 'toggle',
           label: 'Only quests for activities that are on',
           help: 'For example, skip arena quests while the arena is off.',
+        },
+        {
+          path: 'quests.skipTimed',
+          type: 'toggle',
+          label: 'Skip quests with a time limit',
+          help: 'They fail when the time runs out, which can happen while waiting for cooldowns.',
+        },
+        { path: 'quests.skipFoodReward', type: 'toggle', label: 'Skip quests that reward food' },
+        {
+          path: 'quests.rankBy',
+          type: 'select',
+          label: 'Of the rest, take the one with the most',
+          options: [
+            { value: 'gold', label: 'Gold' },
+            { value: 'honour', label: 'Honour' },
+            { value: 'xp', label: 'Experience' },
+          ],
         },
       ],
     },
@@ -609,6 +650,7 @@
       c.where !== 'local' && c.limitLevels && `levels −${c.maxBelow} to +${c.maxAbove}`,
       c.preferBeaten && 'beaten ones first',
       ignored && `${times(ignored, 'name', 'names')} never attacked`,
+      c.perDay && `at most ${c.perDay} a day`,
     ]);
   }
 
@@ -659,7 +701,14 @@
     },
     quests: (s) => {
       const on = ['combat', 'arena', 'circus', 'expedition', 'dungeon', 'items', 'work'].filter((k) => s.quests.types[k]);
-      return line([on.length ? on.join(', ') : 'no quest types ticked', s.quests.matchLocation && 'only where it fights']);
+      const q = s.quests;
+      return line([
+        on.length ? on.join(', ') : 'no quest types ticked',
+        q.matchLocation && 'only where it fights',
+        q.skipTimed && 'no time limits',
+        q.skipFoodReward && 'no food rewards',
+        q.rankBy !== 'gold' && `most ${q.rankBy === 'xp' ? 'experience' : 'honour'} first`,
+      ]);
     },
     work: (s) => line([`job ${s.work.job + 1}`, times(s.work.hours, 'hour', 'hours'), 'once the points run out']),
     training: (s) => {
@@ -686,6 +735,7 @@
         ]) || 'no rules switched on'
       );
     },
+    gold: (s) => line([`keeps ${fmt(s.gold.keep)} on hand`, 'the rest in guild market packs']),
     auction: (s) => {
       const a = s.auction;
       return line([`at least ${a.minHpPerGold} HP per gold`, `up to ${fmt(a.maxPerRound)} gold a round`, `keeps ${fmt(a.keepGold)} gold`]);
@@ -708,7 +758,7 @@
     [null, ['overview', 'general']],
     ['Fights', ['expedition', 'dungeon', 'underworld', 'arena', 'circus']],
     ['Character', ['heal', 'quests', 'work', 'training']],
-    ['Items', ['repair', 'smelting', 'packages', 'auction']],
+    ['Items', ['gold', 'repair', 'smelting', 'packages', 'auction']],
     ['Lanista', ['schedule', 'safety', 'notifications', 'interface', 'stats', 'log', 'profile']],
   ];
   const byId = Object.fromEntries(ALL_TABS.map((t) => [t.id, t]));

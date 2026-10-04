@@ -123,7 +123,7 @@ async function withGame(game, fn) {
 test('reads packages: quality (missing = green), kind, size, value and expiry', () => {
   const doc = new JSDOM(packagesPage([SHIELD, BOOTS, BONES])).window.document;
   const items = packages.readPackageItems(doc).map(({ el, ...rest }) => rest);
-  assert.deepEqual(items[0], { cn: -1, name: 'Sugos Viking Shield', type: 4, quality: 1, level: 110, amount: 1, value: 18721, w: 2, h: 2, expiresInMs: 6 * DAY });
+  assert.deepEqual(items[0], { cn: -1, name: 'Sugos Viking Shield', type: 4, quality: 1, level: 110, basis: null, amount: 1, value: 18721, w: 2, h: 2, expiresInMs: 6 * DAY });
   assert.equal(items[1].quality, 0, 'no data-quality: Ceres (green)');
   assert.equal(items[2].quality, -1);
   assert.equal(items[2].value, 108, 'value of the whole stack');

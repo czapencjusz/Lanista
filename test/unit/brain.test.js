@@ -509,3 +509,32 @@ test('the local arena has no levels: weakest is the next rank up, strongest the 
   assert.equal(brain.filterOpponents(local, { ...s.arena, limitLevels: true }, 110).length, 3, 'the level range does not apply');
   assert.equal(s.arena.where, 'provinciarum', 'Provinciarum by default');
 });
+
+test('arena limits: per player and per day, counted from the fights, reset at midnight', () => {
+  const m = memory();
+  const fight = (type, opponent, at = NOW) => {
+    m.pending = { type, at, attempts: 1, opponent };
+    brain.resolvePending(makeState({ report: { win: true, gold: 552, xp: 1, renown: 8 } }), m, at + 1000);
+  };
+  const cfg = { ...makeSettings().arena, perPlayerPerDay: 2, perDay: 3 };
+  fight('arena', 'Akesak');
+  fight('arena', 'akesak');
+  assert.deepEqual(brain.cappedNames(m, 'arena', cfg, NOW), ['akesak'], 'twice today: left alone');
+  assert.deepEqual(brain.cappedNames(m, 'circus', cfg, NOW), [], 'the circus counts separately');
+  assert.deepEqual(brain.cappedNames(m, 'arena', { ...cfg, perPlayerPerDay: 0 }, NOW), [], '0 = no limit');
+
+  const s = makeSettings({ expedition: { enabled: false }, arena: { enabled: true, perDay: 3 } });
+  const ready = makeState({ expedition: cd(false, 600000, { points: 0 }), arena: cd(true) });
+  assert.equal(brain.decide(ready, s, m, NOW).type, 'arena');
+  fight('arena', 'Sargeras');
+  assert.equal(brain.decide(ready, s, m, NOW).type, 'wait', '3 attacks today: no more');
+  const tile = brain.activityStatus(ready, s, m, NOW).arena;
+  assert.equal(tile.text, 'daily limit');
+  assert.equal(new Date(tile.until).getHours(), 0, 'until midnight');
+
+  const tomorrow = NOW + 24 * 3600 * 1000;
+  assert.equal(brain.decide(ready, s, m, tomorrow).type, 'arena', 'a new day');
+  assert.deepEqual(brain.cappedNames(m, 'arena', cfg, tomorrow), []);
+  assert.equal(makeSettings().arena.perPlayerPerDay, 5);
+  assert.equal(makeSettings().arena.perDay, 0);
+});

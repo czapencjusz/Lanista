@@ -422,7 +422,7 @@
 
     // Quests, repairs, smelting, the auction house and the packages are
     // multi-step and keep their own failure handling.
-    if (!['quests', 'repair', 'smelt', 'auction', 'packages', 'underworld', 'premium'].includes(decision.type)) {
+    if (!['quests', 'repair', 'smelt', 'auction', 'packages', 'underworld', 'premium', 'gold'].includes(decision.type)) {
       const attempt = brain.beginAttempt(memory, decision.type, now, settings, state);
       if (!attempt.ok) {
         log('warn', attempt.message);
@@ -434,7 +434,7 @@
     }
     // Multi-step actions (navigate, then act) re-decide on every page; log
     // the reason once per run. Repairs log their own steps (workbench.js).
-    if (['repair', 'smelt', 'auction', 'packages'].includes(decision.type)) log('debug', decision.reason);
+    if (['repair', 'smelt', 'auction', 'packages', 'gold'].includes(decision.type)) log('debug', decision.reason);
     else if (!memory.pending || memory.pending.attempts === 1) log('info', decision.reason);
     await persist();
     await send({ type: 'heartbeat', host: location.host, nextAt: now + 60000, enabled: true });

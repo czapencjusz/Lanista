@@ -56,6 +56,7 @@
         type: Number(el.dataset.contentType) || 0,
         quality: qualityOf(el),
         level: Number(el.dataset.level) || 0,
+        basis: el.dataset.basis || null,
         amount,
         value: (Number(el.dataset.priceGold) || 0) * amount,
         w: Number(el.dataset.measurementX) || 1,
@@ -164,7 +165,10 @@
       if (p.enabled && p.collectGold) await collectGold(ctx);
       let items = await listPackages(sh);
 
-      if (p.enabled && p.storeResources && items.some((i) => i.type === RESOURCE_TYPE)) {
+      // Gold packs are resources too: never store one before it is listed.
+      const packsWaiting = settings.gold.hide && memory.goldPacks.some((g) => g.state === 'bought');
+      if (packsWaiting && p.storeResources) ctx.log('debug', 'Packages: not storing resources while a gold pack waits to be listed');
+      if (p.enabled && p.storeResources && !packsWaiting && items.some((i) => i.type === RESOURCE_TYPE)) {
         await ctx.humanDelay();
         const stored = await GBot.workbench.storePackagedResources(sh);
         if (stored > 0) ctx.log('info', `Stored ${fmt(stored)} resources from the packages in the Horreum`);
@@ -223,7 +227,7 @@
 
   GBot.actions = GBot.actions || {};
   GBot.actions.packages = packagesAction;
-  GBot.packages = { readPackageItems, qualityOf, lastPage };
+  GBot.packages = { readPackageItems, qualityOf, lastPage, listAll: listPackages };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = GBot.packages;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

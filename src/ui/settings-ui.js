@@ -537,6 +537,7 @@
         }
         if (stats.soldGold) cards.appendChild(card('Gold from sales', formatNumber(stats.soldGold), rate(stats.soldGold)));
         if (stats.goldCollected) cards.appendChild(card('Gold from packages', formatNumber(stats.goldCollected), rate(stats.goldCollected)));
+        if (stats.goldHidden) cards.appendChild(card('Gold hidden', formatNumber(stats.goldHidden), 'in guild market packs'));
         if (stats.goldStart !== null && stats.goldNow !== null) {
           const diff = stats.goldNow - stats.goldStart;
           cards.appendChild(card('Gold change', `${diff >= 0 ? '+' : ''}${formatNumber(diff)}`, `now ${formatNumber(stats.goldNow)}`));

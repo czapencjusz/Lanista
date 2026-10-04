@@ -64,6 +64,10 @@
       underworldRun: null,
       // ... and outside it, per local day: { day, mobilisations, gateKeys }.
       itemsToday: null,
+      // Guild market gold packs held: bought (to be listed) or listed
+      // ({ type, amount, basis, price, state, at }), and the next look.
+      goldPacks: [],
+      nextGoldCheck: 0,
       // Food bought from the merchants today ({ day, gold, items }), and the
       // shop tab it was found in last ({ sub, subsub }).
       foodBought: null,
@@ -102,6 +106,7 @@
         sold: 0,
         soldGold: 0,
         foodBought: 0,
+        goldHidden: 0,
         goldCollected: 0,
         auctionBids: 0,
         goldSpent: 0,
@@ -113,6 +118,9 @@
       },
       // Arena / circus opponents that beat us: type -> { name: until }.
       avoid: { arena: {}, circus: {} },
+      // Arena / circus attacks today: { day, arena: { total, players:
+      // { name: n } }, circus: ... }.
+      attacksToday: null,
       // ... and that we beat: type -> { name: { wins, at } }.
       beaten: { arena: {}, circus: {} },
       log: [],
@@ -140,6 +148,7 @@
       repairSkip: { ...(memory.repairSkip || {}) },
       smeltQueue: Array.isArray(memory.smeltQueue) ? memory.smeltQueue : [],
       history: Array.isArray(memory.history) ? memory.history : [],
+      goldPacks: Array.isArray(memory.goldPacks) ? memory.goldPacks : [],
       log: Array.isArray(memory.log) ? memory.log : [],
     };
   }
@@ -362,6 +371,10 @@
       return { type: 'training', reason: 'Train a stat with spare gold' };
     }
 
+    if (wantsGold(state, settings, memory, now)) {
+      return { type: 'gold', reason: 'Keep spare gold in the guild market' };
+    }
+
     for (const type of settings.general.order) {
       if (type === 'quests') {
         if (!settings.quests.enabled || isBlocked(memory, 'quests', now)) continue;
@@ -382,6 +395,10 @@
         continue;
       }
       if (USES_POINTS[type] && outOfPoints(cd, cfg, state.underworld)) continue;
+      if ((type === 'arena' || type === 'circus') && dailyLimitReached(memory, type, cfg, now)) {
+        wake.push({ label: `${LABELS[type]} (daily limit)`, at: nextMidnight(now) });
+        continue;
+      }
       if (cd.ready) return { type, reason: `${state.underworld && type === 'expedition' ? 'Underworld expedition' : LABELS[type]} is ready` };
       if (cd.remainingMs !== null && cd.remainingMs !== undefined) wake.push({ label: LABELS[type], at: now + cd.remainingMs });
     }
@@ -401,6 +418,31 @@
     // A few seconds of slack after a cooldown ends, like a human would take.
     const until = Math.max(now + MIN_WAIT_MS, next.at + 2000 + Math.floor(Math.random() * 8000));
     return { type: 'wait', until, reason: 'Waiting', next };
+  }
+
+  // Gold to hide, or packs to list again, and the time has come to look.
+  function wantsGold(state, settings, memory, now) {
+    const cfg = settings.gold;
+    if (!cfg.hide || isBlocked(memory, 'gold', now) || (memory.nextGoldCheck || 0) > now) return false;
+    const packsDue = (memory.goldPacks || []).some((p) => p.state === 'bought' || now - p.at > 24 * 3600 * 1000);
+    const spare = state.gold === null || state.gold === undefined ? 0 : state.gold - cfg.keep;
+    return packsDue || spare >= cfg.minPack;
+  }
+
+  // The guild market gold pack to buy: the dearest that `spare` pays for,
+  // from someone else, and priced far above the item's worth (a real item
+  // for sale is never bought).
+  function pickGoldPack(offers, { spare, minPack, me }) {
+    const mine = String(me || '').trim().toLowerCase();
+    const packs = (offers || []).filter(
+      (o) =>
+        o.canBuy &&
+        o.price >= minPack &&
+        o.price <= spare &&
+        o.price >= 20 * Math.max(1, o.value) * Math.max(1, o.amount) &&
+        (!mine || String(o.seller).trim().toLowerCase() !== mine)
+    );
+    return packs.sort((a, b) => b.price - a.price)[0] || null;
   }
 
   function wantsTraining(state, settings, memory, now) {
@@ -630,6 +672,7 @@
       else if (isBlocked(memory, type, now)) Object.assign(s, { text: 'paused', until: memory.blockedUntil[type], warn: true });
       else if (USES_POINTS[type] && outOfPoints(cd, cfg, state.underworld)) s.text = 'no points';
       else if (NEEDS_HP[type] && hpLow) Object.assign(s, { text: 'low HP', warn: true });
+      else if ((type === 'arena' || type === 'circus') && dailyLimitReached(memory, type, cfg, now)) Object.assign(s, { text: 'daily limit', until: nextMidnight(now) });
       else if (cd.ready) Object.assign(s, { text: 'ready', ready: true });
       else if (cd.remainingMs) Object.assign(s, { text: 'cooldown', until: now + cd.remainingMs });
       else s.text = 'waiting';
@@ -699,6 +742,7 @@
           memory.beaten[type][key] = { wins: ((prev && prev.wins) || 0) + 1, at: now };
         }
         if (type === 'expedition' && pending.enemy !== undefined) events.push(...trackExpeditionLosses(memory, pending, state.report.win, now));
+        if (type === 'arena' || type === 'circus') countAttack(memory, type, pending.opponent, now);
         if (!state.report.win && pending.opponent && memory.avoid[type] && pending.avoidHours > 0) {
           memory.avoid[type][pending.opponent.toLowerCase()] = now + pending.avoidHours * 3600 * 1000;
           events.push({ level: 'info', message: `${LABELS[type]}: avoiding ${pending.opponent} for ${pending.avoidHours}h after a loss` });
@@ -706,6 +750,7 @@
       } else if (cd && cd.available && !cd.ready) {
         success = true;
         message = `${type} attack done`;
+        if (type === 'arena' || type === 'circus') countAttack(memory, type, pending.opponent, now);
       }
     } else if (type === 'heal') {
       // Ignore the few HP that natural regeneration adds during a reload.
@@ -858,6 +903,43 @@
     return Object.keys(list);
   }
 
+  // Today's arena / circus attacks ({ total, players: { name: n } }),
+  // without changing memory.
+  function attacksToday(memory, type, now) {
+    const t = memory.attacksToday;
+    return t && t.day === dayOf(now) && t[type] ? t[type] : { total: 0, players: {} };
+  }
+
+  function countAttack(memory, type, opponent, now) {
+    const day = dayOf(now);
+    if (!memory.attacksToday || memory.attacksToday.day !== day) {
+      memory.attacksToday = { day, arena: { total: 0, players: {} }, circus: { total: 0, players: {} } };
+    }
+    const t = memory.attacksToday[type];
+    t.total += 1;
+    if (opponent) {
+      const key = opponent.trim().toLowerCase();
+      t.players[key] = (t.players[key] || 0) + 1;
+    }
+  }
+
+  // Players attacked as often today as allowed (lower-case names).
+  function cappedNames(memory, type, cfg, now) {
+    if (!(cfg.perPlayerPerDay > 0)) return [];
+    const players = attacksToday(memory, type, now).players;
+    return Object.keys(players).filter((name) => players[name] >= cfg.perPlayerPerDay);
+  }
+
+  // True once the day's attacks are used up.
+  const dailyLimitReached = (memory, type, cfg, now) => cfg.perDay > 0 && attacksToday(memory, type, now).total >= cfg.perDay;
+
+  // The next local midnight.
+  function nextMidnight(now) {
+    const d = new Date(now);
+    d.setHours(24, 0, 0, 0);
+    return d.getTime();
+  }
+
   // Quests are a sequence of clicks (finish, accept, ...). Cap the number of
   // steps per 10 minutes so a broken button cannot cause a reload loop.
   function questStep(memory, now) {
@@ -989,6 +1071,8 @@
     };
     if (!quest.type || !q.types[quest.type]) return false;
     if (q.onlyActive && doing[quest.type] === false) return false;
+    if (q.skipTimed && quest.timed) return false;
+    if (q.skipFoodReward && quest.foodReward) return false;
     const here = where[quest.type];
     if (!q.matchLocation || !here) return true;
     const m = String(quest.title || '').match(/^([^:]+):/);
@@ -998,7 +1082,9 @@
   function chooseQuest(offers, settings, places = {}) {
     const ok = offers.filter((quest) => questWanted(quest, settings, places));
     if (!ok.length) return null;
-    return ok.slice().sort((a, b) => (b.reward || 0) - (a.reward || 0))[0];
+    // `reward` is the gold; honour and xp come from the reward tooltips.
+    const key = { gold: 'reward', honour: 'honour', xp: 'xp' }[settings.quests.rankBy] || 'reward';
+    return ok.slice().sort((a, b) => (b[key] || 0) - (a[key] || 0) || (b.reward || 0) - (a.reward || 0))[0];
   }
 
   // A failed quest keeps its slot until it is started again. It is started
@@ -1023,6 +1109,8 @@
     failedQuestStep,
     pickTraining,
     wantsTraining,
+    wantsGold,
+    pickGoldPack,
     conditionOf,
     pickRepair,
     repairDolls,
@@ -1056,6 +1144,8 @@
     materialsAvailable,
     recordFight,
     avoidedNames,
+    attacksToday,
+    cappedNames,
     LABELS,
     createMemory,
     normalizeMemory,

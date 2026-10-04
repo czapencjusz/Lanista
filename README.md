@@ -30,7 +30,8 @@ it. (It used to be called GBot.)
 - **Arena and Circus Turma**, in the Provinciarum (players from other servers) or on your own
   server. Go for the weakest, the strongest or a random opponent, stay near your own level, keep a
   never-attack list, and steer clear of anyone who beat you recently. Optionally it goes back to
-  people you've already beaten first. Your buddies are never attacked. On your own server the game
+  people you've already beaten first. Your buddies are never attacked, and you can cap the attacks
+  per player and per day. On your own server the game
   only shows the players ranked just above you, without levels, so "weakest" means the next rank
   up. The local Circus also needs your participation status set to Active; Lanista leaves that
   switch to you.
@@ -72,10 +73,15 @@ it. (It used to be called GBot.)
 
 - **Training.** Spends gold above a reserve on stats, always the cheapest of the ones you pick, so
   they grow evenly. Spent gold can't be stolen in the arena, either.
+- **Keeping gold safe.** Gold on hand gets stolen when someone beats you in the arena. Lanista can
+  keep everything above a limit in your guild's market as *gold packs*: it buys the dearest pack a
+  guildmate listed that your spare gold covers and lists it again at the same price. When a
+  guildmate buys it, the gold comes back as a gold package, safe in your packages.
 - **Stable work.** Takes a job once you're out of expedition and dungeon points.
 - **Pantheon quests.** Hands in finished quests and picks up the best-paying new ones of the kinds you
   want, skipping ones for places you don't fight at. A failed quest gets another go (twice a day at
-  most); one it wouldn't do anyway is dropped, so it doesn't hog a slot.
+  most); one it wouldn't do anyway is dropped, so it doesn't hog a slot. It can also skip quests with
+  a time limit or a food reward, and go for the most gold, honour or experience.
 - **Point refills.** If you want, it uses Gate Keys and Mobilisations you already own when your
   points run out, up to a daily limit.
 - **Small stuff.** Grabs the daily login bonus and closes pop-ups.
@@ -193,13 +199,14 @@ apply as you go.
 | Expedition | Location, which enemy, learning bonuses before the boss, an easier enemy after losses, points to keep, Mobilisations per day |
 | Dungeon | Location, Normal or Advanced, points to keep, skipping the boss, starting over after losses, Gate Keys per day |
 | Underworld | Fighting on/off, the HP limit, entering automatically, Mobilisations and healing potions per visit |
-| Arena / Circus Turma | Provinciarum or your own server, who to attack, level range, never-attack list, avoiding people who beat you, going back to people you beat |
+| Arena / Circus Turma | Provinciarum or your own server, who to attack, level range, never-attack list, avoiding people who beat you, going back to people you beat, limits per player and per day |
 | **Character** | |
 | Health | Eating on/off, when to eat, when to stop fighting, which bags hold food, plain food only, buying food from the merchants |
-| Quests | Which quest types, only quests that fit what you're doing |
+| Quests | Which quest types, only quests that fit what you're doing, skipping time limits and food rewards, gold, honour or experience first |
 | Stable work | Which job, how many hours |
 | Training | Gold to keep, which stats |
 | **Items** | |
+| Gold | Keeping gold above a limit in guild market gold packs |
 | Repair | When to repair, the *Repair all* cutoff, best materials to use, whose gear to look after |
 | Smelting | On/off, where the resources go, automatic smelting rules |
 | Packages | Gold packages, resources, selling rules, packages about to expire |
