@@ -51,7 +51,8 @@ it. (It used to be called GBot.)
   other goodies stay untouched (you can switch this off).
 - **Food from the auction house.** Optionally bids on cheap food in the auction house, late in the
   round when you're least likely to be outbid, within a budget you set. Heads-up: the game keeps
-  your gold if someone outbids you, so it bids once per item and never early.
+  your gold if someone outbids you, so it bids once per item and never early. It can bid on gear
+  too: the kinds you pick, from a minimum quality, up to a price per lot.
 - **Food from the merchants.** When the food bags and the packages are both empty, it can buy a few
   pieces from the General goods merchant, best HP per gold first, within a daily budget and never
   below the gold you want to keep. It's pricier than the auction house, so think of it as a backup.
@@ -63,11 +64,13 @@ it. (It used to be called GBot.)
   it back on. There's also a **Repair all** button on the overview page, on your character and on
   each mercenary's tab ([more below](#repairs)).
 - **Smelting.** Tick items on the packages page (or tick a whole page at once), or let rules pick
-  them by quality and kind. It keeps the smelter busy and puts the resources in the Horreum.
+  them by quality and kind. You can also set aside a bag or two as a *smelt bin*: whatever you drop
+  in gets smelted. It keeps the smelter busy and puts the resources in the Horreum.
 - **Tidying the packages.** Takes gold out of gold packages, stores resources in the Horreum, sells
   gear you don't want to a merchant, and rescues packages that are about to expire
-  ([more below](#tidying-the-packages)). There's also a one-click **Store all resources in the
-  Horreum** button on the packages page.
+  ([more below](#tidying-the-packages)). It can also take chosen things out into your bags
+  (upgrades, boosts, scrolls, recipes, tools, mercenary items) and learn scrolls you don't know yet.
+  There's also a one-click **Store all resources in the Horreum** button on the packages page.
 
 ### Everything else
 
@@ -160,7 +163,8 @@ kind (weapons, armour, rings and amulets). Every 30 minutes Lanista goes through
    your bags, or sells them.
 
 Items you ticked for smelting are never sold, smelting rules come before selling rules, and anything
-that matches nothing stays put. It's all off until you turn it on.
+that matches nothing stays put. Names you put on the *Never sell or smelt* list are left alone too.
+It's all off until you turn it on.
 
 ## Getting around
 
@@ -208,9 +212,9 @@ apply as you go.
 | **Items** | |
 | Gold | Keeping gold above a limit in guild market gold packs |
 | Repair | When to repair, the *Repair all* cutoff, best materials to use, whose gear to look after |
-| Smelting | On/off, where the resources go, automatic smelting rules |
-| Packages | Gold packages, resources, selling rules, packages about to expire |
-| Auction house | Bidding on/off, price per HP, how late to bid, budget, gold to keep, how much food is enough |
+| Smelting | On/off, where the resources go, automatic smelting rules, smelt bins |
+| Packages | Gold packages, resources, selling rules, packages about to expire, names to keep, item types to take out, learning scrolls |
+| Auction house | Bidding on/off, food and gear, price per HP, gear kinds, quality and price, how late to bid, budget, gold to keep, how much food is enough |
 | **Lanista** | |
 | Schedule | Active hours, random breaks |
 | Timing & safety | Click delays, how long to wait between checks, what to do when something keeps failing |

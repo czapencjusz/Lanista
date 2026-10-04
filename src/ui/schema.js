@@ -417,6 +417,13 @@
           help: KINDS_HELP,
           items: GEAR_KINDS.map(([kind, label]) => ({ path: `smelting.autoTypes.${kind}`, label })),
         },
+        {
+          path: 'smelting.bins',
+          type: 'checks',
+          label: 'Smelt everything in bags',
+          help: 'Inventory tabs I-VIII used as smelt bins: drop items in and anything the smelter takes gets smelted. Keep them free of things you want to keep. None ticked = off.',
+          items: ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'].map((label, i) => ({ path: `smelting.bins.b${i + 1}`, label })),
+        },
       ],
     },
     {
@@ -460,6 +467,33 @@
           help: 'Any package, not only gear. Moving needs free room in your bags.',
         },
         { path: 'packages.expiringHours', type: 'number', label: 'About to expire means less than', unit: 'h left' },
+        {
+          path: 'packages.keepNames',
+          type: 'textarea',
+          label: 'Never sell or smelt',
+          placeholder: 'One name or part of a name per line',
+          help: 'Items whose name contains one of these are left alone by the selling and smelting rules (still rescued before their package expires).',
+        },
+        {
+          path: 'packages.pick',
+          type: 'checks',
+          label: 'Take these out into my bags',
+          help: 'From the packages into a free spot in your bags (not the food bags while others have room).',
+          items: [
+            { path: 'packages.pick.upgrades', label: 'Upgrades (grindstones, powders)' },
+            { path: 'packages.pick.boosts', label: 'Boosts' },
+            { path: 'packages.pick.scrolls', label: 'Scrolls' },
+            { path: 'packages.pick.recipes', label: 'Recipes' },
+            { path: 'packages.pick.tools', label: 'Tools' },
+            { path: 'packages.pick.mercenary', label: 'Mercenary items' },
+          ],
+        },
+        {
+          path: 'packages.learnScrolls',
+          type: 'toggle',
+          label: 'Learn new scrolls',
+          help: "A scroll in the packages whose prefix or suffix the forge does not list yet is used, which learns it. Scrolls you already know are left alone.",
+        },
       ],
     },
     {
@@ -479,9 +513,10 @@
       title: 'Auction house',
       icon: 'auction',
       enable: 'auction.enabled',
-      description: 'Bid on healing items (food and potions) in the auction house. Careful: the game keeps your gold if someone outbids you, so the bot bids late, once per lot, and only at a price you accept. Buyout costs rubies and is never used. Won items arrive as packages; healing takes food from there when the bags are empty.',
+      description: 'Bid on healing items (food and potions) and, if you like, gear in the auction house. Careful: the game keeps your gold if someone outbids you, so the bot bids late, once per lot, and only at a price you accept. Buyout costs rubies and is never used. Won items arrive as packages; healing takes food from there when the bags are empty.',
       fields: [
-        { path: 'auction.minHpPerGold', type: 'number', label: 'Only lots that heal at least', unit: 'HP per gold', step: 0.1, help: 'Heal amount divided by the bid. 4 means a 2,000 HP bread may cost up to 500 gold.' },
+        { path: 'auction.food', type: 'toggle', label: 'Bid on food' },
+        { path: 'auction.minHpPerGold', type: 'number', label: 'Only lots that heal at least', unit: 'HP per gold', step: 0.1, dependsOn: 'auction.food', help: 'Heal amount divided by the bid. 4 means a 2,000 HP bread may cost up to 500 gold.' },
         {
           path: 'auction.bidWhen',
           type: 'select',
@@ -495,7 +530,24 @@
         },
         { path: 'auction.maxPerRound', type: 'number', label: 'Spend at most', unit: 'gold per auction round', step: 1000 },
         { path: 'auction.keepGold', type: 'number', label: 'Always keep', unit: 'gold', step: 10000 },
-        { path: 'auction.maxFood', type: 'number', label: 'Stop at', unit: 'healing items owned', help: 'Food and potions in your bags and packages.' },
+        { path: 'auction.maxFood', type: 'number', label: 'Stop at', unit: 'healing items owned', dependsOn: 'auction.food', help: 'Food and potions in your bags and packages.' },
+        { path: 'auction.gear', type: 'toggle', label: 'Bid on gear', help: 'Within the same round budget and gold reserve as food.' },
+        {
+          path: 'auction.gearTypes',
+          type: 'checks',
+          label: 'Kinds',
+          dependsOn: 'auction.gear',
+          help: KINDS_HELP,
+          items: GEAR_KINDS.map(([kind, label]) => ({ path: `auction.gearTypes.${kind}`, label })),
+        },
+        {
+          path: 'auction.gearMinQuality',
+          type: 'select',
+          label: 'At least',
+          dependsOn: 'auction.gear',
+          options: QUALITIES.map((q, i) => ({ value: i - 1, label: q })),
+        },
+        { path: 'auction.gearMaxPrice', type: 'number', label: 'At most', unit: 'gold per lot', step: 1000, dependsOn: 'auction.gear' },
       ],
     },
     {
@@ -722,7 +774,12 @@
     },
     smelting: (s) => {
       const m = s.smelting;
-      return line([`resources to the ${m.storeIn === 'horreum' ? 'Horreum' : 'packages'}`, m.auto ? `picks items up to ${quality(m.autoUpTo)}` : 'only what you tick']);
+      const bins = ROMAN.filter((_, i) => m.bins && m.bins[`b${i + 1}`]);
+      return line([
+        `resources to the ${m.storeIn === 'horreum' ? 'Horreum' : 'packages'}`,
+        m.auto ? `picks items up to ${quality(m.autoUpTo)}` : 'only what you tick',
+        bins.length && `everything in ${bins.length === 1 ? 'bag' : 'bags'} ${bins.join(', ')}`,
+      ]);
     },
     packages: (s) => {
       const p = s.packages;
@@ -732,13 +789,20 @@
           p.storeResources && 'stores resources',
           p.sell && `sells up to ${quality(p.sellUpTo)}`,
           p.expiring === 'bag' ? 'rescues expiring ones' : p.expiring === 'sell' ? 'sells expiring ones' : null,
+          Object.values(p.pick || {}).some(Boolean) && 'takes chosen items out',
+          p.learnScrolls && 'learns scrolls',
         ]) || 'no rules switched on'
       );
     },
     gold: (s) => line([`keeps ${fmt(s.gold.keep)} on hand`, 'the rest in guild market packs']),
     auction: (s) => {
       const a = s.auction;
-      return line([`at least ${a.minHpPerGold} HP per gold`, `up to ${fmt(a.maxPerRound)} gold a round`, `keeps ${fmt(a.keepGold)} gold`]);
+      return line([
+        a.food && `food at ${a.minHpPerGold}+ HP per gold`,
+        a.gear && `${QUALITY_NAMES[a.gearMinQuality + 1]}+ gear up to ${fmt(a.gearMaxPrice)}`,
+        `up to ${fmt(a.maxPerRound)} gold a round`,
+        `keeps ${fmt(a.keepGold)} gold`,
+      ]);
     },
   };
 

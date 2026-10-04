@@ -15,6 +15,7 @@
   const brain = GBot.brain;
 
   const FOOD_TYPE = 64; // data-content-type of food and healing potions
+  const QUALITY_NAMES = ['Standard', 'Ceres', 'Neptun', 'Mars', 'Jupiter', 'Olymp'];
   const USABLES = 7; // "Usables" in the auction and packages filters
   const RETRY_MS = 10 * 60 * 1000;
 
@@ -40,6 +41,7 @@
           id: form.querySelector(SEL.auction.lotId).value,
           name: lines[0] || '',
           type: item ? Number(item.dataset.contentType) : null,
+          quality: item && GBot.packages ? GBot.packages.qualityOf(item) : null,
           heal: item && Number(item.dataset.contentType) === FOOD_TYPE ? healOf(item) : 0,
           plain: item ? GBot.actions._internal.isPlainFood(item) : false,
           minBid: bid ? parseNumber(bid.value) : null,
@@ -96,41 +98,48 @@
         note(`time:${rank}`, `Auction: the round time is "${label || '?'}", waiting to bid until it is later`);
         return { retick: true };
       }
-      const owned = await countFood(sh, ctx.settings);
-      if (owned >= cfg.maxFood) {
-        note('food', `Auction: you own ${owned} healing items (limit ${cfg.maxFood}), not bidding`);
-        return { retick: true };
-      }
 
       let gold = ctx.state.gold;
-      // Food the bot would not eat (eggs and the like) is not bid on either.
-      const wanted = ctx.settings.heal.plainOnly ? lots.filter((l) => l.plain) : lots;
-      const plan = brain.planAuctionBids(wanted, cfg, { gold, spent: round.spent, bids: round.bids, owned });
-      if (!plan.length) {
-        note('none', `Auction: no new lot heals at least ${cfg.minHpPerGold} HP per gold within your gold limits`);
-        return { retick: true };
-      }
-      memory.auctionNote = null;
-      for (const lot of plan) {
-        await ctx.humanDelay();
-        const action = new URL(lot.form.getAttribute('action'), location.href).href;
-        const html = await GBot.forge.post(action, bidBody(lot.form, lot.minBid));
-        // The answer is the auction page again: the bid went through if the
-        // gold in the header dropped by the bid.
-        const after = parseNumber((new DOMParser().parseFromString(html, 'text/html').querySelector(SEL.gold) || {}).textContent);
-        round.bids[lot.id] = lot.minBid;
-        if (after === null || gold - after < lot.minBid) {
-          ctx.log('warn', `Auction: the bid on ${lot.name} (${lot.minBid.toLocaleString('en-US')} gold) was not taken; someone may have bid first`);
-          continue;
+      // Bids as the game's form sends them; the answer is the auction page
+      // again, and the bid went through if the gold in its header dropped.
+      const place = async (plan, describe) => {
+        for (const lot of plan) {
+          await ctx.humanDelay();
+          const action = new URL(lot.form.getAttribute('action'), location.href).href;
+          const html = await GBot.forge.post(action, bidBody(lot.form, lot.minBid));
+          const after = parseNumber((new DOMParser().parseFromString(html, 'text/html').querySelector(SEL.gold) || {}).textContent);
+          round.bids[lot.id] = lot.minBid;
+          if (after === null || gold - after < lot.minBid) {
+            ctx.log('warn', `Auction: the bid on ${lot.name} (${lot.minBid.toLocaleString('en-US')} gold) was not taken; someone may have bid first`);
+            continue;
+          }
+          gold = after;
+          round.spent += lot.minBid;
+          memory.stats.auctionBids = (memory.stats.auctionBids || 0) + 1;
+          memory.stats.goldSpent = (memory.stats.goldSpent || 0) + lot.minBid;
+          ctx.log('info', `Auction (${label}): bid ${lot.minBid.toLocaleString('en-US')} gold on ${lot.name} (${describe(lot)})`);
+          await ctx.persist();
         }
-        gold = after;
-        round.spent += lot.minBid;
-        memory.stats.auctionBids = (memory.stats.auctionBids || 0) + 1;
-        memory.stats.goldSpent = (memory.stats.goldSpent || 0) + lot.minBid;
-        const ratio = (lot.heal / lot.minBid).toFixed(1);
-        ctx.log('info', `Auction (${label}): bid ${lot.minBid.toLocaleString('en-US')} gold on ${lot.name} (+${lot.heal.toLocaleString('en-US')} HP, ${ratio} HP/gold)`);
-        await ctx.persist();
+      };
+
+      let bid = false;
+      if (cfg.food) {
+        const owned = await countFood(sh, ctx.settings);
+        // Food the bot would not eat (eggs and the like) is not bid on either.
+        const wanted = ctx.settings.heal.plainOnly ? lots.filter((l) => l.plain) : lots;
+        const plan = owned >= cfg.maxFood ? [] : brain.planAuctionBids(wanted, cfg, { gold, spent: round.spent, bids: round.bids, owned });
+        if (owned >= cfg.maxFood) note('food', `Auction: you own ${owned} healing items (limit ${cfg.maxFood}), not bidding on food`);
+        else if (!plan.length) note('none', `Auction: no new lot heals at least ${cfg.minHpPerGold} HP per gold within your gold limits`);
+        await place(plan, (l) => `+${l.heal.toLocaleString('en-US')} HP, ${(l.heal / l.minBid).toFixed(1)} HP/gold`);
+        bid = bid || plan.length > 0;
       }
+      if (cfg.gear) {
+        const gearPage = await GBot.forge.getDoc(sh, { mod: 'auction', itemType: 0, itemQuality: cfg.gearMinQuality, qry: '' });
+        const plan = brain.planGearBids(readAuction(gearPage.doc).lots, cfg, { gold, spent: round.spent, bids: round.bids });
+        await place(plan, (l) => `${QUALITY_NAMES[l.quality + 1] || 'gear'}, ${brain.gearKind(l.type)}`);
+        bid = bid || plan.length > 0;
+      }
+      if (bid) memory.auctionNote = null;
     } catch (e) {
       memory.nextAuctionCheck = now + RETRY_MS;
       throw e;

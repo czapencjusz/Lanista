@@ -355,7 +355,8 @@
 
     // Smelting only sends requests (no page change) and never touches the
     // character, so it goes before the fights.
-    if (settings.smelting.enabled && memory.smeltNext && memory.smeltNext <= now && !isBlocked(memory, 'smelt', now)) {
+    const smeltDue = (memory.smeltNext && memory.smeltNext <= now) || (smeltBins(settings).length > 0 && !memory.smeltNext);
+    if (settings.smelting.enabled && smeltDue && !isBlocked(memory, 'smelt', now)) {
       return { type: 'smelt', reason: 'Smelting' };
     }
 
@@ -536,8 +537,25 @@
   // 'smelt' | 'sell' | 'bag' | null (leave it). Smelting rules go first, then
   // selling, then rescuing packages about to expire. Items ticked for
   // smelting (queued) are the smelter's.
+  // Package filter ids ("Type of object") of the item types that can be
+  // taken into the bags.
+  const PICK_FILTERS = { upgrades: 12, boosts: 11, scrolls: 20, recipes: 13, tools: 19, mercenary: 15 };
+
+  // Is the item named on the "never sell or smelt" list?
+  const keptByName = (name, settings) => {
+    const list = parseNameList(settings.packages.keepNames);
+    const n = String(name || '').toLowerCase();
+    return list.some((part) => n.includes(part));
+  };
+
   function packageAction(item, settings) {
     if (item.queued) return null;
+    if (keptByName(item.name, settings)) {
+      // Kept: only ever rescued from an expiring package, never sold.
+      const p = settings.packages;
+      const expiring = item.expiresInMs !== null && item.expiresInMs !== undefined && item.expiresInMs <= p.expiringHours * 3600000;
+      return p.enabled && p.expiring !== 'off' && expiring ? 'bag' : null;
+    }
     const kind = gearKind(item.type);
     const s = settings.smelting;
     if (kind && s.enabled && s.auto && s.autoTypes[kind] && item.quality <= s.autoUpTo) return 'smelt';
@@ -588,6 +606,32 @@
     }
     return plan;
   }
+
+  // Gear lots to bid on: of the chosen kinds, at least the chosen quality,
+  // at most the price per lot; best quality first, then cheapest. Within
+  // the gold above the reserve and the round's budget.
+  function planGearBids(lots, cfg, { gold, spent, bids }) {
+    const good = lots
+      .filter((l) => {
+        const kind = gearKind(l.type || 0);
+        return kind && cfg.gearTypes[kind] && l.quality !== null && l.quality >= cfg.gearMinQuality && l.minBid > 0 && l.minBid <= cfg.gearMaxPrice && !(l.id in bids);
+      })
+      .sort((a, b) => b.quality - a.quality || a.minBid - b.minBid);
+    const plan = [];
+    let free = gold - cfg.keepGold;
+    let budget = cfg.maxPerRound - spent;
+    for (const lot of good) {
+      if (lot.minBid > free || lot.minBid > budget) continue;
+      plan.push(lot);
+      free -= lot.minBid;
+      budget -= lot.minBid;
+    }
+    return plan;
+  }
+
+  // Inventory bags set as smelt bins (512-519).
+  const smeltBins = (settings) =>
+    Array.from({ length: 8 }, (_, i) => i).filter((i) => settings.smelting.bins && settings.smelting.bins[`b${i + 1}`]).map((i) => FIRST_BAG + i);
 
   // Does the "Repair all" button take this item? (at or below the cutoff)
   const inRepairAll = (item, settings) => !!item.condition && item.condition.percent <= settings.repair.allUpToPercent;
@@ -1147,6 +1191,10 @@
     auctionTimeOk,
     auctionRecheckMs,
     planAuctionBids,
+    planGearBids,
+    smeltBins,
+    keptByName,
+    PICK_FILTERS,
     freeSpot,
     materialsAvailable,
     recordFight,

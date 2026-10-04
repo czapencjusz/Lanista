@@ -184,6 +184,9 @@
       // 1 Neptun (blue), 2 Mars, 3 Jupiter, 4 Olymp.
       autoUpTo: 0,
       autoTypes: { weapons: true, armour: true, jewellery: false },
+      // Inventory bags whose items are all smelted (a "smelt bin"): put
+      // items there to have them smelted. None ticked = off.
+      bins: { b1: false, b2: false, b3: false, b4: false, b5: false, b6: false, b7: false, b8: false },
     },
 
     packages: {
@@ -200,6 +203,14 @@
       // Packages about to expire: 'off' | 'bag' (move into the bags) | 'sell'.
       expiring: 'bag',
       expiringHours: 24,
+      // Item types taken out of the packages into the bags (by the
+      // packages page's "Type of object" filter).
+      pick: { upgrades: false, boosts: false, scrolls: false, recipes: false, tools: false, mercenary: false },
+      // Use scrolls whose prefix or suffix the forge does not know yet.
+      learnScrolls: false,
+      // Items whose name contains one of these (one per line) are never
+      // sold or smelted by the rules.
+      keepNames: '',
     },
 
     gold: {
@@ -212,8 +223,9 @@
     },
 
     auction: {
-      // Bid on healing items in the auction house.
+      // Bid in the auction house: on healing items, and optionally on gear.
       enabled: false,
+      food: true,
       // Only lots that heal at least this many HP per gold of the bid.
       minHpPerGold: 4,
       // 'short' (short or very short) | 'medium' (medium or shorter) |
@@ -225,6 +237,12 @@
       keepGold: 100000,
       // Stop bidding while the bags and packages hold this many healing items.
       maxFood: 50,
+      // Gear: of these kinds, at least this quality (-1 Standard ... 4
+      // Olymp), for at most this much per lot.
+      gear: false,
+      gearTypes: { weapons: true, armour: true, jewellery: true },
+      gearMinQuality: 2,
+      gearMaxPrice: 50000,
     },
 
     quests: {
@@ -348,6 +366,9 @@
     'auction.maxPerRound': { int: true, min: 0, max: 2000000000 },
     'auction.keepGold': { int: true, min: 0, max: 2000000000 },
     'auction.maxFood': { int: true, min: 1, max: 500 },
+    'auction.gearMinQuality': { int: true, min: -1, max: 4 },
+    'auction.gearMaxPrice': { int: true, min: 0, max: 2000000000 },
+    'packages.keepNames': { maxLength: 2000 },
     'repair.maxQuality': { int: true, min: -1, max: 4 },
     'schedule.start': { pattern: TIME },
     'schedule.end': { pattern: TIME },

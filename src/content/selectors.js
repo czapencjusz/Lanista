@@ -210,6 +210,8 @@
     },
     // The character's name on the overview.
     playerName: '.playername_achievement',
+    // The forge's lists of known prefixes and suffixes (mod=forge&submod=forge).
+    forgeAffixes: '#content select[name^="prefix"] option, #content select[name^="suffix"] option',
 
     // Training ground: one button and one cost per stat, in stat order.
     training: {

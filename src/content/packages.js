@@ -7,6 +7,9 @@
 //   smelt      gear by quality and kind -> the smelting queue (smelter.js)
 //   sell       gear by quality and kind -> a bag -> a merchant's shop grid
 //   expiring   packages about to expire -> a bag, or sold
+//   pick       chosen item types (upgrades, boosts, scrolls...) -> a bag
+//   scrolls    scrolls with a prefix or suffix the forge does not know
+//              yet -> a bag -> used (learned)
 //
 // Selling is what a player does by dragging an item onto a merchant: the
 // same "move" request, into the shop grid's container.
@@ -138,6 +141,81 @@
     }
   }
 
+  // A free bag spot, outside the food bags when there is room elsewhere.
+  async function spotOutsideFood(ctx, w, h) {
+    const food = brain.foodBags(ctx.settings);
+    const others = [512, 513, 514, 515, 516, 517, 518, 519].filter((b) => !food.includes(b));
+    if (others.length) {
+      try {
+        return await GBot.forge.freeBagSpot(ctx.state.sh, w, h, others);
+      } catch (e) {
+        if (!/^No room/.test(e.message)) throw e;
+      }
+    }
+    return GBot.forge.freeBagSpot(ctx.state.sh, w, h);
+  }
+
+  async function intoBag(ctx, item) {
+    const spot = await spotOutsideFood(ctx, item.w, item.h);
+    await ctx.humanDelay();
+    const moved = await GBot.forge.moveItem(ctx.state.sh, { from: item.cn, fromX: 1, fromY: 1, to: spot.bag, toX: spot.x, toY: spot.y, amount: item.amount });
+    return { ...spot, itemId: moved && moved.to && moved.to.data && moved.to.data.itemId };
+  }
+
+  // The chosen item types go from the packages into the bags.
+  async function pickTypes(ctx, room) {
+    const picks = settingsPicks(ctx.settings);
+    let moved = 0;
+    for (const [kind, filter] of picks) {
+      const items = await listPackages(ctx.state.sh, { f: filter });
+      let count = 0;
+      for (const item of items) {
+        if (moved >= room) return { moved, more: true };
+        await intoBag(ctx, item);
+        moved += 1;
+        count += 1;
+        await ctx.persist();
+      }
+      if (count) ctx.log('info', `Took ${count} ${PICK_LABELS[kind]}${count === 1 ? '' : 's'} out of the packages into your bags`);
+    }
+    return { moved, more: false };
+  }
+
+  const PICK_LABELS = { upgrades: 'upgrade', boosts: 'boost', scrolls: 'scroll', recipes: 'recipe', tools: 'tool', mercenary: 'mercenary item' };
+  const settingsPicks = (settings) => Object.entries(brain.PICK_FILTERS).filter(([kind]) => settings.packages.pick && settings.packages.pick[kind]);
+
+  // The prefixes and suffixes the forge knows (its selects' option names).
+  async function knownAffixes(sh) {
+    const { doc } = await GBot.forge.getDoc(sh, { mod: 'forge', submod: 'forge' });
+    const names = Array.from(doc.querySelectorAll(SEL.forgeAffixes))
+      .map((o) => o.textContent.trim())
+      .filter((n) => n && n !== '-');
+    if (!names.length) throw new ActionError('Could not read the known prefixes and suffixes from the forge');
+    return names;
+  }
+
+  // A scroll teaches the prefix or suffix in its name ("Lepidus Scroll",
+  // "Scroll of hell"): unknown while no known name is part of it.
+  const scrollKnown = (name, known) => known.some((k) => name.toLowerCase().includes(k.toLowerCase()));
+
+  async function learnScrolls(ctx) {
+    const sh = ctx.state.sh;
+    const scrolls = await listPackages(sh, { f: brain.PICK_FILTERS.scrolls });
+    if (!scrolls.length) return;
+    let known = await knownAffixes(sh);
+    for (const scroll of scrolls) {
+      if (scrollKnown(scroll.name, known)) continue;
+      const spot = await intoBag(ctx, scroll);
+      await ctx.humanDelay();
+      await GBot.forge.moveItem(sh, { from: spot.bag, fromX: spot.x, fromY: spot.y, to: 8, toX: 1, toY: 1, amount: 1 });
+      const before = known.length;
+      known = await knownAffixes(sh);
+      if (known.length > before) ctx.log('info', `Learned ${scroll.name}`);
+      else ctx.log('warn', `Used ${scroll.name}, but the forge lists nothing new`);
+      await ctx.persist();
+    }
+  }
+
   async function goldNow(sh) {
     const { doc } = await GBot.forge.getDoc(sh, { mod: 'overview' });
     return parseNumber((doc.querySelector(SEL.gold) || {}).textContent);
@@ -218,6 +296,22 @@
         ctx.log('info', `Queued ${toSmelt} item${toSmelt === 1 ? '' : 's'} from the packages for smelting`);
         memory.smeltNext = Math.min(memory.smeltNext || Infinity, ctx.now());
       }
+      if (p.enabled && p.learnScrolls) {
+        try {
+          await learnScrolls(ctx);
+        } catch (e) {
+          if (!/^No room/.test(e.message)) throw e;
+          ctx.log('warn', `Packages: ${e.message}; learning scrolls later`);
+        }
+      }
+      if (p.enabled && !more && settingsPicks(settings).length) {
+        try {
+          more = (await pickTypes(ctx, MAX_MOVES - moves)).more;
+        } catch (e) {
+          if (!/^No room/.test(e.message)) throw e;
+          ctx.log('warn', `Packages: ${e.message}; taking items out later`);
+        }
+      }
       memory.nextPackagesCheck = ctx.now() + (more ? MORE_MS : CHECK_MS);
     } catch (e) {
       memory.nextPackagesCheck = ctx.now() + RETRY_MS;
@@ -228,7 +322,7 @@
 
   GBot.actions = GBot.actions || {};
   GBot.actions.packages = packagesAction;
-  GBot.packages = { readPackageItems, qualityOf, lastPage, listAll: listPackages };
+  GBot.packages = { readPackageItems, qualityOf, lastPage, listAll: listPackages, scrollKnown };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = GBot.packages;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
