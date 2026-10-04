@@ -168,9 +168,20 @@
   // ---------------------------------------------------------------- steps
 
   // A free spot for a w x h item, in any bag or only in `bags` (numbers).
+  // Bags the account does not have (V-VIII until bought): their tabs say
+  // data-available="false", though the page lists them, empty.
+  function lockedBags(html) {
+    const locked = new Set();
+    for (const tag of html.match(/<[^>]*data-bag-number="\d+"[^>]*>/g) || []) {
+      if (/data-available="false"/.test(tag)) locked.add(Number(/data-bag-number="(\d+)"/.exec(tag)[1]));
+    }
+    return locked;
+  }
+
   async function freeBagSpot(sh, w, h, bags = null) {
     const { html } = await getDoc(sh, { mod: 'overview' });
-    const spot = brain.freeSpot(readBags(html).filter((b) => !bags || bags.includes(b.bag)), w, h);
+    const locked = lockedBags(html);
+    const spot = brain.freeSpot(readBags(html).filter((b) => !locked.has(b.bag) && (!bags || bags.includes(b.bag))), w, h);
     if (!spot) throw new ActionError(`No room in the ${bags ? 'food ' : ''}bags for a ${w}x${h} item`);
     return spot;
   }
@@ -425,7 +436,7 @@
   GBot.actions.repair = repair;
   GBot.workbench = { readDoll, readBags, readSlots, readStock, stockTotal, storePackagedResources };
   // Request helpers shared with the smelter (smelter.js).
-  GBot.forge = { getDoc, ajax, post, moveItem, tooltipLines, readBags, readBagItems, readSlots, freeBagSpot, RENT_GOLD };
+  GBot.forge = { getDoc, ajax, post, moveItem, tooltipLines, readBags, readBagItems, readSlots, freeBagSpot, lockedBags, RENT_GOLD };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = GBot.workbench;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

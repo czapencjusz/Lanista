@@ -478,7 +478,7 @@
           path: 'packages.pick',
           type: 'checks',
           label: 'Take these out into my bags',
-          help: 'From the packages into a free spot in your bags (not the food bags while others have room).',
+          help: 'From the packages into a free spot in your bags, never into the food bags you chose under Health. When the other bags are full it waits until there is room.',
           items: [
             { path: 'packages.pick.upgrades', label: 'Upgrades (grindstones, powders)' },
             { path: 'packages.pick.boosts', label: 'Boosts' },

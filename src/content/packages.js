@@ -141,25 +141,30 @@
     }
   }
 
-  // A free bag spot, outside the food bags when there is room elsewhere.
-  async function spotOutsideFood(ctx, w, h) {
+  // A free bag spot outside the food bags. Only an item used right away (a
+  // scroll) may borrow room in a food bag when the others are full.
+  async function spotOutsideFood(ctx, w, h, borrowFood) {
     const food = brain.foodBags(ctx.settings);
     const others = [512, 513, 514, 515, 516, 517, 518, 519].filter((b) => !food.includes(b));
-    if (others.length) {
-      try {
-        return await GBot.forge.freeBagSpot(ctx.state.sh, w, h, others);
-      } catch (e) {
-        if (!/^No room/.test(e.message)) throw e;
-      }
+    if (!others.length) return GBot.forge.freeBagSpot(ctx.state.sh, w, h);
+    try {
+      return await GBot.forge.freeBagSpot(ctx.state.sh, w, h, others);
+    } catch (e) {
+      if (!/^No room/.test(e.message)) throw e;
+      if (!borrowFood) throw new ActionError(`No room in the bags outside your food bags for a ${w}x${h} item`);
     }
     return GBot.forge.freeBagSpot(ctx.state.sh, w, h);
   }
 
-  async function intoBag(ctx, item) {
-    const spot = await spotOutsideFood(ctx, item.w, item.h);
+  async function intoBag(ctx, item, borrowFood = false) {
+    const spot = await spotOutsideFood(ctx, item.w, item.h, borrowFood);
     await ctx.humanDelay();
     const moved = await GBot.forge.moveItem(ctx.state.sh, { from: item.cn, fromX: 1, fromY: 1, to: spot.bag, toX: spot.x, toY: spot.y, amount: item.amount });
-    return { ...spot, itemId: moved && moved.to && moved.to.data && moved.to.data.itemId };
+    const itemId = moved && moved.to && moved.to.data && moved.to.data.itemId;
+    // The game answers a move it did not make without an error, but also
+    // without the item's new id.
+    if (!itemId) throw new ActionError(`The game did not take ${item.name} into bag ${spot.bag - 511}`);
+    return { ...spot, itemId };
   }
 
   // The chosen item types go from the packages into the bags.
@@ -169,14 +174,23 @@
     for (const [kind, filter] of picks) {
       const items = await listPackages(ctx.state.sh, { f: filter });
       let count = 0;
+      const said = () => count && ctx.log('info', `Took ${count} ${PICK_LABELS[kind]}${count === 1 ? '' : 's'} out of the packages into your bags`);
       for (const item of items) {
-        if (moved >= room) return { moved, more: true };
-        await intoBag(ctx, item);
+        if (moved >= room) {
+          said();
+          return { moved, more: true };
+        }
+        try {
+          await intoBag(ctx, item);
+        } catch (e) {
+          said();
+          throw e;
+        }
         moved += 1;
         count += 1;
         await ctx.persist();
       }
-      if (count) ctx.log('info', `Took ${count} ${PICK_LABELS[kind]}${count === 1 ? '' : 's'} out of the packages into your bags`);
+      said();
     }
     return { moved, more: false };
   }
@@ -205,7 +219,7 @@
     let known = await knownAffixes(sh);
     for (const scroll of scrolls) {
       if (scrollKnown(scroll.name, known)) continue;
-      const spot = await intoBag(ctx, scroll);
+      const spot = await intoBag(ctx, scroll, true);
       await ctx.humanDelay();
       await GBot.forge.moveItem(sh, { from: spot.bag, fromX: spot.x, fromY: spot.y, to: 8, toX: 1, toY: 1, amount: 1 });
       const before = known.length;
@@ -308,7 +322,7 @@
         try {
           more = (await pickTypes(ctx, MAX_MOVES - moves)).more;
         } catch (e) {
-          if (!/^No room/.test(e.message)) throw e;
+          if (!/^(No room|The game did not take)/.test(e.message)) throw e;
           ctx.log('warn', `Packages: ${e.message}; taking items out later`);
         }
       }

@@ -160,3 +160,64 @@ test('auction lots carry their quality', () => {
   const doc = new window.DOMParser().parseFromString(`<div>${lot('item-i-purple', ' data-quality="2"')}${lot('item-i-green')}</div>`, 'text/html');
   assert.deepEqual(auction.readAuction(doc).lots.map((l) => [l.quality, l.minBid]), [[2, 1200], [0, 1200]]);
 });
+
+// s303 on 2026-10-04: bag I holds food, II-IV are full, and V-VIII are not
+// bought (their tabs say data-available="false") though the page lists them.
+function lockedBagsGame({ upgrades = 1, moveAnswer = (q) => ({ to: { data: { itemId: 5 } } }) } = {}) {
+  const s = { moves: [] };
+  const full = Array.from({ length: 40 }, (_, i) => `<div data-content-type="4096" data-position-x="${(i % 8) + 1}" data-position-y="${Math.floor(i / 8) + 1}"></div>`).join('');
+  const nav = [512, 513, 514, 515, 516, 517, 518, 519]
+    .map((n) => `<a class="awesome-tabs" data-bag-number="${n}" data-available="${n < 516}" data-extend-message="">x</a>`)
+    .join('');
+  const pkg = (cn, name) => `<div class="packageItem"><div data-container-number="${cn}"><div data-content-type="4096" data-tooltip="${tip([name])}"></div></div></div>`;
+  const fetch = async (url) => {
+    const u = new URL(url);
+    const q = Object.fromEntries(u.searchParams);
+    const reply = (text) => ({ ok: true, text: async () => text });
+    if (q.submod === 'move') {
+      s.moves.push(`${q.from} -> ${q.to}`);
+      return reply(JSON.stringify(moveAnswer(q)));
+    }
+    if (q.mod === 'overview') return reply(`<div id="inventory_nav">${nav}</div>${bagLoader(['', full, full, full, '', '', '', ''])}`);
+    if (q.mod === 'packages') {
+      const items = q.f === '12' ? Array.from({ length: upgrades }, (_, i) => pkg(-(i + 1), 'Small grindstone')).join('') : '';
+      return reply(`<div id="packages">${items}</div>`);
+    }
+    throw new Error(`unexpected ${url}`);
+  };
+  return { s, fetch };
+}
+
+const onlyBagOne = { b1: true, b2: false, b3: false, b4: false, b5: false, b6: false, b7: false, b8: false };
+
+test('locked bags are never used, and picked items stay out of the food bags', async () => {
+  const game = lockedBagsGame();
+  const { ctx, logs } = context({ heal: { bags: onlyBagOne }, packages: { enabled: true, collectGold: false, pick: { upgrades: true } } });
+  await withFetch(game.fetch, () => GBot.actions.packages(ctx));
+  assert.deepEqual(game.s.moves, [], 'not bag V (516), which the account does not have, and not the food bag I');
+  assert.ok(logs.includes('warn: Packages: No room in the bags outside your food bags for a 1x1 item; taking items out later'), logs.join(' / '));
+
+  // With every bag a food bag (the default), the first free spot is fine.
+  const open = lockedBagsGame();
+  const all = context({ packages: { enabled: true, collectGold: false, pick: { upgrades: true } } });
+  await withFetch(open.fetch, () => GBot.actions.packages(all.ctx));
+  assert.deepEqual(open.s.moves, ['-1 -> 512']);
+  assert.ok(all.logs.includes('info: Took 1 upgrade out of the packages into your bags'));
+});
+
+test('picking says how many it moved, also when it stops at 10 for this round', async () => {
+  const game = lockedBagsGame({ upgrades: 12 });
+  const { ctx, logs } = context({ packages: { enabled: true, collectGold: false, pick: { upgrades: true } } });
+  await withFetch(game.fetch, () => GBot.actions.packages(ctx));
+  assert.equal(game.s.moves.length, 10);
+  assert.ok(logs.includes('info: Took 10 upgrades out of the packages into your bags'), logs.join(' / '));
+  assert.equal(ctx.memory.nextPackagesCheck, NOW + 60 * 1000, 'the rest a minute later');
+});
+
+test('a move the game did not make stops the picking with a warning', async () => {
+  const game = lockedBagsGame({ upgrades: 3, moveAnswer: () => ({}) });
+  const { ctx, logs } = context({ packages: { enabled: true, collectGold: false, pick: { upgrades: true } } });
+  await withFetch(game.fetch, () => GBot.actions.packages(ctx));
+  assert.deepEqual(game.s.moves, ['-1 -> 512'], 'stops after the first');
+  assert.ok(logs.includes('warn: Packages: The game did not take Small grindstone into bag 1; taking items out later'), logs.join(' / '));
+});
