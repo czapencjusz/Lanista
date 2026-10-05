@@ -7,6 +7,9 @@
 //   smelt      gear by quality and kind -> the smelting queue (smelter.js)
 //   sell       gear by quality and kind -> a bag -> a merchant's shop grid
 //   expiring   packages about to expire -> a bag, or sold
+//   pick       chosen item types (upgrades, boosts, scrolls...) -> a bag
+//   scrolls    scrolls with a prefix or suffix the forge does not know
+//              yet -> a bag -> used (learned)
 //
 // Selling is what a player does by dragging an item onto a merchant: the
 // same "move" request, into the shop grid's container.
@@ -56,6 +59,7 @@
         type: Number(el.dataset.contentType) || 0,
         quality: qualityOf(el),
         level: Number(el.dataset.level) || 0,
+        basis: el.dataset.basis || null,
         amount,
         value: (Number(el.dataset.priceGold) || 0) * amount,
         w: Number(el.dataset.measurementX) || 1,
@@ -137,6 +141,95 @@
     }
   }
 
+  // A free bag spot outside the food bags. Only an item used right away (a
+  // scroll) may borrow room in a food bag when the others are full.
+  async function spotOutsideFood(ctx, w, h, borrowFood) {
+    const food = brain.foodBags(ctx.settings);
+    const others = [512, 513, 514, 515, 516, 517, 518, 519].filter((b) => !food.includes(b));
+    if (!others.length) return GBot.forge.freeBagSpot(ctx.state.sh, w, h);
+    try {
+      return await GBot.forge.freeBagSpot(ctx.state.sh, w, h, others);
+    } catch (e) {
+      if (!/^No room/.test(e.message)) throw e;
+      if (!borrowFood) throw new ActionError(`No room in the bags outside your food bags for a ${w}x${h} item`);
+    }
+    return GBot.forge.freeBagSpot(ctx.state.sh, w, h);
+  }
+
+  async function intoBag(ctx, item, borrowFood = false) {
+    const spot = await spotOutsideFood(ctx, item.w, item.h, borrowFood);
+    await ctx.humanDelay();
+    const moved = await GBot.forge.moveItem(ctx.state.sh, { from: item.cn, fromX: 1, fromY: 1, to: spot.bag, toX: spot.x, toY: spot.y, amount: item.amount });
+    const itemId = moved && moved.to && moved.to.data && moved.to.data.itemId;
+    // The game answers a move it did not make without an error, but also
+    // without the item's new id.
+    if (!itemId) throw new ActionError(`The game did not take ${item.name} into bag ${spot.bag - 511}`);
+    return { ...spot, itemId };
+  }
+
+  // The chosen item types go from the packages into the bags.
+  async function pickTypes(ctx, room) {
+    const picks = settingsPicks(ctx.settings);
+    let moved = 0;
+    for (const [kind, filter] of picks) {
+      const items = await listPackages(ctx.state.sh, { f: filter });
+      let count = 0;
+      const said = () => count && ctx.log('info', `Took ${count} ${PICK_LABELS[kind]}${count === 1 ? '' : 's'} out of the packages into your bags`);
+      for (const item of items) {
+        if (moved >= room) {
+          said();
+          return { moved, more: true };
+        }
+        try {
+          await intoBag(ctx, item);
+        } catch (e) {
+          said();
+          throw e;
+        }
+        moved += 1;
+        count += 1;
+        await ctx.persist();
+      }
+      said();
+    }
+    return { moved, more: false };
+  }
+
+  const PICK_LABELS = { upgrades: 'upgrade', boosts: 'boost', scrolls: 'scroll', recipes: 'recipe', tools: 'tool', mercenary: 'mercenary item' };
+  const settingsPicks = (settings) => Object.entries(brain.PICK_FILTERS).filter(([kind]) => settings.packages.pick && settings.packages.pick[kind]);
+
+  // The prefixes and suffixes the forge knows (its selects' option names).
+  async function knownAffixes(sh) {
+    const { doc } = await GBot.forge.getDoc(sh, { mod: 'forge', submod: 'forge' });
+    const names = Array.from(doc.querySelectorAll(SEL.forgeAffixes))
+      .map((o) => o.textContent.trim())
+      .filter((n) => n && n !== '-');
+    if (!names.length) throw new ActionError('Could not read the known prefixes and suffixes from the forge');
+    return names;
+  }
+
+  // A scroll teaches the prefix or suffix in its name ("Lepidus Scroll",
+  // "Scroll of hell"): unknown while no known name is part of it.
+  const scrollKnown = (name, known) => known.some((k) => name.toLowerCase().includes(k.toLowerCase()));
+
+  async function learnScrolls(ctx) {
+    const sh = ctx.state.sh;
+    const scrolls = await listPackages(sh, { f: brain.PICK_FILTERS.scrolls });
+    if (!scrolls.length) return;
+    let known = await knownAffixes(sh);
+    for (const scroll of scrolls) {
+      if (scrollKnown(scroll.name, known)) continue;
+      const spot = await intoBag(ctx, scroll, true);
+      await ctx.humanDelay();
+      await GBot.forge.moveItem(sh, { from: spot.bag, fromX: spot.x, fromY: spot.y, to: 8, toX: 1, toY: 1, amount: 1 });
+      const before = known.length;
+      known = await knownAffixes(sh);
+      if (known.length > before) ctx.log('info', `Learned ${scroll.name}`);
+      else ctx.log('warn', `Used ${scroll.name}, but the forge lists nothing new`);
+      await ctx.persist();
+    }
+  }
+
   async function goldNow(sh) {
     const { doc } = await GBot.forge.getDoc(sh, { mod: 'overview' });
     return parseNumber((doc.querySelector(SEL.gold) || {}).textContent);
@@ -164,7 +257,11 @@
       if (p.enabled && p.collectGold) await collectGold(ctx);
       let items = await listPackages(sh);
 
-      if (p.enabled && p.storeResources && items.some((i) => i.type === RESOURCE_TYPE)) {
+      // Gold packs are resources too: never store one before it is listed
+      // (again).
+      const packsWaiting = brain.goldPacksDue(memory, ctx.now());
+      if (packsWaiting && p.storeResources) ctx.log('debug', 'Packages: not storing resources while a gold pack waits to be listed');
+      if (p.enabled && p.storeResources && !packsWaiting && items.some((i) => i.type === RESOURCE_TYPE)) {
         await ctx.humanDelay();
         const stored = await GBot.workbench.storePackagedResources(sh);
         if (stored > 0) ctx.log('info', `Stored ${fmt(stored)} resources from the packages in the Horreum`);
@@ -213,6 +310,22 @@
         ctx.log('info', `Queued ${toSmelt} item${toSmelt === 1 ? '' : 's'} from the packages for smelting`);
         memory.smeltNext = Math.min(memory.smeltNext || Infinity, ctx.now());
       }
+      if (p.enabled && p.learnScrolls) {
+        try {
+          await learnScrolls(ctx);
+        } catch (e) {
+          if (!/^No room/.test(e.message)) throw e;
+          ctx.log('warn', `Packages: ${e.message}; learning scrolls later`);
+        }
+      }
+      if (p.enabled && !more && settingsPicks(settings).length) {
+        try {
+          more = (await pickTypes(ctx, MAX_MOVES - moves)).more;
+        } catch (e) {
+          if (!/^(No room|The game did not take)/.test(e.message)) throw e;
+          ctx.log('warn', `Packages: ${e.message}; taking items out later`);
+        }
+      }
       memory.nextPackagesCheck = ctx.now() + (more ? MORE_MS : CHECK_MS);
     } catch (e) {
       memory.nextPackagesCheck = ctx.now() + RETRY_MS;
@@ -223,7 +336,7 @@
 
   GBot.actions = GBot.actions || {};
   GBot.actions.packages = packagesAction;
-  GBot.packages = { readPackageItems, qualityOf, lastPage };
+  GBot.packages = { readPackageItems, qualityOf, lastPage, listAll: listPackages, scrollKnown, intoBag };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = GBot.packages;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

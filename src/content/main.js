@@ -28,6 +28,15 @@
   window.addEventListener('beforeunload', () => {
     unloading = true;
   });
+  // Pressing the game's own Logout: no logging back in after that.
+  document.addEventListener(
+    'click',
+    (e) => {
+      const link = e.isTrusted && e.target && e.target.closest ? e.target.closest('a[href*="submod=logout"]') : null;
+      if (link) send({ type: 'userLogout', host: HOST });
+    },
+    true
+  );
   window.addEventListener('pageshow', (e) => {
     // Restored from the back/forward cache: start over.
     if (e.persisted) {
@@ -46,11 +55,24 @@
 
   async function loadMemory() {
     const data = await ext.storage.local.get(MEMORY_KEY);
-    return brain.normalizeMemory(data[MEMORY_KEY], Date.now());
+    const loaded = brain.normalizeMemory(data[MEMORY_KEY], Date.now());
+    queueBase = brain.smeltKeys(loaded.smeltQueue);
+    return loaded;
   }
 
+  // The smelting queue as this tab last read it. Another tab (ticking items
+  // on its packages page) may change the stored queue meanwhile: saving
+  // then merges both sides' changes instead of overwriting theirs.
+  let queueBase = null;
+
   async function persist() {
-    if (memory && extensionAlive()) await ext.storage.local.set({ [MEMORY_KEY]: memory });
+    if (!memory || !extensionAlive()) return;
+    if (queueBase) {
+      const stored = (await ext.storage.local.get(MEMORY_KEY))[MEMORY_KEY];
+      if (stored && Array.isArray(stored.smeltQueue)) memory.smeltQueue = brain.mergeSmeltQueue(queueBase, memory.smeltQueue, stored.smeltQueue);
+    }
+    queueBase = brain.smeltKeys(memory.smeltQueue);
+    await ext.storage.local.set({ [MEMORY_KEY]: memory });
   }
 
   // Read-modify-write of the stored memory from UI buttons (reset stats...).
@@ -119,7 +141,7 @@
   // "Repair all" button under the character (or the mercenary shown) on the
   // overview page.
   function renderRepairButton(state) {
-    let box = document.getElementById('gbot-repair-all');
+    let box = document.getElementById('lanista-repair-all');
     const onOverview = state && state.inGame && state.page.mod === 'overview' && !state.page.submod;
     const dollNumber = Math.min(6, Math.max(1, Number((state && state.page.doll) || 1) || 1));
     const doll = document.querySelector('#char');
@@ -129,7 +151,7 @@
     }
     if (!box) {
       box = document.createElement('div');
-      box.id = 'gbot-repair-all';
+      box.id = 'lanista-repair-all';
       box.style.cssText = 'margin:4px 0 0;text-align:center;font:11px Arial,sans-serif;color:#4a2d0d';
       const button = document.createElement('button');
       button.type = 'button';
@@ -147,14 +169,14 @@
         });
       });
       const status = document.createElement('div');
-      status.className = 'gbot-repair-status';
+      status.className = 'lanista-repair-status';
       status.style.marginTop = '2px';
       box.append(button, status);
       doll.insertAdjacentElement('afterend', box);
     }
     const button = box.querySelector('button');
     button.dataset.doll = String(dollNumber);
-    const status = box.querySelector('.gbot-repair-status');
+    const status = box.querySelector('.lanista-repair-status');
     const cutoff = settings.repair.allUpToPercent;
     const worn = GBot.workbench.readDoll(document, dollNumber).filter((i) => brain.inRepairAll(i, settings));
     const quality = ['Standard', 'Ceres', 'Neptun', 'Mars', 'Jupiter', 'Olymp'][settings.repair.maxQuality + 1];
@@ -176,7 +198,7 @@
 
   // "Store all resources in the Horreum" button on the packages page.
   function renderPackagesButton(state) {
-    let box = document.getElementById('gbot-store-resources');
+    let box = document.getElementById('lanista-store-resources');
     const list = document.querySelector(GBot.selectors.SEL.packages.list);
     if (!(state && state.inGame && state.page.mod === 'packages') || !list) {
       if (box) box.remove();
@@ -187,7 +209,7 @@
       return;
     }
     box = document.createElement('div');
-    box.id = 'gbot-store-resources';
+    box.id = 'lanista-store-resources';
     box.style.cssText = 'margin:6px 0;text-align:center;font:11px Arial,sans-serif;color:#4a2d0d';
     const button = document.createElement('button');
     button.type = 'button';
@@ -215,7 +237,7 @@
     });
     const tickAll = document.createElement('button');
     tickAll.type = 'button';
-    tickAll.className = 'awesome-button gbot-smelt-all';
+    tickAll.className = 'awesome-button lanista-smelt-all';
     tickAll.style.marginLeft = '6px';
     tickAll.addEventListener('click', () => {
       const items = smeltableOnPage();
@@ -223,7 +245,7 @@
       setSmeltQueued(items, !all);
     });
     const queueLine = document.createElement('div');
-    queueLine.className = 'gbot-smelt-status';
+    queueLine.className = 'lanista-smelt-status';
     queueLine.style.marginTop = '3px';
     box.append(button, tickAll, status, queueLine);
     // Above the packages' "Content" header, with or without add-ons
@@ -260,12 +282,12 @@
     const items = smeltableOnPage();
     for (const el of items) {
       const pkg = el.closest('.packageItem');
-      let tick = pkg.querySelector('.gbot-smelt-tick');
+      let tick = pkg.querySelector('.lanista-smelt-tick');
       if (!tick) {
         if (getComputedStyle(pkg).position === 'static') pkg.style.position = 'relative';
         tick = document.createElement('input');
         tick.type = 'checkbox';
-        tick.className = 'gbot-smelt-tick';
+        tick.className = 'lanista-smelt-tick';
         tick.title = 'Smelt this item (Lanista)';
         tick.style.cssText = 'position:absolute;top:2px;right:2px;z-index:5;margin:0;width:15px;height:15px;cursor:pointer;accent-color:#b8382b';
         tick.addEventListener('click', (e) => e.stopPropagation());
@@ -274,14 +296,14 @@
       }
       tick.checked = smeltQueued(el);
     }
-    const tickAll = box.querySelector('.gbot-smelt-all');
+    const tickAll = box.querySelector('.lanista-smelt-all');
     const all = items.length && items.every((el) => smeltQueued(el));
     tickAll.textContent = all ? 'Untick all on this page' : 'Tick all on this page for smelting';
     tickAll.disabled = !items.length;
     tickAll.title = 'Queue every weapon, armour and jewellery item on this page for smelting. Smelting destroys the item and gives resources.';
     const queued = memory ? memory.smeltQueue.length : 0;
     const note = !settings || !settings.smelting.enabled ? ' (smelting is off under Settings > Smelting)' : !settings.enabled ? ' (starts when the bot runs)' : '';
-    box.querySelector('.gbot-smelt-status').textContent = queued ? `${queued} item${queued === 1 ? '' : 's'} queued for smelting${note}` : '';
+    box.querySelector('.lanista-smelt-status').textContent = queued ? `${queued} item${queued === 1 ? '' : 's'} queued for smelting${note}` : '';
   }
 
   function renderPageButtons(state) {
@@ -299,6 +321,18 @@
     if (state.gold !== null) {
       if (memory.stats.goldStart === null) memory.stats.goldStart = state.gold;
       memory.stats.goldNow = state.gold;
+    }
+  }
+
+  // Food the bot may eat in a food bag, as the bags came with this page
+  // (every page that shows the inventory embeds all eight).
+  function foodInBags() {
+    const script = Array.from(document.scripts).find((s) => s.textContent.includes('new BagLoader'));
+    if (!script || !settings) return false;
+    try {
+      return GBot.forge.readBagItems(script.textContent, brain.foodBags(settings)).some((el) => GBot.actions._internal.edible(el, settings));
+    } catch (e) {
+      return false;
     }
   }
 
@@ -341,9 +375,22 @@
         log('info', `Back from the Underworld${used.length ? ` (used ${used.join(' and ')})` : ''}`);
       }
       for (const event of brain.resolvePending(state, memory, now)) log(event.level, event.message);
+      const finished = brain.rollStatsDay(memory, now);
+      if (finished && settings.enabled) notify('dailySummary', brain.daySummary(finished));
+      for (const alert of brain.pageAlerts(state, memory)) if (settings.enabled) notify(alert.kind, alert.message);
+      // Out of food, and food has turned up in the bags since (put there by
+      // hand, or bought): no need to wait out the 30 minutes.
+      if ((memory.noFoodUntil || 0) > now && state.inGame && foodInBags()) {
+        memory.noFoodUntil = 0;
+        log('info', 'Found food in the food bags again');
+      }
       if (settings.enabled) brain.updateBreaks(settings.schedule, memory, now);
 
       let decision = brain.decide(state, settings, memory, now);
+      // For the remote "status" command.
+      if (state.inGame) {
+        memory.snapshot = { at: now, hp: state.hp ? state.hp.percent : null, gold: state.gold, level: state.level, underworld: state.underworld, doing: decision.reason || null, next: decision.next || null };
+      }
       // A repair also runs while paused; it must not run in two tabs at once.
       if ((settings.enabled || repairRunning()) && state.inGame) {
         const claim = await send({ type: 'claim', host: location.host });
@@ -371,9 +418,16 @@
       await send({ type: 'heartbeat', host: location.host, nextAt: null, enabled: false });
       // Another tab owns the bot: check again later in case it gets closed.
       if (decision.retryMs) schedule(tick, decision.retryMs);
-      if (settings.enabled && !state.inGame && now - lastAlertAt > 30 * 60 * 1000) {
-        lastAlertAt = now;
-        notify('loggedOut', 'Lanista is enabled but this is not an in-game page. Are you logged out?');
+      if (settings.enabled && !state.inGame) {
+        // Logged out: log back in through the lobby, if that is switched on
+        // (the background decides; it also keeps the number of tries down).
+        const rejoin = settings.general.rejoin ? await send({ type: 'rejoin', host: HOST }) : null;
+        if (rejoin && rejoin.ok) return;
+        if (now - lastAlertAt > 30 * 60 * 1000) {
+          lastAlertAt = now;
+          const why = rejoin && rejoin.reason ? ` (not logging back in: ${rejoin.reason})` : '';
+          notify('loggedOut', `Lanista is on but this is not an in-game page. Are you logged out?${why}`);
+        }
       }
       return;
     }
@@ -387,7 +441,7 @@
 
     // Quests, repairs, smelting, the auction house and the packages are
     // multi-step and keep their own failure handling.
-    if (!['quests', 'repair', 'smelt', 'auction', 'packages', 'underworld', 'premium'].includes(decision.type)) {
+    if (!['quests', 'repair', 'smelt', 'auction', 'packages', 'underworld', 'premium', 'gold', 'medic', 'gods', 'boosts', 'costume'].includes(decision.type)) {
       const attempt = brain.beginAttempt(memory, decision.type, now, settings, state);
       if (!attempt.ok) {
         log('warn', attempt.message);
@@ -399,7 +453,7 @@
     }
     // Multi-step actions (navigate, then act) re-decide on every page; log
     // the reason once per run. Repairs log their own steps (workbench.js).
-    if (['repair', 'smelt', 'auction', 'packages'].includes(decision.type)) log('debug', decision.reason);
+    if (['repair', 'smelt', 'auction', 'packages', 'gold', 'gods', 'boosts', 'costume'].includes(decision.type)) log('debug', decision.reason);
     else if (!memory.pending || memory.pending.attempts === 1) log('info', decision.reason);
     await persist();
     await send({ type: 'heartbeat', host: location.host, nextAt: now + 60000, enabled: true });
@@ -453,11 +507,24 @@
     loadServerSettings: S.loadSettings,
     onRunNow: () => {
       cancel();
+      // "Check now" also ends a wait for food: the user may just have put
+      // some in a bag.
+      if (memory && (memory.noFoodUntil || 0) > Date.now()) {
+        editMemory((m) => {
+          m.noFoodUntil = 0;
+        }).then(() => {
+          log('info', 'Checking the bags for food again');
+          tick();
+        });
+        return;
+      }
       tick();
     },
     onResetStats: () =>
       editMemory((m) => {
         m.stats = brain.createMemory(Date.now()).stats;
+        m.today = null;
+        m.history = [];
         m.blockedUntil = {};
         m.noFoodUntil = 0;
       }),
@@ -465,12 +532,25 @@
       editMemory((m) => {
         m.log = [];
       }),
+    onTestPush: (url) => send({ type: 'pushTest', url, host: HOST }),
+  });
+
+  // The remote "check" command: look at the game right away.
+  ext.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (!message || message.type !== 'checkNow') return false;
+    if (settings && settings.enabled && !running) {
+      cancel();
+      tick();
+    }
+    sendResponse({ ok: true });
+    return false;
   });
 
   ext.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     if (changes[MEMORY_KEY] && !running && changes[MEMORY_KEY].newValue) {
       memory = brain.normalizeMemory(changes[MEMORY_KEY].newValue, Date.now());
+      queueBase = brain.smeltKeys(memory.smeltQueue);
       panel.update({ memory, status: statusFor(lastState) });
       renderPageButtons(lastState);
     }

@@ -112,6 +112,25 @@
     up: [['path', { d: 'M6 15l6-6 6 6' }]],
     down: [['path', { d: 'M6 9l6 6 6-6' }]],
     grip: [['path', { d: 'M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01', 'stroke-width': 3 }]],
+    report: [['path', { d: 'M5.5 21V4M5.5 4.5h12l-2.5 4 2.5 4h-12' }]],
+    gold: [
+      ['ellipse', { cx: 12, cy: 6.5, rx: 7, ry: 2.8 }],
+      ['path', { d: 'M5 6.5v5c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-5M5 11.5v5c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-5' }],
+    ],
+    // A phone: remote control.
+    remote: [['rect', { x: 7, y: 2.5, width: 10, height: 19, rx: 2 }], ['path', { d: 'M11 18.5h2' }]],
+    // A temple: the gods.
+    gods: [['path', { d: 'M3.5 9L12 4l8.5 5zM4.5 20h15M6 9v8.5M10 9v8.5M14 9v8.5M18 9v8.5M3.5 17.5h17' }]],
+    // A potion flask: boosts.
+    boosts: [['path', { d: 'M9.5 3.5h5M10.5 3.5v5L5.6 17a2.3 2.3 0 0 0 2 3.5h8.8a2.3 2.3 0 0 0 2-3.5l-4.9-8.5v-5M7.7 14h8.6' }]],
+    // A tunic: costumes.
+    costumes: [['path', { d: 'M9 3.5L4 6.5l1.8 4 2.2-1V20.5h8V9.5l2.2 1 1.8-4-5-3c-.5 1.4-1.6 2.2-3 2.2s-2.5-.8-3-2.2z' }]],
+    overview: [
+      ['rect', { x: 4, y: 4, width: 7, height: 7, rx: 1.5 }],
+      ['rect', { x: 13, y: 4, width: 7, height: 7, rx: 1.5 }],
+      ['rect', { x: 4, y: 13, width: 7, height: 7, rx: 1.5 }],
+      ['rect', { x: 13, y: 13, width: 7, height: 7, rx: 1.5 }],
+    ],
   };
 
   function icon(name, size = 18) {
@@ -140,5 +159,83 @@
     return GBot.util ? GBot.util.formatDuration(until - now) : '';
   }
 
-  Object.assign(ui, { h, append, icon, ICONS, countdown });
+  // "Report a problem": a new issue on the project's GitHub page, with a
+  // short template, the version and (from the game's settings window) the
+  // last log lines. GitHub shows it all for editing before anything is
+  // posted.
+  const ISSUES_URL = 'https://github.com/czapencjusz/Lanista/issues/new';
+
+  // Log entries ({ t, level, message }) as plain text, oldest first. Game
+  // session codes (sh=...) are blanked: a log may end up in a public issue.
+  function logText(entries) {
+    const pad = (n) => String(n).padStart(2, '0');
+    return entries
+      .map((e) => {
+        const d = new Date(e.t);
+        const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        return `${stamp} ${String(e.level).padEnd(5)} ${String(e.message).replace(/\bsh=[^&\s"']+/g, 'sh=…')}`;
+      })
+      .join('\n');
+  }
+
+  // The newest log lines put into a report, and a cap on the link's length
+  // (GitHub turns very long ones away): older lines are dropped to fit.
+  const REPORT_LOG_LINES = 30;
+  const REPORT_URL_MAX = 7000;
+
+  function reportUrl(log = []) {
+    let version = '';
+    try {
+      const api = root.browser || root.chrome;
+      version = api.runtime.getManifest().version;
+    } catch (e) {
+      // Outside the extension (tests): no version.
+    }
+    const build = (entries) => {
+      const body = [
+        '**What happened?**',
+        '',
+        '',
+        '**What did you expect instead?**',
+        '',
+        '',
+        entries.length ? '**Where?** (server, game page, which feature)' : '**Where?** (server, game page, which feature; a few lines from the Log tab help a lot)',
+        '',
+        '',
+        ...(entries.length ? ['**Log** (the last lines; remove anything you would rather not share)', '```', logText(entries), '```', ''] : []),
+        `Lanista ${version}`.trim(),
+      ].join('\n');
+      return `${ISSUES_URL}?body=${encodeURIComponent(body)}`;
+    };
+    let entries = (log || []).slice(-REPORT_LOG_LINES);
+    let url = build(entries);
+    while (url.length > REPORT_URL_MAX && entries.length) {
+      entries = entries.slice(1);
+      url = build(entries);
+    }
+    return url;
+  }
+
+  // Link that opens the report page in a new tab: a labelled button, or
+  // an icon-only one for headers. `log` returns the log entries to attach;
+  // they are read when the link is followed, so the newest ones go in.
+  function reportLink({ iconOnly = false, log = null } = {}) {
+    const link = h(
+      'a',
+      {
+        class: iconOnly ? 'gb-icon-btn gb-report' : 'gb-btn gb-report',
+        href: reportUrl(),
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        title: log ? 'Report a problem on GitHub, with the last log lines (opens a new tab)' : 'Report a problem on GitHub (opens a new tab)',
+        'aria-label': 'Report a problem',
+      },
+      icon('report', 16),
+      iconOnly ? null : 'Report a problem'
+    );
+    if (log) link.addEventListener('click', () => (link.href = reportUrl(log() || [])));
+    return link;
+  }
+
+  Object.assign(ui, { h, append, icon, ICONS, countdown, logText, reportUrl, reportLink, ISSUES_URL });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

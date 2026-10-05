@@ -18,6 +18,14 @@
     hpPercent: '#header_values_hp_percent',
     level: '#header_values_level',
     gold: '#sstat_gold_val',
+    // Header menu: unread messages show as a count on Messages, like the
+    // count on Packages.
+    messagesMenu: '#menue_messages',
+    messagesCount: '#menue_messages .menue_new_count',
+    // The overview's stat boxes: strength, dexterity, agility,
+    // constitution, charisma, intelligence; the tooltip says "Agility: 1112
+    // | Basic: 535 | Maximum: 1180 | ...".
+    statTooltip: (i) => `#char_f${i}_tt`,
 
     points: {
       expedition: {
@@ -106,6 +114,15 @@
       levelCellIndex: 1,
       error: '#errorRow',
       errorText: '#errorText',
+      // The local arena and circus (this server): "Own placing" lists the
+      // players ranked just above you (rank, name, attack); no levels.
+      // Players on your buddy list have their name in a span.buddy. The
+      // local Circus only lists attacks while your participation status is
+      // Active; Lanista never changes it.
+      localTable: '#content table',
+      localRankCellIndex: 0,
+      localNameCellIndex: 1,
+      buddy: '.buddy',
     },
 
     inventory: {
@@ -149,6 +166,13 @@
         medium: '#content input[name="difficulty_medium"]',
         hard: '#content input[name="difficulty_hard"]',
       },
+      // While the player still holds a level's Dīs Pater's Armor, the page's
+      // script binds that level's button to a popup ("Enter the Underworld?
+      // ... you will not receive the armor a second time"). The script names
+      // the button (difficulty_normal, ...) next to the popup's name.
+      armorPopupName: 'confirmEnter',
+      armorPopup: '#blackoutDialogconfirmEnter',
+      armorPopupNo: '#linkcancelconfirmEnter',
     },
 
     // Premium inventory (mod=premium&submod=inventory): items already owned,
@@ -180,6 +204,60 @@
     // Merchant shop grid (mod=inventory&sub=1..6); selling is a move into it.
     shop: '#shop[data-container-number]',
 
+    // Guild market (mod=guildMarket): one row per listing (item, seller,
+    // price, duration, level, Buy); the listing id is the item's id. The
+    // Sell form takes an item id from the bags (sellid), a price (preis)
+    // and a duration (dauer: 1 = 2 h, 2 = 8 h, 3 = 24 h).
+    market: {
+      table: '#market_item_table',
+      sellerCell: 1,
+      priceCell: 2,
+      buy: 'input[name="buy"]',
+      sellForm: '#sellForm',
+      sellButton: 'input[type="submit"], button[type="submit"]',
+    },
+    // The character's name on the overview.
+    playerName: '.playername_achievement',
+
+    // Villa Medici (mod=guild_medic, a guild building): a row per doctor
+    // with "Heal now!" (a plain link, s=<doctor>) or, while he rests after
+    // a treatment (about 2 hours), a countdown (ms).
+    medic: {
+      rows: '#guild_medicus_heal tr',
+      heal: 'a[href*="mod=guild_medic"]',
+      resting: '[data-ticker-time-left]',
+    },
+
+    // Gods (mod=gods): a box per god (its id is the god's name) with the
+    // favour ("164 / 722") and an image map, one area per rank whose
+    // tooltip names it and its cost ("Cost: 20 Favor"). Only a rank that
+    // can be bought has an onclick, which confirms a plain link
+    // (submod=activateBlessing&god=<1-6>&rank=<1-3>).
+    gods: {
+      box: '#gods .god_box',
+      points: '.god_points',
+      ranks: 'map area',
+    },
+
+    // Costumes (mod=costumes): sections under h1 headings (Everywear,
+    // Underworld, the costume festival, Temporary), a box per costume whose
+    // tooltip starts "Name (pieces/needed)". Its buttons confirm a plain
+    // link, submod=changeCostume&doll=<1|2>&setId=<costume>; setId=0 takes
+    // the costume off (so that one is worn). Disabled buttons show the
+    // cooldown (ms).
+    costumes: {
+      heading: '#content h1',
+      box: '#content .costumes_box',
+      buttons: 'input',
+      ticker: '[data-ticker-time-left]',
+      tooltip: '[data-tooltip]',
+    },
+    // The header buff of the costume worn ("Dīs Pater`s Armour can still be
+    // worn"), ending data-effect-end seconds from now.
+    costumeBuff: '#buffbar .buff[data-link*="mod=costumes"]',
+    // The forge's lists of known prefixes and suffixes (mod=forge&submod=forge).
+    forgeAffixes: '#content select[name^="prefix"] option, #content select[name^="suffix"] option',
+
     // Training ground: one button and one cost per stat, in stat order.
     training: {
       buttons: '#training_box .training_button',
@@ -195,11 +273,25 @@
 
     quests: {
       finish: '#content .contentboard_slot a.quest_slot_button_finish',
+      // A failed quest ("Failed") keeps its slot and only offers "Start
+      // quest again"; an accepted one offers "Cancel quest". Plain links.
+      restart: '#content .contentboard_slot a.quest_slot_button_restart',
+      slot: '.contentboard_slot',
+      activeSlots: '#content .contentboard_slot_active',
+      cancelInSlot: '.quest_slot_button_cancel',
       openSlots: '#content .contentboard_slot_inactive',
       acceptInSlot: '.quest_slot_button_accept',
       icon: '.quest_slot_icon',
       title: '.quest_slot_title',
       reward: '.quest_slot_reward',
+      // Rewards: gold as text; honour and experience in their tooltips
+      // ("1.039 Honor"); an item reward as an image with the item tooltip.
+      rewardGold: '.quest_slot_reward_gold',
+      rewardHonour: '.quest_slot_reward_honor [data-tooltip]',
+      rewardXp: '.quest_slot_reward_xp [data-tooltip]',
+      rewardItem: '.quest_slot_reward_item [data-tooltip]',
+      // "00:17:59" on a quest with a time limit ("Failed" once failed).
+      time: '.quest_slot_time',
       cooldown: '#quest_header_cooldown [data-ticker-time-left]',
       // "Accepted quests: 2 / 5"
       accepted: '#quest_header_accepted',
@@ -228,6 +320,8 @@
     premiumInventory: () => ({ mod: 'premium', submod: 'inventory' }),
     arena: () => ({ mod: 'arena', submod: 'serverArena', aType: 2 }),
     circus: () => ({ mod: 'arena', submod: 'serverArena', aType: 3 }),
+    localArena: () => ({ mod: 'arena' }),
+    localCircus: () => ({ mod: 'arena', submod: 'grouparena' }),
     work: () => ({ mod: 'work' }),
     training: () => ({ mod: 'training' }),
     quests: () => ({ mod: 'quests' }),

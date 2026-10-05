@@ -18,6 +18,9 @@
 
   const opponentDefaults = () => ({
     enabled: false,
+    // 'provinciarum' (players from other servers) | 'local' (this server's
+    // own arena: the players ranked just above you, no levels shown).
+    where: 'provinciarum',
     target: 'lowest', // 'lowest' | 'highest' | 'random'
     // Only attack opponents within [myLevel - maxBelow, myLevel + maxAbove].
     limitLevels: false,
@@ -29,6 +32,9 @@
     avoidLostHours: 24,
     // Try opponents beaten in the last two weeks first (most wins first).
     preferBeaten: false,
+    // Attacks per local day: on one player, and in all (0 = no limit).
+    perPlayerPerDay: 5,
+    perDay: 0,
   });
 
   const DEFAULT_SETTINGS = {
@@ -41,6 +47,10 @@
       // After some wins the game offers to search the enemy's nest:
       // 'off' (leave the dialog alone) | 'return' | 'quick' | 'thorough'.
       nestSearch: 'quick',
+      // When the game logs the player out: open the Gladiatus lobby in the
+      // tab and press Play for this server's account (no password). Needs
+      // a lobby session, and pop-ups allowed for the lobby.
+      rejoin: false,
     },
 
     expedition: {
@@ -54,6 +64,9 @@
       bonusesFirst: false,
       // Stop attacking when this many points are left (saved for later).
       keepPoints: 0,
+      // After this many lost fights in a row against one enemy, fight the
+      // next easier one for an hour (0 = never).
+      easierAfterLosses: 0,
       // Owned Mobilisations (+3 points each) to use per day once the points
       // run out. Never bought.
       mobilisationsPerDay: 0,
@@ -103,6 +116,63 @@
       eatBelowPercent: 30,
       // Expeditions, dungeons and the arena are skipped below this HP.
       minHpPercent: 20,
+      // Inventory bags (tabs I-VIII) the bot eats from; food taken out of
+      // the packages goes into one of them. None ticked = all bags.
+      bags: { b1: true, b2: true, b3: true, b4: true, b5: true, b6: true, b7: true, b8: true },
+      // Only food that just heals: not eggs, Cervisia and the like that also
+      // give rubies, points, cooldown skips or Centurio.
+      plainOnly: true,
+      // When the food bags and the packages are empty: buy food from the
+      // merchants (for gold only), best HP per gold first, up to buyAtOnce
+      // items per trip and buyMaxGoldPerDay a day, never going below
+      // buyKeepGold.
+      buy: false,
+      buyAtOnce: 3,
+      buyMaxGoldPerDay: 50000,
+      buyKeepGold: 100000,
+      // ...and from other players on the public market first, when a lot
+      // heals at least marketMinHpPerGold HP per gold (same daily budget).
+      market: false,
+      marketMinHpPerGold: 1,
+      // The guild's Villa Medici heals a share of your HP per doctor for
+      // free; each doctor then rests for about two hours. 'off' |
+      // 'underworld' (only there, where food cannot be eaten) | 'always'
+      // (before eating food too). At most medicMax doctors a day (a visit,
+      // in the Underworld); 0 = no limit.
+      medic: 'off',
+      medicMax: 0,
+    },
+
+    gods: {
+      // Spend the gods' favour (never rubies) on these, whenever one is
+      // off cooldown and its god has the favour: rank 1 blessings (an hour
+      // of a small bonus), rank 2 holy oils, rank 3 blessings (half an hour
+      // of a strong one).
+      enabled: false,
+      blessings: { minerva: false, diana: false, mars: false, merkur: false, apollo: false, vulcanus: false },
+      oils: { minerva: false, diana: false, mars: false, merkur: false, apollo: false, vulcanus: false },
+      rank3: { minerva: false, diana: false, mars: false, merkur: false, apollo: false, vulcanus: false },
+      // Only spend a god's favour once it has at least this share of its
+      // maximum (0 = whenever there is enough).
+      minPercent: 0,
+    },
+
+    boosts: {
+      // Use boost potions from the bags and packages for these, one at a
+      // time per kind, while the stat is below its maximum for your level
+      // (boosts above it are wasted).
+      enabled: false,
+      stats: { strength: false, dexterity: false, agility: false, constitution: false, charisma: false, intelligence: false, health: false },
+    },
+
+    costumes: {
+      // Put on Dīs Pater's Armour won on these Underworld levels as soon as
+      // it can be worn (it is used up when it ends, and taking it off early
+      // destroys it, so nothing else is put on meanwhile).
+      enabled: false,
+      armour: { normal: false, medium: false, hard: false },
+      // Otherwise wear this costume ('' = leave the costume as it is).
+      everyday: '',
     },
 
     work: {
@@ -157,6 +227,9 @@
       // 1 Neptun (blue), 2 Mars, 3 Jupiter, 4 Olymp.
       autoUpTo: 0,
       autoTypes: { weapons: true, armour: true, jewellery: false },
+      // Inventory bags whose items are all smelted (a "smelt bin"): put
+      // items there to have them smelted. None ticked = off.
+      bins: { b1: false, b2: false, b3: false, b4: false, b5: false, b6: false, b7: false, b8: false },
     },
 
     packages: {
@@ -173,11 +246,29 @@
       // Packages about to expire: 'off' | 'bag' (move into the bags) | 'sell'.
       expiring: 'bag',
       expiringHours: 24,
+      // Item types taken out of the packages into the bags (by the
+      // packages page's "Type of object" filter).
+      pick: { upgrades: false, boosts: false, scrolls: false, recipes: false, tools: false, mercenary: false },
+      // Use scrolls whose prefix or suffix the forge does not know yet.
+      learnScrolls: false,
+      // Items whose name contains one of these (one per line) are never
+      // sold or smelted by the rules.
+      keepNames: '',
+    },
+
+    gold: {
+      // Keep gold above `keep` out of raiders' reach: buy the dearest
+      // guild market gold pack the spare gold pays for and list it again at
+      // the same price (24 h). Listings below minPack are not packs.
+      hide: false,
+      keep: 100000,
+      minPack: 50000,
     },
 
     auction: {
-      // Bid on healing items in the auction house.
+      // Bid in the auction house: on healing items, and optionally on gear.
       enabled: false,
+      food: true,
       // Only lots that heal at least this many HP per gold of the bid.
       minHpPerGold: 4,
       // 'short' (short or very short) | 'medium' (medium or shorter) |
@@ -189,6 +280,12 @@
       keepGold: 100000,
       // Stop bidding while the bags and packages hold this many healing items.
       maxFood: 50,
+      // Gear: of these kinds, at least this quality (-1 Standard ... 4
+      // Olymp), for at most this much per lot.
+      gear: false,
+      gearTypes: { weapons: true, armour: true, jewellery: true },
+      gearMinQuality: 2,
+      gearMaxPrice: 50000,
     },
 
     quests: {
@@ -208,6 +305,12 @@
       // Skip quests for activities the bot is not doing (arena quests while
       // the arena is off, ...).
       onlyActive: true,
+      // Skip quests with a time limit (they fail when it runs out), and
+      // quests whose item reward is food.
+      skipTimed: false,
+      skipFoodReward: false,
+      // Which reward picks the best quest: 'gold' | 'honour' | 'xp'.
+      rankBy: 'gold',
     },
 
     schedule: {
@@ -240,6 +343,37 @@
       loggedOut: true,
       activityPaused: true,
       noFood: true,
+      // The Underworld was not entered (Dīs Pater's Armor still held).
+      underworld: true,
+      levelUp: true,
+      // New in-game messages (players, guild, auction wins).
+      messages: false,
+      // Yesterday's statistics, once a day.
+      dailySummary: false,
+      // A costume was put on, or Dīs Pater's Armour ran out.
+      costume: true,
+      // A place turned up in the location menu (an event, or a new area).
+      newLocation: true,
+      // Show the alerts on this computer.
+      desktop: true,
+      // Also send the alerts above to these addresses, one per line: ntfy
+      // topics, Discord or Slack webhooks, a Telegram bot, Pushover, Gotify.
+      // Empty = desktop only.
+      pushUrl: '',
+      // Hold phone alerts between quietStart and quietEnd and send them
+      // together afterwards.
+      quiet: false,
+      quietStart: '23:00',
+      quietEnd: '07:00',
+    },
+
+    remote: {
+      // Take commands from the phone (status, stop, start, check, stats,
+      // log): through the Telegram bot among the phone alert addresses, only
+      // from its chat, and/or from this ntfy topic. Answers go back the same
+      // way. Looked at once a minute.
+      enabled: false,
+      ntfyTopic: '',
     },
 
     ui: {
@@ -259,6 +393,7 @@
     'expedition.location': { pattern: LOCATION },
     'expedition.enemy': { int: true, min: 1, max: 4 },
     'expedition.keepPoints': { int: true, min: 0, max: 500 },
+    'expedition.easierAfterLosses': { int: true, min: 0, max: 20 },
     'dungeon.location': { pattern: LOCATION },
     'dungeon.difficulty': { enum: ['normal', 'advanced'] },
     'dungeon.keepPoints': { int: true, min: 0, max: 500 },
@@ -272,6 +407,23 @@
     'underworld.potionBelowPercent': { int: true, min: 1, max: 99 },
     'heal.eatBelowPercent': { int: true, min: 0, max: 100 },
     'heal.minHpPercent': { int: true, min: 0, max: 100 },
+    'heal.buyAtOnce': { int: true, min: 1, max: 20 },
+    'heal.buyMaxGoldPerDay': { int: true, min: 0, max: 2000000000 },
+    'heal.buyKeepGold': { int: true, min: 0, max: 2000000000 },
+    'heal.marketMinHpPerGold': { min: 0.01, max: 1000 },
+    'heal.medic': { enum: ['off', 'underworld', 'always'] },
+    'heal.medicMax': { int: true, min: 0, max: 50 },
+    'gods.minPercent': { int: true, min: 0, max: 100 },
+    'costumes.everyday': { maxLength: 80 },
+    'quests.rankBy': { enum: ['gold', 'honour', 'xp'] },
+    'gold.keep': { int: true, min: 0, max: 2000000000 },
+    'gold.minPack': { int: true, min: 1000, max: 2000000000 },
+    'arena.where': { enum: ['provinciarum', 'local'] },
+    'circus.where': { enum: ['provinciarum', 'local'] },
+    'arena.perPlayerPerDay': { int: true, min: 0, max: 100 },
+    'circus.perPlayerPerDay': { int: true, min: 0, max: 100 },
+    'arena.perDay': { int: true, min: 0, max: 1000 },
+    'circus.perDay': { int: true, min: 0, max: 1000 },
     'work.job': { int: true, min: 0, max: 19 },
     'work.hours': { int: true, min: 1, max: 24 },
     'training.keepGold': { int: true, min: 0, max: 2000000000 },
@@ -282,11 +434,18 @@
     'packages.sellUpTo': { int: true, min: -1, max: 4 },
     'packages.expiring': { enum: ['off', 'bag', 'sell'] },
     'packages.expiringHours': { int: true, min: 1, max: 168 },
+    'notifications.pushUrl': { pattern: /^(https:\/\/\S+(\s+https:\/\/\S+)*)?$/i, keepCase: true, maxLength: 2000 },
+    'notifications.quietStart': { pattern: TIME },
+    'remote.ntfyTopic': { pattern: /^(https:\/\/[^\s?#]+)?$/i, keepCase: true, maxLength: 300 },
+    'notifications.quietEnd': { pattern: TIME },
     'auction.minHpPerGold': { min: 0.1, max: 1000 },
     'auction.bidWhen': { enum: ['short', 'medium', 'any'] },
     'auction.maxPerRound': { int: true, min: 0, max: 2000000000 },
     'auction.keepGold': { int: true, min: 0, max: 2000000000 },
     'auction.maxFood': { int: true, min: 1, max: 500 },
+    'auction.gearMinQuality': { int: true, min: -1, max: 4 },
+    'auction.gearMaxPrice': { int: true, min: 0, max: 2000000000 },
+    'packages.keepNames': { maxLength: 2000 },
     'repair.maxQuality': { int: true, min: -1, max: 4 },
     'schedule.start': { pattern: TIME },
     'schedule.end': { pattern: TIME },
@@ -368,7 +527,8 @@
       const fallback = getPath(DEFAULT_SETTINGS, path);
       if (rule.enum && !rule.enum.includes(value)) value = fallback;
       if (rule.pattern) {
-        value = String(value).trim().toLowerCase();
+        value = String(value).trim();
+        if (!rule.keepCase) value = value.toLowerCase();
         if (!rule.pattern.test(value)) value = fallback;
       }
       if (typeof fallback === 'number') {
@@ -454,6 +614,25 @@
     return area ? serversIn(await area.get(null)) : [];
   }
 
+  // True when `now` (local time) is inside the daily window start-end
+  // ("HH:MM"; it may run past midnight). An empty window (start = end) is
+  // never on.
+  function inTimeWindow(start, end, now) {
+    const minutes = (t) => {
+      const [h, m] = String(t).split(':').map(Number);
+      return h * 60 + m;
+    };
+    const s = minutes(start);
+    const e = minutes(end);
+    if (s === e) return false;
+    const d = new Date(now);
+    const m = d.getHours() * 60 + d.getMinutes();
+    return s < e ? m >= s && m < e : m >= s || m < e;
+  }
+
+  // The phone alert addresses: one per line (or separated by spaces).
+  const pushUrls = (notifications) => String((notifications && notifications.pushUrl) || '').split(/\s+/).filter(Boolean);
+
   // "s303-en.gladiatus.gameforge.com" -> "Server 303 (EN)".
   const serverName = (host) => {
     const m = String(host).match(/^s(\d+)-(\w+)\./);
@@ -475,6 +654,8 @@
     serversIn,
     listServers,
     serverName,
+    inTimeWindow,
+    pushUrls,
     getPath,
     setPath,
     mergeSettings,

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Lanista - Gladiatus Autopilot",
+  "name": "Lanista",
   "short_name": "Lanista",
-  "version": "2.0.0",
+  "version": "2.7.0",
   "description": "Automates Gladiatus: expeditions, dungeons, Underworld, arena, circus, healing, quests, work, repair, smelting, packages, auctions.",
   "minimum_chrome_version": "121",
   "icons": {
@@ -23,6 +23,8 @@
     "service_worker": "src/background/background.js",
     "scripts": [
       "src/shared/settings.js",
+      "src/content/brain.js",
+      "src/background/remote.js",
       "src/background/background.js"
     ]
   },
@@ -53,7 +55,9 @@
         "src/content/workbench.js",
         "src/content/smelter.js",
         "src/content/packages.js",
+        "src/content/gold.js",
         "src/content/auction.js",
+        "src/content/character.js",
         "src/ui/dom.js",
         "src/ui/styles.js",
         "src/ui/schema.js",
@@ -62,6 +66,15 @@
         "src/content/main.js"
       ],
       "run_at": "document_end"
+    },
+    {
+      "matches": [
+        "https://lobby.gladiatus.gameforge.com/*"
+      ],
+      "js": [
+        "src/content/lobby.js"
+      ],
+      "run_at": "document_idle"
     }
   ],
   "browser_specific_settings": {

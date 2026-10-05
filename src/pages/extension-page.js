@@ -90,6 +90,7 @@
       h('img', { src: '../../icons/icon32.png', alt: '', width: 26, height: 26 }),
       h('div', { class: 'gb-page-title' }, h('h1', {}, 'Lanista'), subtitle),
       serverSelect,
+      GBot.ui.reportLink({ iconOnly: true }),
       compact
         ? h('button', { type: 'button', class: 'gb-icon-btn gb-open-options', title: 'Open settings in a tab', onclick: () => ext.runtime.openOptionsPage() }, icon('interface', 18))
         : null,
@@ -130,6 +131,8 @@
       onResetStats: () =>
         editMemory((m) => {
           m.stats = GBot.brain.createMemory(Date.now()).stats;
+          m.today = null;
+          m.history = [];
           m.blockedUntil = {};
           m.noFoodUntil = 0;
         }),
@@ -137,6 +140,7 @@
         editMemory((m) => {
           m.log = [];
         }),
+      onTestPush: (url) => ext.runtime.sendMessage({ type: 'pushTest', url, host }),
     });
 
     document.body.append(header, permission, h('main', { class: 'gb-page-main' }, view.element));

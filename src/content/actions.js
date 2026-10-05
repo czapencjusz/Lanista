@@ -45,7 +45,7 @@
       // 0 HP): only ever close it.
       const close = $(SEL.underworld.closeDialog);
       if (!close || !isVisible(close)) {
-        ctx.notify('activityPaused', 'Lanista: a dialog in the Underworld needs your answer; the bot will not choose for you.');
+        ctx.notify('activityPaused', 'Lanista: a dialog in the Underworld needs your answer; it will not choose for you.');
         throw new ActionError('A dialog in the Underworld has no close button; leaving it to you');
       }
       await click(ctx, close, 'close the dialog');
@@ -89,9 +89,15 @@
     const buttons = $$(SEL.expedition.attackButtons);
     if (!buttons.length) throw new ActionError('No expedition attack buttons on this page');
     const enemies = GBot.state.readExpeditionEnemies(document);
-    const target = brain.expeditionTarget(enemies, settings.expedition);
+    const chosen = brain.expeditionTarget(enemies, settings.expedition);
+    // An easier enemy for a while after too many losses in a row.
+    const easier = brain.easierEnemy(ctx.memory, state.page.loc, ctx.now());
+    const target = easier !== null && easier < chosen ? easier : chosen;
     const index = Math.min(Math.max(target, 0), buttons.length - 1);
-    if (index !== settings.expedition.enemy - 1) {
+    const place = (state.locations || []).find((l) => l.id === state.page.loc);
+    const area = { key: `expedition:${state.page.loc}`, name: place ? place.name : null };
+    if (ctx.memory.pending) Object.assign(ctx.memory.pending, { enemy: index, loc: state.page.loc, easierAfter: settings.expedition.easierAfterLosses, area });
+    if (target === chosen && index !== settings.expedition.enemy - 1) {
       // Log the bonus hunt when it moves on (a new enemy, or a bonus learned).
       const enemy = enemies[index];
       const progress = `${state.page.loc}:${index}:${enemy.learnable}`;
@@ -99,14 +105,14 @@
         ctx.memory.bonusHunt = progress;
         const chance = enemy.chance !== null ? ` (${enemy.chance}% per win)` : '';
         ctx.log('info', `Expedition: ${enemy.name || `enemy #${index + 1}`} has ${enemy.learnable} bonus${enemy.learnable === 1 ? '' : 'es'} left to learn${chance}, fighting it before the boss`);
-        // Save now: the attack below leaves the page before the runner saves.
-        await ctx.persist();
       }
     }
     const button = buttons[index];
     if (button.disabled || button.classList.contains(SEL.expedition.disabledClass)) {
       throw new ActionError(`Expedition enemy #${index + 1} cannot be attacked right now`);
     }
+    // Save now: the attack below leaves the page before the runner saves.
+    await ctx.persist();
     await click(ctx, button, `attack expedition enemy #${index + 1}`);
     if (await expectNavigation(ctx)) return { navigated: true };
     throw new ActionError('Expedition attack did not open a combat report');
@@ -148,6 +154,9 @@
       throw new ActionError('Out of Underworld expedition points (attacks would cost rubies)');
     }
     const name = ((box.querySelector('.expedition_name') || {}).textContent || '').trim();
+    const place = (state.locations || []).find((l) => l.id === state.page.loc);
+    if (ctx.memory.pending) ctx.memory.pending.area = { key: `underworld:${state.page.loc}`, name: `Underworld: ${place ? place.name : state.page.loc}` };
+    await ctx.persist();
     await click(ctx, button, `attack Underworld enemy ${name || `#${next}`}`);
     if (await expectNavigation(ctx)) return { navigated: true };
     throw new ActionError('Underworld attack did not open a combat report');
@@ -217,13 +226,47 @@
       ctx.log('info', 'Underworld: not enough gold for the journey (8,000)');
       return { refresh: true };
     }
+    if (armorHeld(difficulty)) return keepArmor(ctx, difficulty, label);
+    memory.underworldArmor = null;
     // If the click does not go through, try again in an hour, not at once.
     memory.nextUnderworldCheck = ctx.now() + 3600 * 1000;
     ctx.log('info', `Underworld: entering on ${label} (8,000 gold)`);
     await ctx.persist();
     await click(ctx, button, `enter the Underworld (${label})`);
-    if (await expectNavigation(ctx)) return { navigated: true };
+    const popup = () => {
+      const el = $(SEL.underworld.armorPopup);
+      return el && isVisible(el) ? el : null;
+    };
+    await waitFor(() => ctx.isUnloading() || popup(), 12000, 100);
+    if (ctx.isUnloading()) return { navigated: true };
+    // The armor popup after all: answer No, never Yes.
+    if (popup()) {
+      const no = $(SEL.underworld.armorPopupNo);
+      if (no) await click(ctx, no, 'keep the armor: do not enter');
+      return keepArmor(ctx, difficulty, label);
+    }
     throw new ActionError('Entering the Underworld did not reload the page');
+  }
+
+  // True when the page asks for a confirmation before entering this level,
+  // which it does while the player still holds its Dīs Pater's Armor.
+  function armorHeld(difficulty) {
+    const name = `difficulty_${difficulty}`;
+    return $$('script').some((s) => s.textContent.includes(SEL.underworld.armorPopupName) && s.textContent.includes(name));
+  }
+
+  // Beating Dīs Pater again would not give the armor a second time, so the
+  // bot stays out until it is used up, and tells the player once.
+  function keepArmor(ctx, difficulty, label) {
+    const { memory } = ctx;
+    memory.nextUnderworldCheck = ctx.now() + 24 * 3600 * 1000;
+    const message = `Underworld: not entering on ${label}. You still have Dīs Pater's Armor from it, and beating him there again would not give another. Use the armor up, or pick another level under Settings > Underworld.`;
+    ctx.log('warn', message);
+    if (memory.underworldArmor !== difficulty) {
+      memory.underworldArmor = difficulty;
+      if (ctx.notify) ctx.notify('underworld', `Lanista: ${message}`);
+    }
+    return { refresh: true };
   }
 
   // ---------------------------------------------------------------- dungeon
@@ -262,6 +305,9 @@
       const choice = brain.dungeonChoice(targets, settings.dungeon, ctx.memory);
       if (choice.cancel) return cancelDungeon(ctx, choice.cancel);
       const target = targets.find((t) => t.position === choice.position);
+      const place = (state.locations || []).find((l) => l.id === state.page.loc);
+      if (ctx.memory.pending) ctx.memory.pending.area = { key: `dungeon:${state.page.loc}`, name: `Dungeon: ${state.dungeonName || (place ? place.name : state.page.loc)}` };
+      await ctx.persist();
       await click(ctx, target.el, `attack dungeon enemy #${target.position}${target.boss ? ' (boss)' : ''}`);
       if (await expectNavigation(ctx)) return { navigated: true };
       throw new ActionError('Dungeon attack did not open a combat report');
@@ -329,22 +375,24 @@
 
   // --------------------------------------------------------- arena / circus
 
-  function readOpponents(type) {
-    const table = $(SEL.arena.tables[type]);
+  // The opponents on the page: name and level per row (Provinciarum), or
+  // rank and name (the local arena and circus, which show no levels).
+  // `buddy` marks players on the buddy list. null when there is no list.
+  function readOpponents(type, local = false) {
+    const table = local ? $$(SEL.arena.localTable).find((t) => t.querySelector(SEL.arena.attack)) : $(SEL.arena.tables[type]);
     if (!table) return null;
+    const cellText = (row, i) => (row.cells[i] ? row.cells[i].textContent.trim() : '');
     return $$('tr', table)
       .map((row) => ({ row, attack: row.querySelector(SEL.arena.attack) }))
       .filter((o) => o.attack)
-      .map((o, index) => {
-        const cell = o.row.cells[SEL.arena.levelCellIndex];
-        const nameCell = o.row.cells[SEL.arena.nameCellIndex];
-        return {
-          ...o,
-          index,
-          level: cell ? parseNumber(cell.textContent) : null,
-          name: nameCell ? nameCell.textContent.trim() : '',
-        };
-      });
+      .map((o, index) => ({
+        ...o,
+        index,
+        level: local ? null : parseNumber(cellText(o.row, SEL.arena.levelCellIndex)),
+        rank: local ? parseNumber(cellText(o.row, SEL.arena.localRankCellIndex)) : null,
+        name: cellText(o.row, local ? SEL.arena.localNameCellIndex : SEL.arena.nameCellIndex),
+        buddy: !!o.row.querySelector(SEL.arena.buddy),
+      }));
   }
 
   function visibleConfirmDialog() {
@@ -353,24 +401,41 @@
 
   async function arenaLike(ctx, type) {
     const { state, settings } = ctx;
-    const page = type === 'arena' ? PAGES.arena() : PAGES.circus();
-    const onPage = state.page.mod === 'arena' && state.page.submod === 'serverArena' && state.page.aType === String(page.aType);
-    if (!onPage) return ctx.navigate(ctx.url(page), type === 'arena' ? 'arena provinciarum' : 'circus provinciarum');
+    const local = settings[type].where === 'local';
+    const page = local ? (type === 'arena' ? PAGES.localArena() : PAGES.localCircus()) : type === 'arena' ? PAGES.arena() : PAGES.circus();
+    const name = `${local ? 'local ' : ''}${type}${local ? '' : ' provinciarum'}`;
+    const onPage = local
+      ? state.page.mod === 'arena' && (state.page.submod || null) === (page.submod || null)
+      : state.page.mod === 'arena' && state.page.submod === 'serverArena' && state.page.aType === String(page.aType);
+    if (!onPage) return ctx.navigate(ctx.url(page), local ? `the ${name}` : name);
 
-    const opponents = readOpponents(type);
-    if (!opponents) throw new ActionError(`The ${type} opponent list was not found`);
-    if (!opponents.length) throw new ActionError(`No ${type} opponents can be attacked`);
+    const opponents = readOpponents(type, local);
+    if (!opponents && local && type === 'circus') {
+      // Nobody to attack in the local Circus while the participation status
+      // is Passive. Changing it is the player's call (it also opens them to
+      // attacks), so wait a while instead of failing over and over.
+      ctx.memory.blockedUntil[type] = ctx.now() + 6 * 3600 * 1000;
+      ctx.memory.pending = null;
+      ctx.log('warn', 'Local circus: nobody can be attacked. Is your participation status Passive? Set it to Active on the Circus Turma page, or switch to Provinciarum under Settings > Circus Turma. Looking again in 6 hours.');
+      return { retick: true };
+    }
+    if (!opponents) throw new ActionError(`The ${name} opponent list was not found`);
+    if (!opponents.length) throw new ActionError(`No ${name} opponents can be attacked`);
 
-    const avoided = brain.avoidedNames(ctx.memory, type, ctx.now());
-    const allowed = brain.filterOpponents(opponents, settings[type], state.level, avoided);
-    if (!allowed.length) throw new ActionError(`None of the ${opponents.length} ${type} opponents match your filters`);
+    // Players on the buddy list are never attacked.
+    // Players who beat us lately, and those attacked enough for today.
+    const avoided = brain.avoidedNames(ctx.memory, type, ctx.now()).concat(brain.cappedNames(ctx.memory, type, settings[type], ctx.now()));
+    const allowed = brain.filterOpponents(opponents.filter((o) => !o.buddy), settings[type], state.level, avoided);
+    if (!allowed.length) throw new ActionError(`None of the ${opponents.length} ${name} opponents match your filters (buddies are never attacked)`);
     let order = brain.pickOpponents(allowed, settings[type].target);
     if (settings[type].preferBeaten) order = brain.preferBeaten(order, ctx.memory.beaten[type], ctx.now());
     for (const opponent of order.slice(0, 3)) {
       // Remembered so the combat report can be tied to this opponent.
-      if (ctx.memory.pending) Object.assign(ctx.memory.pending, { opponent: opponent.name, avoidHours: settings[type].avoidLostHours });
+      const area = { key: `${type}:${local ? 'local' : 'provinciarum'}`, name: local ? (type === 'arena' ? 'Local arena' : 'Local Circus Turma') : type === 'arena' ? 'Arena Provinciarum' : 'Circus Provinciarum' };
+      if (ctx.memory.pending) Object.assign(ctx.memory.pending, { opponent: opponent.name, avoidHours: settings[type].avoidLostHours, area });
       await ctx.persist();
-      await click(ctx, opponent.attack, `attack ${type} opponent ${opponent.name || ''} (level ${opponent.level ?? '?'})`);
+      const about = opponent.rank !== null && opponent.rank !== undefined ? `rank ${opponent.rank}` : `level ${opponent.level ?? '?'}`;
+      await click(ctx, opponent.attack, `attack ${name} opponent ${opponent.name || ''} (${about})`);
       const outcome = await waitFor(() => {
         if (ctx.isUnloading()) return 'navigated';
         if (visibleConfirmDialog()) return 'confirm';
@@ -401,22 +466,51 @@
 
   // ------------------------------------------------------------------- heal
 
-  // Heal amount from the item tooltip. The tooltip is a JSON array of lines;
-  // the heal value sits on the line before the first "+N" bonus line.
-  function foodHealAmount(el) {
+  const tooltipOf = (el) => {
     try {
-      const lines = JSON.parse(el.getAttribute('data-tooltip'))[0].map((l) => String(Array.isArray(l) ? l[0] : l));
-      for (let i = 1; i + 1 < lines.length; i++) {
-        if (/\+\d+/.test(lines[i + 1])) {
-          const m = lines[i].match(/(\d[\d.]*)/);
-          if (m) return parseNumber(m[1]);
-        }
-      }
+      return JSON.parse(el.getAttribute('data-tooltip'))[0].map((l) => String(Array.isArray(l) ? l[0] : l));
     } catch (e) {
-      // Unknown tooltip format; treat the heal amount as unknown.
+      return []; // Unknown tooltip format.
     }
-    return 0;
+  };
+
+  // Index of the heal line in an item tooltip ("Using: Heals 3960 of
+  // life"): a "label: ..." line with a number but no "+N" of its own,
+  // followed by the "+N" bonus line ("From intelligence: +2325 vitality
+  // point(s)"). Stat lines of scrolls ("Damage +5"), buffs ("Using: +1624
+  // Health") and gear ("Armour 120") are not heal lines. -1 if none.
+  function healLine(lines) {
+    for (let i = 1; i + 1 < lines.length; i++) {
+      if (/\+\d+/.test(lines[i + 1]) && /:.*\d/.test(lines[i]) && !/\+\d/.test(lines[i])) return i;
+    }
+    return -1;
   }
+
+  // Heal amount from the item tooltip, 0 when it does not heal.
+  function foodHealAmount(el) {
+    const lines = tooltipOf(el);
+    const i = healLine(lines);
+    const m = i >= 0 ? lines[i].match(/(\d[\d.]*)/) : null;
+    return m ? parseNumber(m[1]) : 0;
+  }
+
+  // Food that only heals. Eggs, Cervisia and the like have a second line
+  // with the heal line's label ("Using: You will receive 1 Ruby", "Using:
+  // Centurio will be activated"...): those are kept.
+  function isPlainFood(el) {
+    const lines = tooltipOf(el);
+    const i = healLine(lines);
+    if (i < 0) return false;
+    const colon = lines[i].indexOf(':');
+    if (colon <= 0) return true;
+    const label = lines[i].slice(0, colon + 1);
+    return lines.filter((l) => l.startsWith(label)).length === 1;
+  }
+
+  // Food the bot may eat: it heals, and (with heal.plainOnly) does nothing
+  // else.
+  const edible = (el, settings) =>
+    Number(el.dataset.contentType) === 64 && foodHealAmount(el) > 0 && (!settings.heal.plainOnly || isPlainFood(el));
 
   function center(el) {
     const r = el.getBoundingClientRect();
@@ -490,7 +584,7 @@
   };
 
   async function heal(ctx) {
-    const { state } = ctx;
+    const { state, settings } = ctx;
     if (state.page.mod !== 'overview' || (state.page.doll && state.page.doll !== '1')) {
       return ctx.navigate(ctx.url(PAGES.overview()), 'character overview');
     }
@@ -498,12 +592,16 @@
     const avatar = $(SEL.inventory.avatar);
     if (!avatar) throw new ActionError('Character avatar (food drop target) not found');
 
+    // Only the food bags chosen under Settings > Health are looked at, and
+    // only food the bot may eat.
+    const bags = brain.foodBags(settings);
+    const isFoodBag = (tab) => bags.includes(parseNumber(tab.getAttribute('data-bag-number')));
     const tried = new Set();
     for (;;) {
       const current = $(SEL.inventory.currentBagTab);
       if (current) tried.add(current.getAttribute('data-bag-number'));
 
-      const foods = $$(SEL.inventory.food).map((el) => ({ el, heal: foodHealAmount(el) }));
+      const foods = !current || isFoodBag(current) ? $$(SEL.inventory.food).filter((el) => edible(el, settings)).map((el) => ({ el, heal: foodHealAmount(el) })) : [];
       if (foods.length) {
         const hp = GBot.state.readHp(document);
         const missing = hp.max && hp.value !== null ? hp.max - hp.value : null;
@@ -523,7 +621,7 @@
         return { refresh: true };
       }
 
-      const next = $$(SEL.inventory.bagTabs).find((tab) => !tried.has(tab.getAttribute('data-bag-number')));
+      const next = $$(SEL.inventory.bagTabs).find((tab) => isFoodBag(tab) && !tried.has(tab.getAttribute('data-bag-number')));
       if (!next) break;
       tried.add(next.getAttribute('data-bag-number'));
       await click(ctx, next, `open inventory bag ${next.textContent.trim()}`);
@@ -545,9 +643,38 @@
       }
     }
 
+    // Still nothing: buy some from other players on the market, if allowed;
+    // it arrives as a package, taken out on the next look.
+    if (settings.heal.market && GBot.auction) {
+      try {
+        const result = await GBot.auction.buyMarketFood(ctx);
+        if (result.bought.length) {
+          ctx.log('info', `Bought food on the market for ${result.gold.toLocaleString('en-US')} gold: ${result.bought.join(', ')}`);
+          return { retick: true };
+        }
+        ctx.log('info', `Did not buy food on the market: ${result.reason}`);
+      } catch (e) {
+        ctx.log('warn', `Could not buy food on the market: ${e.message}`);
+      }
+    }
+
+    // ... or from a merchant.
+    if (settings.heal.buy && GBot.auction) {
+      try {
+        const result = await GBot.auction.buyFood(ctx);
+        if (result.bought.length) {
+          ctx.log('info', `Bought food from the merchant for ${result.gold.toLocaleString('en-US')} gold: ${result.bought.join(', ')}`);
+          return { refresh: true };
+        }
+        ctx.log('info', `Did not buy food: ${result.reason}`);
+      } catch (e) {
+        ctx.log('warn', `Could not buy food: ${e.message}`);
+      }
+    }
+
     brain.markNoFood(ctx.memory, ctx.now());
-    ctx.log('warn', 'No food in the bags or packages; waiting for HP to regenerate (retrying food in 30 min)');
-    if (ctx.notify) ctx.notify('noFood', `Lanista: HP is ${state.hp.percent}% and there is no food left in your bags.`);
+    ctx.log('warn', `No food in the food bags or the packages${settings.heal.buy || settings.heal.market ? ', and none bought' : ''}; waiting for HP to regenerate (looking again in 30 min, or as soon as food shows up in a food bag or you press Check now)`);
+    if (ctx.notify) ctx.notify('noFood', `Lanista: HP is ${state.hp.percent}% and there is no food left in your food bags. Put some in and press Check now.`);
     return { retick: true };
   }
 
@@ -644,6 +771,31 @@
 
   // ----------------------------------------------------------------- quests
 
+  // A quest's rewards and limits: { reward (gold), honour, xp, foodReward,
+  // timed }.
+  function questRewards(slot) {
+    const gold = slot.querySelector(SEL.quests.rewardGold) || slot.querySelector(SEL.quests.reward);
+    const fromTooltip = (sel) => {
+      const el = slot.querySelector(sel);
+      const m = el && /([\d.,]+)/.exec(tooltipOf(el).join(' '));
+      return m ? parseNumber(m[1]) : null;
+    };
+    const item = slot.querySelector(SEL.quests.rewardItem);
+    const time = slot.querySelector(SEL.quests.time);
+    return {
+      reward: gold ? parseNumber(gold.textContent) : null,
+      honour: fromTooltip(SEL.quests.rewardHonour),
+      xp: fromTooltip(SEL.quests.rewardXp),
+      foodReward: !!item && foodHealAmount(item) > 0,
+      timed: !!time && /\d+:\d+/.test(time.textContent),
+    };
+  }
+
+  function slotTitle(slot) {
+    const title = slot.querySelector(SEL.quests.title);
+    return title ? title.textContent.trim() : '';
+  }
+
   function questType(slot) {
     const icon = slot.querySelector(SEL.quests.icon);
     if (!icon) return null;
@@ -689,24 +841,55 @@
       throw new ActionError('Collecting the quest reward did not reload the page');
     }
 
+    // The quest given up on the last visit was started again so that it
+    // can be cancelled now.
+    if (memory.questDrop) {
+      const title = memory.questDrop;
+      memory.questDrop = null;
+      const slot = $$(SEL.quests.activeSlots).find((s) => slotTitle(s) === title);
+      const cancel = slot && slot.querySelector(SEL.quests.cancelInSlot);
+      if (cancel && isVisible(cancel)) {
+        await ctx.persist();
+        await click(ctx, cancel, `cancel quest "${title}"`);
+        if (await expectNavigation(ctx)) return { navigated: true };
+        throw new ActionError('Cancelling the quest did not reload the page');
+      }
+    }
+
+    const places = {
+      location: fightLocationName(state, settings, memory),
+      dungeon: memory.gameInfo.dungeonName,
+    };
+
+    // A failed quest blocks its slot until it is started again.
+    const restart = $$(SEL.quests.restart).find(isVisible);
+    if (restart) {
+      const slot = restart.closest(SEL.quests.slot);
+      const quest = { type: questType(slot), title: slotTitle(slot) };
+      const { step, why } = brain.failedQuestStep(quest, settings, places, memory, now);
+      if (step === 'drop') {
+        memory.questDrop = quest.title;
+        ctx.log('info', `Quests: giving up the failed quest "${quest.title}" (${why})`);
+      } else {
+        ctx.log('info', `Quests: starting the failed quest "${quest.title}" again`);
+      }
+      await ctx.persist();
+      await click(ctx, restart, `start quest "${quest.title}" again`);
+      if (await expectNavigation(ctx)) return { navigated: true };
+      throw new ActionError('Starting the failed quest again did not reload the page');
+    }
+
     const accepted = acceptedQuests();
     if (!accepted || accepted.count < accepted.max) {
       const offers = $$(SEL.quests.openSlots)
-        .map((slot) => {
-          const title = slot.querySelector(SEL.quests.title);
-          const reward = slot.querySelector(SEL.quests.reward);
-          return {
-            type: questType(slot),
-            title: title ? title.textContent.trim() : '',
-            reward: reward ? parseNumber(reward.textContent) : null,
-            accept: slot.querySelector(SEL.quests.acceptInSlot),
-          };
-        })
+        .map((slot) => ({
+          type: questType(slot),
+          title: slotTitle(slot),
+          ...questRewards(slot),
+          accept: slot.querySelector(SEL.quests.acceptInSlot),
+        }))
         .filter((q) => q.accept && isVisible(q.accept));
-      const quest = brain.chooseQuest(offers, settings, {
-        location: fightLocationName(state, settings, memory),
-        dungeon: memory.gameInfo.dungeonName,
-      });
+      const quest = brain.chooseQuest(offers, settings, places);
       if (quest) {
         await click(ctx, quest.accept, `accept ${quest.type} quest "${quest.title}"`);
         if (await expectNavigation(ctx)) return { navigated: true };
@@ -736,6 +919,6 @@
     work,
     quests,
     // Exposed for tests.
-    _internal: { foodHealAmount, dragAndDrop, readOpponents },
+    _internal: { foodHealAmount, isPlainFood, edible, dragAndDrop, readOpponents, questRewards },
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

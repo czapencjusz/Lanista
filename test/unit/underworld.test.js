@@ -227,3 +227,85 @@ test('attacks the enemy whose turn it is in the newest area, only for expedition
   assert.equal(moveOn.clicked.length, 0);
   assert.match(moveOn.result.url, /loc=1/, 'goes to the newest area first');
 });
+
+// The Hermit's page on s303-en (2026-10) while the player still holds the
+// Normal level's Dīs Pater's Armor: the page's script binds a popup to that
+// level's button only.
+const hermitPage = (armor = ['normal'], bound = true) =>
+  `${header(17)}<div id="header_values_level">110</div><div id="sstat_gold_val">262.214</div>
+   <div id="content"><form id="enterForm" action="index.php?mod=hermit&submod=enterUnderworld&sh=x" method="post">
+     <input type="submit" name="difficulty_normal" value="Normal" class="awesome-button big">
+     <input type="submit" name="difficulty_medium" value="Middle" class="awesome-button big">
+     <input type="submit" name="difficulty_hard" value="Hard" class="awesome-button big">
+     <input type="hidden" name="csrf_token" value="t"></form>
+     ${bound ? armor.map((d) => `<script>jQuery(function () { jQuery('#enterForm').find('input[name=difficulty_${d}]').click(function () { var button = this; new BlackoutDialog('confirmEnter', { confirm: function () { jQuery(button).off('click').click(); } }); return false; }); });</script>`).join('') : ''}
+   </div>
+   <div id="blackoutDialogconfirmEnter" class="cancel_confirm" style="display:none">Enter the Underworld? You have already defeated Dīs Pater at this difficulty level and received Dīs Pater's Armor.
+     <input id="linkconfirmEnter" class="awesome-button big" type="submit" value="Yes"><input id="linkcancelconfirmEnter" class="awesome-button big" type="submit" value="No"></div>`;
+
+// Runs the entry action. `popupFor` makes those buttons open the popup on a
+// click (as the page's script does) instead of entering.
+async function runEntry(body, enter, { popupFor = [], memory = brain.createMemory(NOW) } = {}) {
+  const { dom, st } = page(body, 'mod=hermit&submod=underworld');
+  const doc = dom.window.document;
+  const saved = { document: globalThis.document, location: globalThis.location };
+  Object.assign(globalThis, { document: doc, location: dom.window.location });
+  const clicked = [];
+  let unloading = false;
+  for (const b of doc.querySelectorAll('input')) {
+    b.addEventListener('click', (e) => {
+      e.preventDefault();
+      clicked.push(b.name || b.value);
+      if (popupFor.includes(b.name)) doc.querySelector('#blackoutDialogconfirmEnter').style.display = 'block';
+      else if (b.name.startsWith('difficulty_')) unloading = true;
+    });
+  }
+  const logs = [];
+  const notes = [];
+  const ctx = {
+    state: st,
+    settings: S.sanitizeSettings({ enabled: true, underworld: { enter } }),
+    memory,
+    log: (l, m) => logs.push(`${l}: ${m}`),
+    notify: (kind, m) => notes.push(`${kind}: ${m}`),
+    humanDelay: async () => {},
+    persist: async () => {},
+    isUnloading: () => unloading,
+    navigate: async (url, what) => ({ navigated: true, url, what }),
+    url: (p) => `${URL_BASE}?${new URLSearchParams(p)}`,
+    now: () => NOW,
+  };
+  try {
+    return { result: await GBot.actions.underworld(ctx), clicked, logs, notes, memory };
+  } finally {
+    Object.assign(globalThis, saved);
+  }
+}
+
+test('entering: not while the armor of that level is unused; the player is told once', async () => {
+  const held = await runEntry(hermitPage(['normal']), 'normal');
+  assert.deepEqual(held.clicked, [], 'the button is never clicked');
+  assert.deepEqual(held.result, { refresh: true });
+  assert.equal(held.memory.nextUnderworldCheck, NOW + 24 * 3600 * 1000);
+  assert.match(held.logs.find((l) => l.startsWith('warn')), /not entering on Normal\. You still have Dīs Pater's Armor/);
+  assert.equal(held.notes.length, 1);
+  assert.match(held.notes[0], /^underworld: Lanista: Underworld: not entering on Normal/);
+
+  const again = await runEntry(hermitPage(['normal']), 'normal', { memory: held.memory });
+  assert.equal(again.notes.length, 0, 'no second notification for the same level');
+  assert.equal(again.logs.filter((l) => l.startsWith('warn')).length, 1, 'still logged');
+
+  const other = await runEntry(hermitPage(['normal']), 'medium', { memory: held.memory });
+  assert.deepEqual(other.clicked, ['difficulty_medium'], 'another level without its armor is entered');
+  assert.deepEqual(other.result, { navigated: true });
+  assert.equal(other.memory.underworldArmor, null);
+});
+
+test('entering: if the armor popup shows up anyway, the answer is No', async () => {
+  const run = await runEntry(hermitPage(['medium'], false), 'medium', { popupFor: ['difficulty_medium'] });
+  assert.deepEqual(run.clicked, ['difficulty_medium', 'No']);
+  assert.ok(!run.clicked.includes('Yes'));
+  assert.deepEqual(run.result, { refresh: true });
+  assert.equal(run.memory.underworldArmor, 'medium');
+  assert.equal(run.notes.length, 1);
+});

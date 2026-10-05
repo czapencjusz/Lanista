@@ -74,13 +74,13 @@ async function scenario(gameState, settings) {
   game.reset(gameState);
   await worker.evaluate(async (host) => chrome.storage.local.remove(`memory:${host}`), HOST);
   await page.goto(`${GAME}index.php?mod=overview&sh=${SH}`);
-  await page.waitForSelector('#gbot-root', { state: 'attached' });
+  await page.waitForSelector('#lanista-root', { state: 'attached' });
   await configure({ ...settings, enabled: true });
 }
 
-test.describe('Lanista extension against a mock Gladiatus server', { skip: !executablePath && 'no Chromium binary found' }, () => {
+test.describe('Lanista against a mock Gladiatus server', { skip: !executablePath && 'no Chromium binary found' }, () => {
   test.before(async () => {
-    const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'gbot-e2e-'));
+    const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'lanista-e2e-'));
     context = await chromium.launchPersistentContext(profile, {
       executablePath,
       headless: true,
@@ -88,10 +88,12 @@ test.describe('Lanista extension against a mock Gladiatus server', { skip: !exec
       args: [`--disable-extensions-except=${EXTENSION}`, `--load-extension=${EXTENSION}`, '--no-sandbox'],
     });
     await context.route(`${ORIGIN}/**`, (route) => game.handle(route));
+    await context.route('https://lobby.gladiatus.gameforge.com/**', (route) => game.handleLobby(route));
+    await context.addCookies([{ name: 'gf-token-production', value: 'tok', domain: 'lobby.gladiatus.gameforge.com', path: '/', secure: true }]);
     worker = context.serviceWorkers()[0] || (await context.waitForEvent('serviceworker'));
     page = context.pages()[0] || (await context.newPage());
     page.on('console', (msg) => {
-      if (process.env.E2E_DEBUG && msg.text().includes('[Lanista]')) console.log('   page:', msg.text());
+      if (process.env.E2E_DEBUG && msg.text().includes('[GBot]')) console.log('   page:', msg.text());
     });
     page.on('pageerror', (e) => pageErrors.push(e.message));
   });
@@ -123,7 +125,7 @@ test.describe('Lanista extension against a mock Gladiatus server', { skip: !exec
     }, 15000, 'stats update');
     assert.equal(memory.stats.expedition, 1);
     await page.waitForFunction(() => {
-      const root = document.querySelector('#gbot-root').shadowRoot;
+      const root = document.querySelector('#lanista-root').shadowRoot;
       return /Waiting/.test(root.querySelector('.gb-status').textContent);
     }, null, { timeout: 15000 });
   });
@@ -149,6 +151,25 @@ test.describe('Lanista extension against a mock Gladiatus server', { skip: !exec
     assert.equal(game.state.hp, 400);
   });
 
+  test('out of food: food put in a bag later ends the 30-minute wait', { timeout: 90000 }, async () => {
+    await scenario(
+      { hp: 100, expPoints: 5, dunPoints: 0, bags: { 512: [], 513: [] } },
+      { expedition: { enabled: true }, heal: { enabled: true, eatBelowPercent: 50, minHpPercent: 25 } }
+    );
+    await waitUntil(async () => {
+      const m = await storageGet(`memory:${HOST}`);
+      return m && m.noFoodUntil > Date.now();
+    }, 45000, 'the no-food wait');
+    assert.equal(game.events('heal').length, 0);
+
+    // The player drops some food into bag II; the next page shows it.
+    game.state.bags[513] = [{ x: 1, y: 1, heal: 300 }];
+    await page.goto(`${GAME}index.php?mod=overview&sh=${SH}`);
+    await waitUntil(() => game.events('heal').length, 30000, 'eating the new food');
+    const memory = await storageGet(`memory:${HOST}`);
+    assert.ok(memory.log.some((l) => /Found food in the food bags again/.test(l.message)));
+  });
+
   test('attacks the lowest arena opponent and the highest circus opponent', { timeout: 90000 }, async () => {
     await scenario(
       { expPoints: 0, dunPoints: 0 },
@@ -157,6 +178,45 @@ test.describe('Lanista extension against a mock Gladiatus server', { skip: !exec
     await waitUntil(() => game.events('arena').length && game.events('circus').length, 75000, 'arena and circus fights');
     assert.equal(game.events('arena')[0].level, 22);
     assert.equal(game.events('circus')[0].level, 45);
+  });
+
+  test('local arena: the strongest that is not a buddy; local circus waits while passive', { timeout: 90000 }, async () => {
+    await scenario(
+      { expPoints: 0, dunPoints: 0 },
+      {
+        expedition: { enabled: false },
+        dungeon: { enabled: false },
+        arena: { enabled: true, where: 'local', target: 'highest' },
+        circus: { enabled: true, where: 'local' },
+      }
+    );
+    const [fight] = await waitUntil(() => game.events('arena').length && game.events('arena'), 60000, 'a local arena fight');
+    assert.deepEqual([fight.opponent, fight.local], ['Tough', true], 'rank 6 is a buddy, so rank 7');
+    const memory = await waitUntil(async () => {
+      const m = await storageGet(`memory:${HOST}`);
+      return m && m.blockedUntil && m.blockedUntil.circus ? m : null;
+    }, 30000, 'the circus to wait');
+    assert.ok(memory.blockedUntil.circus > Date.now() + 5 * 3600 * 1000, 'about 6 hours');
+    assert.equal(game.events('circus').length, 0);
+    assert.ok(memory.log.some((l) => /participation status Passive/.test(l.message)));
+  });
+
+  test('out of food: buys the best HP per gold from the merchant, then eats it', { timeout: 90000 }, async () => {
+    const shopFood = [
+      { x: 1, y: 1, heal: 300, price: 500 },
+      { x: 2, y: 1, heal: 400, price: 2000 },
+      { x: 3, y: 1, heal: 350, price: 400 },
+    ];
+    await scenario(
+      { hp: 100, expPoints: 0, dunPoints: 0, bags: { 512: [], 513: [] }, shopFood },
+      { expedition: { enabled: true }, heal: { enabled: true, eatBelowPercent: 50, minHpPercent: 25, buy: true, buyAtOnce: 2, buyKeepGold: 1000, bags: { b1: false, b2: true } } }
+    );
+    await waitUntil(() => game.events('heal').length, 60000, 'eating the bought food');
+    assert.deepEqual(game.events('buy').map((b) => [b.price, b.bag]), [[400, 513], [500, 513]], 'best HP per gold first, into the food bag (II)');
+    assert.equal(game.state.gold, 12345 - 900);
+    const memory = await storageGet(`memory:${HOST}`);
+    assert.equal(memory.stats.foodBought, 2);
+    assert.equal(memory.foodBought.gold, 900);
   });
 
   test('collects the daily login bonus', { timeout: 45000 }, async () => {
@@ -184,6 +244,19 @@ test.describe('Lanista extension against a mock Gladiatus server', { skip: !exec
     assert.deepEqual(game.events('questAccept').map((e) => e.questType), ['expedition']);
   });
 
+  test('failed quests: started again, or given up when the bot would not do them', { timeout: 60000 }, async () => {
+    const types = { combat: false, arena: true, circus: false, expedition: true, dungeon: false, items: false };
+    const quests = [
+      { pos: 4, type: 'arena', title: 'Arena: Win 3 attacks in succession', failed: true },
+      { pos: 5, type: 'expedition', title: 'Defeat 5 opponents', failed: true },
+    ];
+    await scenario({ quests, acceptedQuests: ['expedition', 'items'], expPoints: 0, dunPoints: 0 }, { arena: { enabled: false }, quests: { enabled: true, types } });
+    await waitUntil(() => game.events('cancelQuest').length && game.events('restartQuest').length === 2, 45000, 'both quests started again, one cancelled');
+    assert.deepEqual(game.events('restartQuest').map((e) => e.title).sort(), ['Arena: Win 3 attacks in succession', 'Defeat 5 opponents']);
+    assert.deepEqual(game.events('cancelQuest').map((e) => e.title), ['Arena: Win 3 attacks in succession'], 'the arena is off: given up');
+    assert.deepEqual(game.state.quests.map((q) => [q.title, q.failed]), [['Defeat 5 opponents', false]]);
+  });
+
   test('pauses an activity that keeps failing instead of looping', { timeout: 90000 }, async () => {
     await scenario(
       { expeditionDisabled: true, expPoints: 5, dunPoints: 0 },
@@ -202,12 +275,12 @@ test.describe('Lanista extension against a mock Gladiatus server', { skip: !exec
     await configure({ enabled: false });
     game.reset({ expPoints: 0, dunPoints: 0 });
     await page.goto(`${GAME}index.php?mod=overview&sh=${SH}`);
-    const bar = page.locator('#gbot-root .gb-panel');
+    const bar = page.locator('#lanista-root .gb-panel');
     await bar.waitFor();
 
     await bar.locator('[data-activity="arena"]').click();
     await waitUntil(async () => (await storageGet(SETTINGS)).arena.enabled === true, 5000, 'arena on');
-    await page.waitForFunction(() => document.querySelector('#gbot-root').shadowRoot.querySelector('[data-activity="arena"]').classList.contains('on'));
+    await page.waitForFunction(() => document.querySelector('#lanista-root').shadowRoot.querySelector('[data-activity="arena"]').classList.contains('on'));
     await bar.locator('[data-activity="arena"]').click();
     await waitUntil(async () => (await storageGet(SETTINGS)).arena.enabled === false, 5000, 'arena off');
 
@@ -219,10 +292,10 @@ test.describe('Lanista extension against a mock Gladiatus server', { skip: !exec
 
     // Docked layout pushes the page down instead of covering it.
     await configure({ enabled: false, ui: { panel: true, layout: 'bar' } });
-    await page.waitForFunction(() => document.querySelector('#gbot-root').shadowRoot.querySelector('.gb-panel').classList.contains('bar'));
+    await page.waitForFunction(() => document.querySelector('#lanista-root').shadowRoot.querySelector('.gb-panel').classList.contains('bar'));
     assert.ok(parseInt(await page.evaluate(() => document.documentElement.style.paddingTop), 10) > 20);
     await configure({ enabled: false, ui: { panel: false } });
-    await page.waitForFunction(() => document.querySelector('#gbot-root').shadowRoot.querySelector('.gb-panel').style.display === 'none');
+    await page.waitForFunction(() => document.querySelector('#lanista-root').shadowRoot.querySelector('.gb-panel').style.display === 'none');
     assert.equal(await page.evaluate(() => document.documentElement.style.paddingTop), '');
   });
 
@@ -231,7 +304,7 @@ test.describe('Lanista extension against a mock Gladiatus server', { skip: !exec
     game.reset({ expPoints: 0, dunPoints: 0 });
     await worker.evaluate(async (host) => chrome.storage.local.remove(`memory:${host}`), HOST);
     await page.goto(`${GAME}index.php?mod=overview&sh=${SH}`);
-    const root = page.locator('#gbot-root');
+    const root = page.locator('#lanista-root');
     await root.locator('[data-settings="arena"]').click({ force: true });
     const dialog = root.locator('.gb-modal');
     await dialog.waitFor();
@@ -372,5 +445,22 @@ test.describe('Lanista extension against a mock Gladiatus server', { skip: !exec
     assert.equal((await storageGet(SETTINGS)).enabled, false);
     await options.close();
     await worker.evaluate(async (key) => chrome.storage.local.remove(key), `settings:${OTHER}`);
+  });
+
+  // Last: the game tab is closed by the end of it.
+  test('logged out: logs back in through the lobby, and the lobby tab closes', { timeout: 90000 }, async () => {
+    await scenario({ expPoints: 0, dunPoints: 0 }, { expedition: { enabled: true }, general: { rejoin: true } });
+    await page.waitForTimeout(1500);
+    game.state.loggedOut = true;
+    const lobbyTab = page;
+    await page.goto(`${GAME}index.php?mod=overview&sh=${SH}`);
+    await waitUntil(() => game.events('login').length, 60000, 'the login through the lobby');
+    assert.equal(game.events('lobbyLogin').length, 1, 'Play pressed once');
+    await waitUntil(() => lobbyTab.isClosed(), 20000, 'the lobby tab to close');
+    page = await waitUntil(() => context.pages().find((p) => !p.isClosed() && p.url().startsWith(GAME)), 10000, 'the new game tab');
+    page.on('pageerror', (e) => pageErrors.push(e.message));
+    const session = await worker.evaluate(async () => (await chrome.storage.session.get('rejoin')).rejoin);
+    assert.deepEqual(session.jobs, {});
+    assert.equal(session.tries[HOST].length, 1);
   });
 });

@@ -7,7 +7,8 @@
 //             starts the smelt
 //
 // The queue (memory.smeltQueue) holds packages by their container number,
-// which stays the same until the package is opened. Smelting takes a while
+// which stays the same until the package is opened, and items already in
+// a bag set as a smelt bin (Settings > Smelting) by their item id. Smelting takes a while
 // (about an hour on a speed x2 server), so the bot comes back when the
 // first slot is due (memory.smeltNext).
 (function (root) {
@@ -39,20 +40,56 @@
 
   const isSmeltable = (el) => (Number(el.dataset.contentType) & SMELTABLE) > 0;
 
+  // Smeltable items in the smelt bins join the queue (once each).
+  const BIN_CHECK_MS = 15 * 60 * 1000;
+  async function queueBins(ctx) {
+    const bins = brain.smeltBins(ctx.settings);
+    if (!bins.length) return;
+    const { html } = await GBot.forge.getDoc(ctx.state.sh, { mod: 'overview' });
+    const queued = new Set(ctx.memory.smeltQueue.filter((q) => q.iid).map((q) => String(q.iid)));
+    let added = 0;
+    for (const el of GBot.forge.readBagItems(html, bins)) {
+      const iid = el.dataset.itemId;
+      if (!iid || queued.has(String(iid)) || !isSmeltable(el)) continue;
+      ctx.memory.smeltQueue.push({ iid: String(iid), name: GBot.forge.tooltipLines(el)[0] || 'item', basis: el.dataset.basis || '', w: 1, h: 1 });
+      queued.add(String(iid));
+      added += 1;
+    }
+    if (added) ctx.log('info', `Queued ${added} item${added === 1 ? '' : 's'} from the smelt bin${bins.length === 1 ? '' : 's'}`);
+  }
+
   async function readSmelter(sh) {
     return GBot.forge.readSlots((await GBot.forge.getDoc(sh, { mod: 'forge', submod: 'smeltery' })).html);
   }
 
-  // Finds a queued package (by name, then container number) among the
-  // packages. Returns the item element or null.
+  // Finds a queued package by its container number: first among the
+  // packages found by its name (every page of them), then, should the
+  // name search miss it, among all the packages. Returns the item element
+  // or null.
   async function findPackage(sh, entry) {
-    const { doc } = await GBot.forge.getDoc(sh, { mod: 'packages', qry: entry.name, f: 0, fq: -1 });
-    return (
+    const match = (doc) =>
       Array.from(doc.querySelectorAll('.packageItem [data-content-type]')).find(
         (el) => parseNumber(el.parentElement.getAttribute('data-container-number')) === entry.cn
-      ) || null
-    );
+      ) || null;
+    const search = async (qry) => {
+      let last = 1;
+      for (let page = 1; page <= last; page++) {
+        const { doc } = await GBot.forge.getDoc(sh, { mod: 'packages', qry, f: 0, fq: -1, page });
+        const found = match(doc);
+        if (found) return found;
+        if (page === 1) last = GBot.packages ? GBot.packages.lastPage(doc) : 1;
+      }
+      return null;
+    };
+    return (await search(entry.name)) || (entry.name ? search('') : null);
   }
+
+  // Takes this entry (not just the first one: the queue may have changed
+  // meanwhile, from the packages page) off the queue.
+  const dropEntry = (memory, entry) => {
+    const i = memory.smeltQueue.findIndex((e) => brain.smeltKey(e) === brain.smeltKey(entry));
+    if (i >= 0) memory.smeltQueue.splice(i, 1);
+  };
 
   async function collect(ctx, slots) {
     const { memory, settings } = ctx;
@@ -76,18 +113,21 @@
     const sh = ctx.state.sh;
     const entry = memory.smeltQueue[0];
 
-    const pkg = await findPackage(sh, entry);
-    if (!pkg) {
-      memory.smeltQueue.shift();
-      ctx.log('warn', `Smelting: ${entry.name} is no longer in the packages, removed from the queue`);
-      return 0;
+    let iid = entry.iid;
+    if (!iid) {
+      const pkg = await findPackage(sh, entry);
+      if (!pkg) {
+        dropEntry(memory, entry);
+        ctx.log('warn', `Smelting: ${entry.name} is no longer in the packages, removed from the queue`);
+        return 0;
+      }
+      const spot = await GBot.forge.freeBagSpot(sh, entry.w, entry.h);
+      await ctx.humanDelay();
+      const moved = await GBot.forge.moveItem(sh, { from: entry.cn, fromX: 1, fromY: 1, to: spot.bag, toX: spot.x, toY: spot.y, amount: 1 });
+      iid = moved.to && moved.to.data && moved.to.data.itemId;
     }
-    const spot = await GBot.forge.freeBagSpot(sh, entry.w, entry.h);
-    await ctx.humanDelay();
-    const moved = await GBot.forge.moveItem(sh, { from: entry.cn, fromX: 1, fromY: 1, to: spot.bag, toX: spot.x, toY: spot.y, amount: 1 });
-    const iid = moved.to && moved.to.data && moved.to.data.itemId;
-    // From here on the item is in the bag: leave the queue either way.
-    memory.smeltQueue.shift();
+    // From here on the item is in a bag: leave the queue either way.
+    dropEntry(memory, entry);
     await ctx.persist();
     if (!iid) throw new ActionError(`Smelting: moved ${entry.name} to the bag but could not read its id; it stays in the bag`);
 
@@ -122,6 +162,7 @@
     const { memory } = ctx;
     const sh = ctx.state.sh;
     try {
+      await queueBins(ctx);
       const slots = await readSmelter(sh);
       await collect(ctx, slots);
       let gold = ctx.state.gold;
@@ -140,15 +181,18 @@
       // Come back when the first smelt is due (or the queue can move on).
       const after = await readSmelter(sh);
       memory.smeltNext = brain.nextSmeltCheck(after, memory.smeltQueue.length, ctx.now());
+      // With smelt bins, look into them again in a while.
+      if (brain.smeltBins(ctx.settings).length) memory.smeltNext = Math.min(memory.smeltNext || Infinity, ctx.now() + BIN_CHECK_MS);
     } catch (e) {
       // Count failures against the item at the head of the queue, and give
       // up on it after a few. Full bags are not the item's fault.
       const head = memory.smeltQueue[0];
       if (head && e instanceof ActionError && !/^No room/.test(e.message)) {
-        memory.smeltFailures = memory.smeltFailingCn === head.cn ? (memory.smeltFailures || 0) + 1 : 1;
-        memory.smeltFailingCn = head.cn;
+        const key = head.cn !== undefined ? head.cn : `iid:${head.iid}`;
+        memory.smeltFailures = memory.smeltFailingCn === key ? (memory.smeltFailures || 0) + 1 : 1;
+        memory.smeltFailingCn = key;
         if (memory.smeltFailures >= MAX_FAILURES) {
-          memory.smeltQueue.shift();
+          dropEntry(memory, head);
           memory.smeltFailures = 0;
           ctx.log('warn', `Smelting: gave up on ${head.name} after ${MAX_FAILURES} failed attempts`);
         }

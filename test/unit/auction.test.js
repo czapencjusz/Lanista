@@ -162,7 +162,7 @@ test('no bids in a long round, when enough food is owned, or twice on a lot', as
   const third0 = context({ maxFood: 20 });
   await withGame(full, () => GBot.actions.auction(third0.ctx));
   assert.deepEqual(full.posts, []);
-  assert.deepEqual(third0.logs, ['info: Auction: you own 36 healing items (limit 20), not bidding']);
+  assert.deepEqual(third0.logs, ['info: Auction: you own 36 healing items (limit 20), not bidding on food']);
 
   // Same round, later look: lot 1 already has our bid; a new round resets.
   const again = mockGame({ time: 'Very short' });

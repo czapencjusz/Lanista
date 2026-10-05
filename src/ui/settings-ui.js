@@ -33,21 +33,27 @@
     const view = {
       settings: S.sanitizeSettings(opts.settings || {}),
       memory: opts.memory || null,
-      tab: ui.TABS.some((t) => t.id === opts.initialTab) ? opts.initialTab : 'general',
+      tab: ui.TABS.some((t) => t.id === opts.initialTab) ? opts.initialTab : 'overview',
     };
 
     const nav = h('nav', { class: 'gb-tabs', role: 'tablist', 'aria-label': 'Settings sections' });
     const pane = h('section', { class: 'gb-pane', role: 'tabpanel' });
     const element = h('div', { class: `gb-settings${opts.compact ? ' gb-compact' : ''}` }, nav, pane);
 
+    // The on/off path a tab's dot shows: its header switch, or another one.
+    const onPath = (tab) => tab.enable || tab.toggle || null;
+
     const tabButtons = new Map();
+    let group = null;
     for (const tab of ui.TABS) {
+      if (tab.group && tab.group !== group) nav.appendChild(h('div', { class: 'gb-tab-group', role: 'presentation' }, tab.group));
+      group = tab.group;
       const button = h(
         'button',
         { type: 'button', class: 'gb-tab', role: 'tab', title: tab.title, dataset: { tab: tab.id }, onclick: () => showTab(tab.id) },
-        icon(tab.icon),
+        icon(tab.icon, 16),
         h('span', { class: 'gb-tab-label' }, tab.title),
-        tab.enable ? h('span', { class: 'gb-dot', 'aria-hidden': 'true' }) : null
+        onPath(tab) ? h('span', { class: 'gb-dot', 'aria-hidden': 'true' }) : null
       );
       tabButtons.set(tab.id, button);
       nav.appendChild(button);
@@ -177,7 +183,8 @@
       text(field) {
         const input = h('input', {
           type: 'text',
-          class: 'gb-input',
+          class: field.wide ? 'gb-input gb-input-full' : 'gb-input',
+          spellcheck: field.wide ? 'false' : null,
           placeholder: field.placeholder,
           'aria-label': field.label,
           dataset: { path: field.path },
@@ -307,6 +314,55 @@
         };
       },
 
+      // Addresses for phone alerts (one per line), with a button that sends
+      // a test message to each.
+      push(field) {
+        const input = h('textarea', {
+          class: 'gb-input gb-input-wide gb-mono',
+          rows: 2,
+          placeholder: field.placeholder,
+          spellcheck: 'false',
+          'aria-label': field.label,
+          dataset: { path: field.path },
+          onchange: () => commit(field.path, input.value.split(/\s+/).filter(Boolean).join('\n')),
+        });
+        const status = h('div', { class: 'gb-help gb-push-status', role: 'status' });
+        const test = h(
+          'button',
+          {
+            type: 'button',
+            class: 'gb-btn',
+            onclick: async () => {
+              const urls = input.value.split(/\s+/).filter(Boolean);
+              if (!urls.length || urls.some((u) => !/^https:\/\//i.test(u))) {
+                status.textContent = urls.length ? 'Every address has to start with https://.' : 'Enter an https:// address first.';
+                return;
+              }
+              const url = urls.join('\n');
+              status.textContent = 'Sending…';
+              let result;
+              try {
+                result = await opts.onTestPush(url);
+              } catch (e) {
+                result = { ok: false, error: e && e.message ? e.message : String(e) };
+              }
+              const where = urls.length === 1 ? 'the address' : 'the addresses';
+              status.textContent =
+                result && result.ok ? `Sent. If nothing arrives, check ${where}.` : `Could not send: ${(result && result.error) || 'Lanista did not answer (reload the page?)'}`;
+            },
+          },
+          'Send a test'
+        );
+        return {
+          control: h('div', {}, h('span', { class: 'gb-inline gb-push' }, input, opts.onTestPush ? test : null), status),
+          inputs: [input, test],
+          stack: true,
+          sync: () => {
+            if (!isFocused(input)) input.value = get(field.path);
+          },
+        };
+      },
+
       checks(field) {
         const controls = field.items.map((item) => ({ item, control: switchControl(item.path, item.label) }));
         const grid = h(
@@ -336,7 +392,7 @@
       );
       syncers.push(() => {
         r.sync();
-        const enabled = !field.dependsOn || !!get(field.dependsOn);
+        const enabled = !field.dependsOn || [].concat(field.dependsOn).some((path) => !!get(path));
         row.classList.toggle('disabled', !enabled);
         for (const input of r.inputs) input.disabled = !enabled;
       });
@@ -347,16 +403,135 @@
 
     const formatNumber = (n) => (n === null || n === undefined ? '–' : Number(n).toLocaleString());
 
+    // "Today", "Yesterday", or "Mon 28 Sep" for a day key (YYYY-MM-DD).
+    function dayLabel(day) {
+      const [y, m, d] = day.split('-').map(Number);
+      const date = new Date(y, m - 1, d);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const ago = Math.round((today - date) / 86400000);
+      if (ago === 0) return 'Today';
+      if (ago === 1) return 'Yesterday';
+      return date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+    }
+
+    // One row per day: fights and how many were won, what came in and what
+    // was spent.
+    function daysTable(days) {
+      const fightTypes = ['expedition', 'dungeon', 'arena', 'circus'];
+      const n = (v) => (typeof v === 'number' ? v : 0);
+      const rows = days.map((d) => {
+        const fights = fightTypes.reduce((sum, t) => sum + n(d[t]), 0);
+        const results = d.results || {};
+        const won = fightTypes.reduce((sum, t) => sum + n(results[t] && results[t].won), 0);
+        const lost = fightTypes.reduce((sum, t) => sum + n(results[t] && results[t].lost), 0);
+        const loot = d.loot || {};
+        const gold = n(loot.gold) + n(d.soldGold) + n(d.goldCollected);
+        return h(
+          'tr',
+          { dataset: { day: d.day } },
+          h('th', { scope: 'row' }, dayLabel(d.day)),
+          h('td', {}, formatNumber(fights)),
+          h('td', {}, won + lost ? `${Math.round((100 * won) / (won + lost))}%` : '–'),
+          h('td', {}, formatNumber(gold)),
+          h('td', {}, formatNumber(n(loot.xp))),
+          h('td', {}, formatNumber(n(loot.honour))),
+          h('td', {}, formatNumber(n(loot.fame))),
+          h('td', {}, formatNumber(n(d.goldSpent)))
+        );
+      });
+      const head = ['Day', 'Fights', 'Won', 'Gold in', 'XP', 'Honour', 'Fame', 'Gold spent'].map((t) => h('th', { scope: 'col' }, t));
+      return h('div', { class: 'gb-table-wrap' }, h('table', { class: 'gb-table gb-days' }, h('thead', {}, h('tr', {}, head)), h('tbody', {}, rows)));
+    }
+
+    // Fights per place: expedition locations, dungeons, the arenas.
+    function placesTable(places) {
+      const rows = places.map((p) =>
+        h(
+          'tr',
+          { dataset: { place: p.key } },
+          h('th', { scope: 'row' }, p.name),
+          h('td', {}, formatNumber(p.fights)),
+          h('td', {}, p.fights ? `${Math.round((100 * p.won) / p.fights)}%` : '–'),
+          h('td', {}, formatNumber(p.gold)),
+          h('td', {}, p.fights ? formatNumber(Math.round(p.gold / p.fights)) : '–'),
+          h('td', {}, formatNumber(p.xp)),
+          h('td', {}, formatNumber(p.honour + p.fame))
+        )
+      );
+      const head = ['Place', 'Fights', 'Won', 'Gold', 'Gold per fight', 'XP', 'Honour / fame'].map((t) => h('th', { scope: 'col' }, t));
+      return h('div', { class: 'gb-table-wrap' }, h('table', { class: 'gb-table gb-places' }, h('thead', {}, h('tr', {}, head)), h('tbody', {}, rows)));
+    }
+
+    // Every feature on one page: its switch and a line about its settings;
+    // the name opens its tab.
+    function overviewPane() {
+      const master = switchControl('enabled', 'Lanista is running');
+      master.el.classList.add('gb-switch-lg');
+      const state = h('span', { class: 'gb-overview-state' });
+      syncers.push(() => {
+        master.sync();
+        state.textContent = get('enabled') ? 'Running' : 'Paused';
+        state.classList.toggle('on', !!get('enabled'));
+      });
+      const out = [h('div', { class: 'gb-overview-master' }, h('span', { class: 'gb-label' }, 'Lanista'), state, master.el)];
+      let grid = null;
+      let group = null;
+      for (const tab of ui.TABS) {
+        if (!tab.summary) continue;
+        if (!grid || tab.group !== group) {
+          group = tab.group;
+          grid = h('div', { class: 'gb-overview-grid' });
+          out.push(h('h3', {}, group), grid);
+        }
+        const path = onPath(tab);
+        const control = path ? switchControl(path, `${tab.title} on or off`) : null;
+        const summary = h('div', { class: 'gb-overview-sum' });
+        const card = h(
+          'div',
+          { class: 'gb-overview-card', dataset: { card: tab.id } },
+          h(
+            'div',
+            { class: 'gb-overview-card-head' },
+            h('button', { type: 'button', class: 'gb-overview-open', title: `${tab.title} settings`, onclick: () => showTab(tab.id) }, icon(tab.icon, 16), h('span', {}, tab.title)),
+            control ? control.el : null
+          ),
+          summary
+        );
+        syncers.push(() => {
+          if (control) control.sync();
+          card.classList.toggle('off', !!path && !get(path));
+          summary.textContent = tab.summary(view.settings, view.memory && view.memory.gameInfo);
+        });
+        grid.appendChild(card);
+      }
+      return out;
+    }
+
     function statsPane() {
       const cards = h('div', { class: 'gb-cards' });
+      const daysBox = h('div', {});
       const since = h('p', { class: 'gb-desc' });
       const reset = h('button', { type: 'button', class: 'gb-btn', onclick: () => confirmThen(reset, 'Reset statistics', opts.onResetStats) }, 'Reset statistics');
       syncers.push(() => {
         const stats = (view.memory && view.memory.stats) || null;
         cards.textContent = '';
+        daysBox.textContent = '';
         if (!stats) {
           since.textContent = 'No data yet. Open a game tab with the bot running.';
           return;
+        }
+        const days = GBot.brain && GBot.brain.statsDays ? GBot.brain.statsDays(view.memory) : [];
+        if (days.length) {
+          daysBox.appendChild(h('h3', {}, 'Per day'));
+          daysBox.appendChild(daysTable(days));
+          daysBox.appendChild(h('p', { class: 'gb-help' }, 'Gold in: looted, sold and taken from gold packages. Gold spent: training, repairs, smelting, auction bids and food. The last 30 days are kept.'));
+        }
+        const places = GBot.brain && GBot.brain.areaStats ? GBot.brain.areaStats(view.memory) : [];
+        if (places.length) {
+          daysBox.appendChild(h('h3', {}, 'By place'));
+          daysBox.appendChild(placesTable(places));
+          daysBox.appendChild(h('p', { class: 'gb-help' }, 'Since the statistics were last reset. Honour comes from expeditions and the arena, fame from dungeons and the circus.'));
         }
         const hours = Math.max((Date.now() - stats.since) / 3600000, 1 / 60);
         const card = (label, value, sub) =>
@@ -368,11 +543,15 @@
           ['arena', 'Arena fights'],
           ['circus', 'Circus fights'],
           ['heal', 'Meals eaten'],
+          ['medic', 'Doctors seen'],
+          ['blessings', 'Blessings bought'],
+          ['boosts', 'Boosts used'],
           ['nest', 'Nests searched'],
           ['training', 'Stats trained'],
           ['repairs', 'Items repaired'],
           ['smelted', 'Items smelted'],
           ['sold', 'Items sold'],
+          ['foodBought', 'Food bought'],
           ['auctionBids', 'Auction bids'],
           ['quests', 'Quests finished'],
           ['work', 'Work shifts'],
@@ -390,13 +569,14 @@
         }
         if (stats.soldGold) cards.appendChild(card('Gold from sales', formatNumber(stats.soldGold), rate(stats.soldGold)));
         if (stats.goldCollected) cards.appendChild(card('Gold from packages', formatNumber(stats.goldCollected), rate(stats.goldCollected)));
+        if (stats.goldHidden) cards.appendChild(card('Gold hidden', formatNumber(stats.goldHidden), 'in guild market packs'));
         if (stats.goldStart !== null && stats.goldNow !== null) {
           const diff = stats.goldNow - stats.goldStart;
           cards.appendChild(card('Gold change', `${diff >= 0 ? '+' : ''}${formatNumber(diff)}`, `now ${formatNumber(stats.goldNow)}`));
         }
         since.textContent = `Since ${new Date(stats.since).toLocaleString()}.`;
       });
-      return [since, cards, h('div', { class: 'gb-actions' }, reset)];
+      return [since, cards, daysBox, h('div', { class: 'gb-actions' }, reset)];
     }
 
     function logPane() {
@@ -408,8 +588,36 @@
       );
       const list = h('div', { class: 'gb-log' });
       const clear = h('button', { type: 'button', class: 'gb-btn', onclick: () => confirmThen(clear, 'Clear log', opts.onClearLog) }, 'Clear log');
+      const status = h('span', { class: 'gb-help gb-copy-status', role: 'status' });
+      const shown = () => ((view.memory && view.memory.log) || []).filter((e) => filter.value === 'all' || e.level === 'warn' || e.level === 'error');
+
+      // The lines shown, oldest first, as text: for a bug report or a chat.
+      async function copyLog() {
+        const text = ui.logText(shown());
+        let copied = false;
+        try {
+          await navigator.clipboard.writeText(text);
+          copied = true;
+        } catch (e) {
+          // No clipboard access here: copy through a selected text field.
+          const area = h('textarea', { class: 'gb-offscreen', 'aria-hidden': 'true' });
+          area.value = text;
+          element.appendChild(area);
+          area.select();
+          try {
+            copied = document.execCommand('copy');
+          } catch (e2) {
+            copied = false;
+          }
+          area.remove();
+        }
+        status.textContent = copied ? `Copied ${shown().length} lines.` : 'Could not reach the clipboard.';
+        setTimeout(() => (status.textContent = ''), 4000);
+      }
+      const copy = h('button', { type: 'button', class: 'gb-btn', onclick: copyLog }, 'Copy log');
+
       syncers.push(() => {
-        const entries = ((view.memory && view.memory.log) || []).filter((e) => filter.value === 'all' || e.level === 'warn' || e.level === 'error');
+        const entries = shown();
         list.textContent = '';
         if (!entries.length) list.appendChild(h('div', { class: 'gb-empty' }, 'Nothing logged yet.'));
         for (const e of entries.slice().reverse()) {
@@ -417,7 +625,8 @@
           list.appendChild(h('div', { class: `gb-log-line ${e.level}` }, h('span', { class: 'gb-log-time' }, time), ' ', e.message));
         }
       });
-      return [h('div', { class: 'gb-actions' }, filter, clear), list];
+      const report = ui.reportLink({ log: () => (view.memory && view.memory.log) || [] });
+      return [h('div', { class: 'gb-actions' }, filter, copy, clear, report, status), list];
     }
 
     function profilePane() {
@@ -588,7 +797,8 @@
       }
 
       let body;
-      if (tab.custom === 'stats') body = statsPane();
+      if (tab.custom === 'overview') body = overviewPane();
+      else if (tab.custom === 'stats') body = statsPane();
       else if (tab.custom === 'log') body = logPane();
       else if (tab.custom === 'profile') body = profilePane();
       else body = tab.fields.map(renderField);
@@ -603,9 +813,9 @@
 
     function sync() {
       for (const tab of ui.TABS) {
-        if (!tab.enable) continue;
+        if (!onPath(tab)) continue;
         const dot = tabButtons.get(tab.id).querySelector('.gb-dot');
-        dot.classList.toggle('on', !!get(tab.enable));
+        dot.classList.toggle('on', !!get(onPath(tab)));
       }
       for (const fn of syncers) fn();
     }

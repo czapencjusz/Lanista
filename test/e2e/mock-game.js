@@ -34,6 +34,23 @@ function defaultState() {
     questFinished: false,
     expeditionDisabled: false,
     acceptedQuests: [],
+    gold: 12345,
+    // The local arena's "Own placing": players ranked just above us.
+    localArena: [
+      { id: 501, rank: 6, name: 'Friend', buddy: true },
+      { id: 502, rank: 7, name: 'Tough' },
+      { id: 503, rank: 8, name: 'Middle' },
+      { id: 504, rank: 9, name: 'NextUp' },
+    ],
+    // Local Circus Turma: attacks are only listed while taking part.
+    circusActive: false,
+    // Food in the General goods merchant's second tab (container 305).
+    shopFood: [],
+    // Logged out: game pages show no game until the lobby logs back in.
+    loggedOut: false,
+    // Accepted quests: { pos, type, title, failed }. A failed one only offers
+    // "Start quest again" (it runs again), a running one "Cancel quest".
+    quests: [],
     events: [],
   };
 }
@@ -65,6 +82,7 @@ class MockGame {
       sh: SH,
       hp: s.hp,
       hpMax: s.hpMax,
+      gold: s.gold,
       expPoints: s.expPoints,
       dunPoints: s.dunPoints,
       cooldowns: {
@@ -107,6 +125,10 @@ class MockGame {
 
   overviewPage() {
     const bag = 512;
+    // Like the real page: all eight bags as an escaped JSON literal handed
+    // to the game's BagLoader (a stub here).
+    const bags = Array.from({ length: 8 }, (_, i) => [this.bagItems(512 + i)]);
+    const literal = JSON.stringify(bags).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     return this.render(
       'overviewPage',
       `<div id="char" style="display:flex;gap:20px">
@@ -120,6 +142,8 @@ class MockGame {
          </div>
        </div>`,
       `
+      function BagLoader() {}
+      new BagLoader(jQuery('#inv'), jQuery('#inventory_nav'), JSON.parse('${literal}'));
       var currentBag = ${bag};
       function initItems() {
         $('#inv [data-content-type]').draggable({ revert: 'invalid', zIndex: 1000 });
@@ -190,6 +214,43 @@ class MockGame {
     );
   }
 
+  // The local arena (mod=arena) and circus (submod=grouparena), as on
+  // s303-en: rank, name (span.buddy for buddies) and an attack button.
+  localArenaPage(circus) {
+    const own = this.state.localArena
+      .map(
+        (p) => `<tr><td>${p.rank}</td><td><div><span${p.buddy ? ' class="buddy"' : ''}><a href="index.php?mod=player&p=${p.id}&sh=${SH}">${p.name}</a></span></div></td>
+          <td>${circus && !this.state.circusActive ? '' : `<div class="attack" onclick="startFight(this, ${p.id})"></div>`}</td></tr>`
+      )
+      .join('');
+    return this.render(
+      'arenaPage',
+      `<div id="errorRow" style="display:none"><div id="errorText"></div></div>
+       <h2 class="section-header">Own placing</h2>
+       <table><tr><th>Rank</th><th>Name</th><th></th></tr>${own}<tr><td>10</td><td>Me</td><td></td></tr></table>`,
+      `function startFight(el, id) {
+         $.get('ajax.php?mod=arena&submod=localFight&circus=${circus ? 1 : 0}&did=' + id + '&sh=' + secureHash, function (r) {
+           if (r.redirect) window.location.href = r.redirect;
+           else { $('#errorText').text(r.error); $('#errorRow').show(); }
+         }, 'json');
+       }`
+    );
+  }
+
+  // A merchant: General goods' second tab sells the food in state.shopFood;
+  // every other tab has an empty grid.
+  shopPage(sub, subsub) {
+    const food = sub === '3' && subsub === '1' ? this.state.shopFood : [];
+    const items = food
+      .map((f) => {
+        const tooltip = JSON.stringify([[['Apple', 'white'], [`Using: Heals ${f.heal} of life`, 'white'], ['From intelligence: +100 vitality point(s)', 'lime'], ['Level 20', 'white'], [`Merchant Price ${f.price}`, 'white']]]);
+        return `<div data-content-type="64" data-level="20" data-price-gold="${f.price}" data-position-x="${f.x}" data-position-y="${f.y}"
+                  data-measurement-x="1" data-measurement-y="1" data-tooltip='${tooltip}'></div>`;
+      })
+      .join('');
+    return this.render('shopPage', `<div id="shop" class="ui-droppable-grid" data-container-number="${300 + Number(sub) * 2 + Number(subsub)}" style="width:192px;height:256px;">${items}</div>`);
+  }
+
   arenaPage(aType) {
     const type = aType === '3' ? 'circus' : 'arena';
     const levels = type === 'arena' ? this.state.arenaLevels : this.state.circusLevels;
@@ -242,7 +303,67 @@ class MockGame {
         </div>`
       )
       .join('');
-    return this.render('questsPage', finished + open);
+    const icons = { expedition: 'expedition', arena: 'arena', items: 'items' };
+    const accepted = this.state.quests
+      .map(
+        (q) => `<div class="contentboard_slot contentboard_slot_active">
+          <div class="quest_slot_icon" style="background-image:url('img/ui/quest/icon_${icons[q.type]}_active.jpg')"></div>
+          <div class="quest_slot_title">${q.title}</div>
+          ${q.failed
+            ? `<div class="quest_slot_time">Failed</div><a class="quest_slot_button quest_slot_button_restart" href="index.php?mod=quests&submod=restartQuest&questPos=${q.pos}&sh=${SH}" title="Start quest again"></a>`
+            : `<a class="quest_slot_button quest_slot_button_cancel" href="index.php?mod=quests&submod=cancelQuest&questPos=${q.pos}&sh=${SH}" title="Cancel quest"></a>`}
+        </div>`
+      )
+      .join('');
+    return this.render('questsPage', finished + accepted + open);
+  }
+
+  // The Gladiatus lobby (lobby.gladiatus.gameforge.com), as on 2026-10-02:
+  // "/" moves to /en_GB/hub without a reload; /en_GB/accounts lists the game
+  // accounts (react-table markup), its data comes from the API (bearer
+  // token from the gf-token-production cookie), and Play opens a window,
+  // asks for a login link and loads the game there. This server is called
+  // "Aurora" in the lobby; a decoy account sits on s1-pl.
+  async handleLobby(route) {
+    const request = route.request();
+    const url = new URL(request.url());
+    const json = (data, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data) });
+    const html = (body) => route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><meta charset="utf-8"><title>Lobby</title></head><body>${body}</body></html>` });
+    const authed = request.headers().authorization === 'Bearer tok';
+    const row = (province, player) =>
+      `<div class="rt-tr-group"><div class="rt-tr"><div class="rt-td"></div><div class="rt-td">${province}</div><div class="rt-td">${player}</div>
+         <div class="rt-td action-cell"><button class="btn btn-primary" onclick="play()">Play</button></div></div></div>`;
+    switch (url.pathname) {
+      case '/':
+        return html(`<p>Welcome</p><script>setTimeout(function () { history.replaceState(null, '', '/en_GB/hub'); }, 300);</script>`);
+      case '/en_GB/hub':
+        return html('<a href="/en_GB/accounts">Play</a>');
+      case '/en_GB/accounts':
+        return html(`<div class="ReactTable"><div class="rt-tbody" id="rows"></div></div>
+          <script>
+            setTimeout(function () { document.getElementById('rows').innerHTML = ${JSON.stringify(row('1', 'Decoy') + row('Aurora', 'Hero'))}; }, 500);
+            function play() {
+              var w = window.open('/loading');
+              fetch('/api/users/me/loginLink', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (j) { w.location.href = j.url; });
+            }
+          </script>`);
+      case '/loading':
+        return html('Loading...');
+      case '/api/users/me/accounts':
+        if (!authed) return json({ error: 'unauthorized' }, 401);
+        return json([
+          { server: { language: 'pl', number: 1 }, name: 'Decoy', lastPlayed: '2026-10-02T10:00:00+0200' },
+          { server: { language: 'en', number: 1 }, name: 'Hero', lastPlayed: '2026-10-01T10:00:00+0200' },
+        ]);
+      case '/api/servers':
+        if (!authed) return json({ error: 'unauthorized' }, 401);
+        return json([{ language: 'pl', number: 1, name: '1' }, { language: 'en', number: 1, name: 'Aurora' }]);
+      case '/api/users/me/loginLink':
+        this.record('lobbyLogin');
+        return json({ url: `${GAME}index.php?mod=overview&sh=${SH}&login=1` });
+      default:
+        return route.fulfill({ status: 404, body: '' });
+    }
   }
 
   // ---------------------------------------------------------------- routing
@@ -260,6 +381,11 @@ class MockGame {
     if (!url.pathname.startsWith('/game/')) return route.fulfill({ status: 404, body: '' });
     if (url.pathname === '/game/' || url.pathname === '/game/index.php') {
       if (q.sh !== SH) return page('<html><body><h1>Session expired</h1></body></html>');
+      if (q.login === '1' && s.loggedOut) {
+        s.loggedOut = false;
+        this.record('login');
+      }
+      if (s.loggedOut) return page('<html><body><h1>You have been logged out</h1></body></html>');
     }
 
     if (url.pathname === '/game/ajax.php') {
@@ -276,6 +402,21 @@ class MockGame {
         const kind = q.aType === '3' ? 'circus' : 'arena';
         const levels = kind === 'arena' ? s.arenaLevels : s.circusLevels;
         return json(this.fight(kind, { opponent: q.opponentId, level: levels[Number(q.opponentId) - 100] }));
+      }
+      if (q.mod === 'arena' && q.submod === 'localFight') {
+        const player = s.localArena.find((p) => String(p.id) === q.did);
+        return json(this.fight(q.circus === '1' ? 'circus' : 'arena', { opponent: player && player.name, local: true }));
+      }
+      if (q.mod === 'inventory' && q.submod === 'move' && q.from === '307') {
+        // Bought from the shop into a bag (General goods, tab 2).
+        const food = s.shopFood.find((f) => String(f.x) === q.fromX && String(f.y) === q.fromY);
+        if (!food) return json({ error: 'nothing there' });
+        if (s.gold < food.price) return json({ error: 'not enough gold' });
+        s.gold -= food.price;
+        s.shopFood = s.shopFood.filter((f) => f !== food);
+        (s.bags[q.to] = s.bags[q.to] || []).push({ x: Number(q.toX), y: Number(q.toY), heal: food.heal });
+        this.record('buy', { heal: food.heal, price: food.price, bag: Number(q.to) });
+        return json({ to: { data: { itemId: 9000 + s.events.length } } });
       }
       if (q.mod === 'inventory' && q.submod === 'loadBag') {
         return route.fulfill({ contentType: 'text/html', body: this.bagItems(Number(q.bag)) });
@@ -315,6 +456,12 @@ class MockGame {
       s.questFinished = false;
       this.record('questFinish');
     }
+    if (q.mod === 'quests' && (q.submod === 'restartQuest' || q.submod === 'cancelQuest')) {
+      const quest = s.quests.find((x) => String(x.pos) === q.questPos);
+      if (quest && q.submod === 'restartQuest') quest.failed = false;
+      if (quest && q.submod === 'cancelQuest') s.quests = s.quests.filter((x) => x !== quest);
+      this.record(q.submod, { title: quest && quest.title });
+    }
     if (q.mod === 'quests' && q.submod === 'startQuest') {
       s.acceptedQuests.push(q.type);
       this.record('questAccept', { questType: q.type });
@@ -326,7 +473,10 @@ class MockGame {
       case 'dungeon':
         return page(this.dungeonPage());
       case 'arena':
-        return page(this.arenaPage(q.aType));
+        if (q.submod === 'serverArena') return page(this.arenaPage(q.aType));
+        return page(this.localArenaPage(q.submod === 'grouparena'));
+      case 'inventory':
+        return page(this.shopPage(q.sub, q.subsub));
       case 'work':
         return page(this.workPage());
       case 'quests':

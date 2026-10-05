@@ -209,3 +209,42 @@ test('only weapons, armour and jewellery can be ticked for smelting', () => {
   assert.deepEqual(items.map(smelter.isSmeltable), [true, false, false]);
   assert.deepEqual(smelter.queueEntry(items[0]), entry);
 });
+
+test('the queue: the item smelted leaves it, even when the list changed meanwhile', async () => {
+  // While the first item is being moved, the player unticks it and ticks
+  // another on the packages page.
+  const other = { cn: -12, name: 'Bilgs Sugilith pendant', basis: '8-1', w: 1, h: 1 };
+  const game = mockGame({ slots: [{ 'forge_slots.state': 'closed' }] });
+  const { ctx } = context(1_000_000, [entry, other]);
+  const fetch = game.fetch;
+  game.fetch = async (url, init) => {
+    if (/submod=move/.test(url)) ctx.memory.smeltQueue.splice(1, 1); // `other` unticked meanwhile
+    return fetch(url, init);
+  };
+  await withGame(game, () => GBot.actions.smelt(ctx));
+  assert.deepEqual(ctx.memory.smeltQueue, [], 'the smelted one left; the unticked one is gone too, nothing else');
+
+  const game2 = mockGame({ slots: [{ 'forge_slots.state': 'closed' }] });
+  const { ctx: ctx2 } = context(1_000_000, [entry, other]);
+  const fetch2 = game2.fetch;
+  game2.fetch = async (url, init) => {
+    if (/submod=move/.test(url) && ctx2.memory.smeltQueue[0] === entry) ctx2.memory.smeltQueue.unshift({ cn: -99, name: 'New tick', w: 1, h: 1 });
+    return fetch2(url, init);
+  };
+  await withGame(game2, () => GBot.actions.smelt(ctx2));
+  assert.deepEqual(ctx2.memory.smeltQueue.map((e) => e.cn), [-99, -12], 'only the smelted item left the queue (it used to drop the first one)');
+});
+
+test('the queue is merged with changes another tab saved meanwhile', () => {
+  const a = { cn: -1 };
+  const b = { cn: -2 };
+  const c = { cn: -3 };
+  const bin = { iid: '77' };
+  // This tab read [a, b]; it smelted a and queued the bin item. Another tab
+  // meanwhile unticked b and ticked c.
+  const merged = brain.mergeSmeltQueue(brain.smeltKeys([a, b]), [b, bin], [a, c]);
+  assert.deepEqual(brain.smeltKeys(merged), ['cn:-3', 'iid:77']);
+  // Nobody else changed it: this tab's queue as it is.
+  const mine = [b, bin];
+  assert.equal(brain.mergeSmeltQueue(brain.smeltKeys([a, b]), mine, [a, b]), mine);
+});

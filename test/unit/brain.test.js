@@ -335,6 +335,19 @@ test('chooseQuest picks the best-paying quest for my places and activities', () 
   assert.equal(brain.chooseQuest(work, withWork, {}).type, 'work');
 });
 
+test('failed quests are started again twice a day, then given up', () => {
+  const s = makeSettings();
+  const m = memory();
+  const quest = { type: 'expedition', title: 'Cursed Village: Defeat 5 x Ancient' };
+  const step = (q, now = NOW) => brain.failedQuestStep(q, s, { location: 'Cursed Village' }, m, now);
+  assert.deepEqual(step(quest), { step: 'restart' });
+  assert.deepEqual(step(quest), { step: 'restart' });
+  assert.deepEqual(step(quest), { step: 'drop', why: 'failed 3 times today' });
+  assert.deepEqual(step(quest, NOW + 24 * 3600 * 1000), { step: 'restart' }, 'a new day');
+  assert.deepEqual(step({ type: 'arena', title: 'Arena: Win 3 attacks in succession' }), { step: 'drop', why: 'not one Lanista takes on' }, 'the arena is off');
+  assert.deepEqual(step({ type: 'expedition', title: 'Death Hill: Defeat 3 x Harpy' }), { step: 'drop', why: 'not one Lanista takes on' }, 'another location');
+});
+
 test('combat reports are counted and losing opponents avoided', () => {
   const m = memory();
   m.pending = { type: 'arena', at: NOW, attempts: 1, opponent: 'Kaczuszek', avoidHours: 24 };
@@ -423,4 +436,105 @@ test('with the boss selected, earlier enemies with bonuses to learn go first', (
   assert.equal(brain.expeditionTarget(enemies, { enemy: 2, bonusesFirst: true }), 1, 'only applies to the boss');
   assert.equal(brain.expeditionTarget([], cfg), 3, 'page not understood: keep the chosen enemy');
   assert.equal(makeSettings().expedition.bonusesFirst, false, 'off by default');
+});
+
+test('expedition: an easier enemy for an hour after losses in a row', () => {
+  const m = memory();
+  const fight = (win, enemy = 3, at = NOW) => {
+    m.pending = { type: 'expedition', at, attempts: 1, enemy, loc: '7', easierAfter: 3 };
+    return brain.resolvePending(makeState({ report: { win, gold: 0, xp: 1, renown: 0 } }), m, at + 1000).map((e) => e.message);
+  };
+  fight(false);
+  fight(false);
+  fight(true);
+  assert.equal(brain.easierEnemy(m, '7', NOW), null, 'a win starts the count again');
+  fight(false);
+  fight(false, 2);
+  fight(false);
+  assert.equal(brain.easierEnemy(m, '7', NOW), null, 'losses against different enemies do not add up');
+  fight(false);
+  const events = fight(false);
+  assert.ok(events.includes('Expedition: 3 lost fights in a row against enemy #4, fighting enemy #3 for an hour'), events.join(' / '));
+  assert.equal(brain.easierEnemy(m, '7', NOW + 1000), 2);
+  assert.equal(brain.easierEnemy(m, '8', NOW + 1000), null, 'only at that location');
+  assert.equal(brain.easierEnemy(m, '7', NOW + 3601 * 1000), null, 'back to the chosen enemy after an hour');
+
+  fight(false, 0);
+  fight(false, 0);
+  assert.ok(fight(false, 0).includes('Expedition: 3 lost fights in a row, and enemy #1 is already the easiest here'));
+  const off = memory();
+  for (let i = 0; i < 5; i++) {
+    off.pending = { type: 'expedition', at: NOW, attempts: 1, enemy: 3, loc: '7', easierAfter: 0 };
+    brain.resolvePending(makeState({ report: { win: false, gold: 0, xp: 1, renown: 0 } }), off, NOW + 1000);
+  }
+  assert.equal(off.easierEnemy, null, '0 = off');
+  assert.equal(makeSettings().expedition.easierAfterLosses, 0, 'off by default');
+});
+
+test('statistics per day: today so far, finished days kept for 30 days', () => {
+  const m = memory();
+  const at = (d, h = 12) => new Date(2026, 9, d, h).getTime();
+  brain.rollStatsDay(m, at(1, 9));
+  m.stats.expedition += 3;
+  m.stats.loot.gold += 1500;
+  m.stats.results.expedition = { won: 2, lost: 1 };
+  brain.rollStatsDay(m, at(1, 23));
+  assert.deepEqual(brain.statsDays(m), [{ day: '2026-10-01', expedition: 3, loot: { gold: 1500 }, results: { expedition: { won: 2, lost: 1 } } }]);
+
+  brain.rollStatsDay(m, at(2, 0));
+  m.stats.arena += 1;
+  m.stats.results.arena = { won: 1, lost: 0 };
+  m.stats.goldNow = 999999;
+  const days = brain.statsDays(m);
+  assert.deepEqual(days.map((d) => d.day), ['2026-10-02', '2026-10-01']);
+  assert.deepEqual(days[0], { day: '2026-10-02', arena: 1, results: { arena: { won: 1 } } }, 'only what changed today; gold on hand is not a counter');
+  assert.equal(days[1].expedition, 3);
+
+  // A day without a page load is skipped; the bot's next day starts fresh.
+  brain.rollStatsDay(m, at(5));
+  assert.deepEqual(m.history.map((d) => d.day), ['2026-10-02', '2026-10-01']);
+  assert.deepEqual(brain.statsDays(m)[0], { day: '2026-10-05' });
+  for (let d = 6; d < 45; d++) {
+    m.stats.heal += 1;
+    brain.rollStatsDay(m, new Date(2026, 9, d).getTime());
+  }
+  assert.equal(m.history.length, 30);
+});
+
+test('the local arena has no levels: weakest is the next rank up, strongest the best rank', () => {
+  const local = [{ name: 'A', rank: 6, level: null }, { name: 'B', rank: 7, level: null }, { name: 'C', rank: 9, level: null }];
+  assert.deepEqual(brain.pickOpponents(local, 'lowest').map((o) => o.name), ['C', 'B', 'A']);
+  assert.deepEqual(brain.pickOpponents(local, 'highest').map((o) => o.name), ['A', 'B', 'C']);
+  const s = makeSettings();
+  assert.equal(brain.filterOpponents(local, { ...s.arena, limitLevels: true }, 110).length, 3, 'the level range does not apply');
+  assert.equal(s.arena.where, 'provinciarum', 'Provinciarum by default');
+});
+
+test('arena limits: per player and per day, counted from the fights, reset at midnight', () => {
+  const m = memory();
+  const fight = (type, opponent, at = NOW) => {
+    m.pending = { type, at, attempts: 1, opponent };
+    brain.resolvePending(makeState({ report: { win: true, gold: 552, xp: 1, renown: 8 } }), m, at + 1000);
+  };
+  const cfg = { ...makeSettings().arena, perPlayerPerDay: 2, perDay: 3 };
+  fight('arena', 'Akesak');
+  fight('arena', 'akesak');
+  assert.deepEqual(brain.cappedNames(m, 'arena', cfg, NOW), ['akesak'], 'twice today: left alone');
+  assert.deepEqual(brain.cappedNames(m, 'circus', cfg, NOW), [], 'the circus counts separately');
+  assert.deepEqual(brain.cappedNames(m, 'arena', { ...cfg, perPlayerPerDay: 0 }, NOW), [], '0 = no limit');
+
+  const s = makeSettings({ expedition: { enabled: false }, arena: { enabled: true, perDay: 3 } });
+  const ready = makeState({ expedition: cd(false, 600000, { points: 0 }), arena: cd(true) });
+  assert.equal(brain.decide(ready, s, m, NOW).type, 'arena');
+  fight('arena', 'Sargeras');
+  assert.equal(brain.decide(ready, s, m, NOW).type, 'wait', '3 attacks today: no more');
+  const tile = brain.activityStatus(ready, s, m, NOW).arena;
+  assert.equal(tile.text, 'daily limit');
+  assert.equal(new Date(tile.until).getHours(), 0, 'until midnight');
+
+  const tomorrow = NOW + 24 * 3600 * 1000;
+  assert.equal(brain.decide(ready, s, m, tomorrow).type, 'arena', 'a new day');
+  assert.deepEqual(brain.cappedNames(m, 'arena', cfg, tomorrow), []);
+  assert.equal(makeSettings().arena.perPlayerPerDay, 5);
+  assert.equal(makeSettings().arena.perDay, 0);
 });

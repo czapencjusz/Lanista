@@ -2,24 +2,70 @@
 // field per setting. The renderer (settings-ui.js) turns this into forms, and
 // number limits come from GBot.settings.CONSTRAINTS so validation and UI agree.
 //
+// Tabs: id, title, icon, description, group (sidebar heading, from LAYOUT
+// below), enable (path of the tab's main switch, shown in its header),
+// toggle (an on/off path for the sidebar dot and the Overview without a
+// header switch), summary(settings, info) (one line for the Overview),
+// custom (a pane drawn by settings-ui.js) or fields.
+//
 // Field types: toggle, number, select, location, text, textarea, time, order,
-// checks. Optional field keys: help, unit, step, base (display offset, e.g. 1
-// to show a 0-based index as 1-based), dependsOn (path of a toggle that must
-// be on for the field to be editable), placeholder.
+// checks, push. Optional field keys: help, unit, step, base (display offset, e.g. 1
+// to show a 0-based index as 1-based), wide (a text field across the pane),
+// dependsOn (path of a toggle that must
+// be on for the field to be editable, or a list of paths of which one must
+// be on), placeholder.
 (function (root) {
   'use strict';
   const GBot = (root.GBot = root.GBot || {});
   const ui = (GBot.ui = GBot.ui || {});
 
   const TARGETS = [
-    { value: 'lowest', label: 'Lowest level first' },
-    { value: 'highest', label: 'Highest level first' },
+    { value: 'lowest', label: 'Weakest first' },
+    { value: 'highest', label: 'Strongest first' },
     { value: 'random', label: 'Random' },
   ];
 
   // Item and material qualities, as the game's "Minimum quality" filter.
   const QUALITIES = ['Standard (white)', 'Ceres (green)', 'Neptun (blue)', 'Mars (purple)', 'Jupiter (orange)', 'Olymp (red)'];
   const qualityOptions = (lowest) => QUALITIES.map((q, i) => ({ value: i - 1, label: i === 0 ? lowest : `Up to ${q}` }));
+
+  const GOD_NAMES = [
+    ['minerva', 'Minerva'],
+    ['diana', 'Diana'],
+    ['mars', 'Mars'],
+    ['merkur', 'Mercury'],
+    ['apollo', 'Apollo'],
+    ['vulcanus', 'Vulcan'],
+  ];
+  const godChecks = (key) => GOD_NAMES.map(([id, label]) => ({ path: `gods.${key}.${id}`, label }));
+
+  const BOOST_NAMES = [
+    ['strength', 'Strength'],
+    ['dexterity', 'Dexterity'],
+    ['agility', 'Agility'],
+    ['constitution', 'Constitution'],
+    ['charisma', 'Charisma'],
+    ['intelligence', 'Intelligence'],
+    ['health', 'Health (max HP)'],
+  ];
+
+  // Costumes that can be worn outside the Underworld, as the game names
+  // them (festival ones only during the festival).
+  const COSTUMES = [
+    'Vulcanus Forge',
+    "Feronia's Earthen Shield",
+    "Neptune's Fluid Might",
+    "Aeolus' Aerial Freedom",
+    "Pluto's Deadly Mist",
+    "Juno's Breath of Life",
+    "Wrath Mountain's Scale Armour",
+    'Eagle Eyes',
+    "Saturn's Winter Garment",
+    "Bubona's Bull Armour",
+    "Mercurius' Robber's Garments",
+    "Ra's Light Robe",
+    'Defender of the Empire',
+  ];
 
   const GEAR_KINDS = [
     ['weapons', 'Weapons'],
@@ -29,6 +75,20 @@
   const KINDS_HELP = 'Armour means helmets, shields, chest armour, gloves and shoes.';
 
   const opponentFields = (type) => [
+    {
+      path: `${type}.where`,
+      type: 'select',
+      label: 'Where',
+      options: [
+        { value: 'provinciarum', label: type === 'arena' ? 'Arena Provinciarum (other servers)' : 'Circus Provinciarum (other servers)' },
+        { value: 'local', label: type === 'arena' ? 'Local arena (this server)' : 'Local Circus Turma (this server)' },
+      ],
+      help:
+        (type === 'arena'
+          ? 'Locally you fight the players ranked just above you on your own server, for a share of their gold, and they can hit back. '
+          : 'Locally you fight the teams ranked just above you on your own server. It needs your participation status set to Active on the Circus Turma page (which lets others attack you too); Lanista never changes it. ') +
+        'No levels are shown there, so the level range is ignored and the weakest is the one ranked just above you. Players on your buddy list are never attacked.',
+    },
     { path: `${type}.target`, type: 'select', label: 'Opponent choice', options: TARGETS },
     {
       path: `${type}.limitLevels`,
@@ -57,16 +117,35 @@
       label: 'Prefer opponents I have beaten',
       help: 'Opponents beaten in the last two weeks are tried first, most wins first, before the choice above.',
     },
+    {
+      path: `${type}.perPlayerPerDay`,
+      type: 'number',
+      label: 'At most … attacks on one player a day',
+      help: 'Then that player is left alone until tomorrow. 0 = no limit.',
+    },
+    {
+      path: `${type}.perDay`,
+      type: 'number',
+      label: 'At most … attacks a day',
+      help: 'Then this waits for tomorrow (midnight, your time). 0 = no limit.',
+    },
   ];
 
-  const TABS = [
+  const ALL_TABS = [
+    {
+      id: 'overview',
+      title: 'Overview',
+      icon: 'overview',
+      custom: 'overview',
+      description: 'Everything at a glance: switch features on and off here, or click a name for its settings.',
+    },
     {
       id: 'general',
       title: 'General',
       icon: 'general',
       description: 'Master switch, and which activity goes first when several are ready at once.',
       fields: [
-        { path: 'enabled', type: 'toggle', label: 'Bot is running' },
+        { path: 'enabled', type: 'toggle', label: 'Lanista is running' },
         {
           path: 'general.order',
           type: 'order',
@@ -84,6 +163,12 @@
             { value: 'off', label: 'Leave it to me' },
           ],
           help: 'After some wins the game offers to search the enemy nest for extra loot.',
+        },
+        {
+          path: 'general.rejoin',
+          type: 'toggle',
+          label: 'Log back in through the lobby when the game logs you out',
+          help: "Lanista opens the Gladiatus lobby in the game tab and presses Play for this server's account; it never types a password, so you must still be logged in to the lobby. Play opens a new window, so allow pop-ups for lobby.gladiatus.gameforge.com in your browser. At most 3 tries in 6 hours, never after you press Logout yourself, and only while Lanista is running. Gameforge can see that the login was automatic.",
         },
       ],
     },
@@ -113,6 +198,13 @@
           help: 'Only with the boss selected. Fights enemies 1-3 in turn until all their bonuses are learned (each win has a chance to learn one; the chance, shown in the bonus tooltip, depends on your character and the enemy). The boss then gets those bonuses automatically and the bot fights the boss. Bonuses are never bought with rubies.',
         },
         { path: 'expedition.keepPoints', type: 'number', label: 'Keep points in reserve', help: 'Stop when this many expedition points are left.' },
+        {
+          path: 'expedition.easierAfterLosses',
+          type: 'number',
+          label: 'Fight an easier enemy after',
+          unit: 'lost fights in a row',
+          help: 'A loss still costs a point and HP. After that many in a row against one enemy, the next easier one is fought for an hour, then the chosen one gets another try. 0 turns it off.',
+        },
         {
           path: 'expedition.mobilisationsPerDay',
           type: 'number',
@@ -185,7 +277,7 @@
             { value: 'medium', label: 'Yes, on Middle' },
             { value: 'hard', label: 'Yes, on Hard' },
           ],
-          help: 'Whenever the Underworld can be entered again. Costs 8,000 gold and about 30 minutes of travel (less on speed servers). On Hard, dying costs a skill point.',
+          help: 'Whenever the Underworld can be entered again. Costs 8,000 gold and about 30 minutes of travel (less on speed servers). On Hard, dying costs a skill point. Not while you still hold Dīs Pater\'s Armor from that level: beating him again would not give another, so you get a notification instead.',
         },
         {
           path: 'underworld.mobilisations',
@@ -207,7 +299,7 @@
       title: 'Arena',
       icon: 'arena',
       enable: 'arena.enabled',
-      description: 'Arena Provinciarum: fight players from other servers.',
+      description: "Fight other players: in the Arena Provinciarum (other servers) or your own server's arena.",
       fields: opponentFields('arena'),
     },
     {
@@ -215,13 +307,14 @@
       title: 'Circus Turma',
       icon: 'circus',
       enable: 'circus.enabled',
-      description: 'Circus Turma Provinciarum: team fights. Your own HP is not used.',
+      description: "Team fights, in the Circus Provinciarum or your own server's Circus Turma. Your own HP is not used.",
       fields: opponentFields('circus'),
     },
     {
       id: 'heal',
       title: 'Health',
       icon: 'heal',
+      toggle: 'heal.enabled',
       description: 'Eat food from your bags when HP gets low, and stop fighting before it gets dangerous.',
       fields: [
         { path: 'heal.enabled', type: 'toggle', label: 'Eat food when HP is low' },
@@ -232,6 +325,128 @@
           label: 'Stop fighting below',
           unit: '%',
           help: 'Expeditions, dungeons and the arena wait for HP to regenerate below this value. The circus does not use your HP.',
+        },
+        {
+          path: 'heal.bags',
+          type: 'checks',
+          label: 'Eat food from bags',
+          dependsOn: 'heal.enabled',
+          help: 'Inventory tabs I-VIII. Keep usables you want to save in the others. When these bags hold no food, food is taken from the packages into one of them. None ticked = all bags.',
+          items: ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'].map((label, i) => ({ path: `heal.bags.b${i + 1}`, label })),
+        },
+        {
+          path: 'heal.plainOnly',
+          type: 'toggle',
+          label: 'Only plain food',
+          dependsOn: 'heal.enabled',
+          help: 'Skip food that does something besides healing: eggs that give rubies, points or cooldown skips, Cervisia that activates Centurio, and the like. The auction house does not bid on those either.',
+        },
+        {
+          path: 'heal.market',
+          type: 'toggle',
+          label: 'Buy food on the market when none is left',
+          dependsOn: 'heal.enabled',
+          help: "Only when the food bags and the packages hold no food: other players' food on the public market, best HP per gold first and never your own listings. It arrives as a package, which the next meal takes out. Gold only.",
+        },
+        { path: 'heal.marketMinHpPerGold', type: 'number', label: 'Only market food that heals at least', unit: 'HP per gold', step: 0.1, dependsOn: 'heal.market', help: 'Heal amount divided by the price. 1 means a 9,000 HP cake may cost up to 9,000 gold.' },
+        {
+          path: 'heal.buy',
+          type: 'toggle',
+          label: 'Buy food from the merchants when none is left',
+          dependsOn: 'heal.enabled',
+          help: "Only when the food bags and the packages hold no food (and the market had none, if that is on). The merchants' food (General goods sells it) costs more than the auction house, so the best HP per gold goes first. It goes into a food bag. Gold only, never rubies.",
+        },
+        { path: 'heal.buyAtOnce', type: 'number', label: 'Items to buy per trip', dependsOn: ['heal.buy', 'heal.market'] },
+        { path: 'heal.buyMaxGoldPerDay', type: 'number', label: 'Spend at most', unit: 'gold a day', dependsOn: ['heal.buy', 'heal.market'], help: 'Market and merchants together.' },
+        { path: 'heal.buyKeepGold', type: 'number', label: 'Never let gold drop below', dependsOn: ['heal.buy', 'heal.market'] },
+        {
+          path: 'heal.medic',
+          type: 'select',
+          label: "The guild's doctors (Villa Medici)",
+          options: [
+            { value: 'off', label: 'Not used' },
+            { value: 'underworld', label: 'In the Underworld' },
+            { value: 'always', label: 'Always, before food' },
+          ],
+          help: "Free: each doctor heals a share of your HP (the page says how much; it grows with the building), then rests for about 2 hours. In the Underworld, where food cannot be eaten, a doctor is seen when HP is below the Underworld's fighting limit, instead of waiting for HP to come back; elsewhere when it is below the eating limit above. Needs a guild with the Villa Medici.",
+        },
+        { path: 'heal.medicMax', type: 'number', label: 'See at most', unit: 'doctors a day (a visit, in the Underworld)', help: '0 = no limit.' },
+      ],
+    },
+    {
+      id: 'gods',
+      title: 'Gods',
+      icon: 'gods',
+      enable: 'gods.enabled',
+      description:
+        "Spend the gods' favour (from quests with a god reward and the daily login bonus) instead of letting it pile up: each ticked blessing or oil is bought whenever it is off its cooldown and its god has the favour. Favour only; rubies are never spent. Lanista looks every 30 minutes.",
+      fields: [
+        {
+          path: 'gods.blessings',
+          type: 'checks',
+          label: 'Blessings (rank 1, 20 favour, every 6 h)',
+          help: 'An hour of: Minerva +25 intelligence, Diana +840 armour, Mars +12 damage per hit, Mercury +25 charisma, Apollo +25 agility, Vulcan +25 dexterity (stats only up to their maximum for your level).',
+          items: godChecks('blessings'),
+        },
+        {
+          path: 'gods.oils',
+          type: 'checks',
+          label: 'Holy oils (rank 2, 60 favour, every 18 h)',
+          help: 'An oil to put on an item, raising one of its stats to the most possible for your level: Minerva charisma, Diana dexterity, Mars agility, Mercury intelligence, Apollo damage, Vulcan armour. It needs a free spot in your bags.',
+          items: godChecks('oils'),
+        },
+        {
+          path: 'gods.rank3',
+          type: 'checks',
+          label: 'Great blessings (rank 3, 150 favour, every 42 h)',
+          help: "Half an hour of: Minerva no double hits (either side), Diana +15% hit chance, Mars no critical hits (either side), Mercury weaker enemy healing, Apollo more blocking, Vulcan +15% armour (you and your mercenaries).",
+          items: godChecks('rank3'),
+        },
+        { path: 'gods.minPercent', type: 'number', label: 'Only once a god has at least', unit: '% of its maximum favour', help: '0 = whenever there is enough. A god at its maximum gains nothing more, so 90 only spends what would go to waste.' },
+      ],
+    },
+    {
+      id: 'boosts',
+      title: 'Boosts',
+      icon: 'boosts',
+      enable: 'boosts.enabled',
+      description:
+        "Use boost potions (Flask of Strength, Bottle of agility, Hawthorn and the like) from your bags or packages, one at a time per stat: the longest-lasting first, the next once it runs out. A stat already at its maximum for your level gains nothing from a boost, so none is used while it has less room than half the boost.",
+      fields: [
+        {
+          path: 'boosts.stats',
+          type: 'checks',
+          label: 'Keep boosted',
+          help: 'Health boosts raise your maximum HP. Lanista looks again every hour for stats it could not boost.',
+          items: BOOST_NAMES.map(([id, label]) => ({ path: `boosts.stats.${id}`, label })),
+        },
+      ],
+    },
+    {
+      id: 'costumes',
+      title: 'Costumes',
+      icon: 'costumes',
+      enable: 'costumes.enabled',
+      description:
+        "Beating Dīs Pater in the Underworld gives Dīs Pater's Armour for that level, a costume with big bonuses that lasts a while once put on. Lanista can put it on as soon as it may, which also lets you enter the Underworld on that level again. Taking it off early destroys it, so nothing else is put on while it lasts. The rest of the time it can wear a costume of your choice. Changing costumes has a cooldown; Lanista waits for it.",
+      fields: [
+        {
+          path: 'costumes.armour',
+          type: 'checks',
+          label: "Put on Dīs Pater's Armour from",
+          help: 'Normal: expedition points, gold and items. Medium: the same for dungeons. Hard: arena and Circus Turma cooldowns and prize money. When you hold several, the one from the level set under Underworld goes first.',
+          items: [
+            { path: 'costumes.armour.normal', label: 'Normal' },
+            { path: 'costumes.armour.medium', label: 'Medium' },
+            { path: 'costumes.armour.hard', label: 'Hard' },
+          ],
+        },
+        {
+          path: 'costumes.everyday',
+          type: 'select',
+          label: 'Otherwise wear',
+          options: [{ value: '', label: 'Leave the costume as it is' }, ...COSTUMES.map((name) => ({ value: name, label: name }))],
+          help: 'Only a costume you have at least one piece of. Its bonuses come with the number of pieces you have.',
         },
       ],
     },
@@ -339,6 +554,13 @@
           help: KINDS_HELP,
           items: GEAR_KINDS.map(([kind, label]) => ({ path: `smelting.autoTypes.${kind}`, label })),
         },
+        {
+          path: 'smelting.bins',
+          type: 'checks',
+          label: 'Smelt everything in bags',
+          help: 'Inventory tabs I-VIII used as smelt bins: drop items in and anything the smelter takes gets smelted. Keep them free of things you want to keep. None ticked = off.',
+          items: ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'].map((label, i) => ({ path: `smelting.bins.b${i + 1}`, label })),
+        },
       ],
     },
     {
@@ -382,6 +604,45 @@
           help: 'Any package, not only gear. Moving needs free room in your bags.',
         },
         { path: 'packages.expiringHours', type: 'number', label: 'About to expire means less than', unit: 'h left' },
+        {
+          path: 'packages.keepNames',
+          type: 'textarea',
+          label: 'Never sell or smelt',
+          placeholder: 'One name or part of a name per line',
+          help: 'Items whose name contains one of these are left alone by the selling and smelting rules (still rescued before their package expires).',
+        },
+        {
+          path: 'packages.pick',
+          type: 'checks',
+          label: 'Take these out into my bags',
+          help: 'From the packages into a free spot in your bags, never into the food bags you chose under Health. When the other bags are full it waits until there is room.',
+          items: [
+            { path: 'packages.pick.upgrades', label: 'Upgrades (grindstones, powders)' },
+            { path: 'packages.pick.boosts', label: 'Boosts' },
+            { path: 'packages.pick.scrolls', label: 'Scrolls' },
+            { path: 'packages.pick.recipes', label: 'Recipes' },
+            { path: 'packages.pick.tools', label: 'Tools' },
+            { path: 'packages.pick.mercenary', label: 'Mercenary items' },
+          ],
+        },
+        {
+          path: 'packages.learnScrolls',
+          type: 'toggle',
+          label: 'Learn new scrolls',
+          help: "A scroll in the packages whose prefix or suffix the forge does not list yet is used, which learns it. Scrolls you already know are left alone.",
+        },
+      ],
+    },
+    {
+      id: 'gold',
+      title: 'Gold',
+      icon: 'gold',
+      enable: 'gold.hide',
+      description:
+        "Gold on hand can be stolen by anyone who beats you in the arena. Lanista keeps what's above your limit in your guild's market as \"gold packs\": it buys the dearest pack a guildmate listed that your spare gold pays for, and lists it again at the same price for 24 hours. When a guildmate buys it, your gold comes back as a gold package, safe in the packages (leave Packages > Gold packages off to keep it there). Only listings far above the item's worth count as packs; your own are never bought. Packs Lanista holds are listed again until they sell, even with this switched off.",
+      fields: [
+        { path: 'gold.keep', type: 'number', label: 'Keep on hand', unit: 'gold', help: 'Training, repairs and food are paid from this.' },
+        { path: 'gold.minPack', type: 'number', label: 'Smallest pack', unit: 'gold', help: 'Listings cheaper than this are left alone.' },
       ],
     },
     {
@@ -389,9 +650,10 @@
       title: 'Auction house',
       icon: 'auction',
       enable: 'auction.enabled',
-      description: 'Bid on healing items (food and potions) in the auction house. Careful: the game keeps your gold if someone outbids you, so the bot bids late, once per lot, and only at a price you accept. Buyout costs rubies and is never used. Won items arrive as packages; healing takes food from there when the bags are empty.',
+      description: 'Bid on healing items (food and potions) and, if you like, gear in the auction house. Careful: the game keeps your gold if someone outbids you, so the bot bids late, once per lot, and only at a price you accept. Buyout costs rubies and is never used. Won items arrive as packages; healing takes food from there when the bags are empty.',
       fields: [
-        { path: 'auction.minHpPerGold', type: 'number', label: 'Only lots that heal at least', unit: 'HP per gold', step: 0.1, help: 'Heal amount divided by the bid. 4 means a 2,000 HP bread may cost up to 500 gold.' },
+        { path: 'auction.food', type: 'toggle', label: 'Bid on food' },
+        { path: 'auction.minHpPerGold', type: 'number', label: 'Only lots that heal at least', unit: 'HP per gold', step: 0.1, dependsOn: 'auction.food', help: 'Heal amount divided by the bid. 4 means a 2,000 HP bread may cost up to 500 gold.' },
         {
           path: 'auction.bidWhen',
           type: 'select',
@@ -405,7 +667,24 @@
         },
         { path: 'auction.maxPerRound', type: 'number', label: 'Spend at most', unit: 'gold per auction round', step: 1000 },
         { path: 'auction.keepGold', type: 'number', label: 'Always keep', unit: 'gold', step: 10000 },
-        { path: 'auction.maxFood', type: 'number', label: 'Stop at', unit: 'healing items owned', help: 'Food and potions in your bags and packages.' },
+        { path: 'auction.maxFood', type: 'number', label: 'Stop at', unit: 'healing items owned', dependsOn: 'auction.food', help: 'Food and potions in your bags and packages.' },
+        { path: 'auction.gear', type: 'toggle', label: 'Bid on gear', help: 'Within the same round budget and gold reserve as food.' },
+        {
+          path: 'auction.gearTypes',
+          type: 'checks',
+          label: 'Kinds',
+          dependsOn: 'auction.gear',
+          help: KINDS_HELP,
+          items: GEAR_KINDS.map(([kind, label]) => ({ path: `auction.gearTypes.${kind}`, label })),
+        },
+        {
+          path: 'auction.gearMinQuality',
+          type: 'select',
+          label: 'At least',
+          dependsOn: 'auction.gear',
+          options: QUALITIES.map((q, i) => ({ value: i - 1, label: q })),
+        },
+        { path: 'auction.gearMaxPrice', type: 'number', label: 'At most', unit: 'gold per lot', step: 1000, dependsOn: 'auction.gear' },
       ],
     },
     {
@@ -441,6 +720,23 @@
           label: 'Only quests for activities that are on',
           help: 'For example, skip arena quests while the arena is off.',
         },
+        {
+          path: 'quests.skipTimed',
+          type: 'toggle',
+          label: 'Skip quests with a time limit',
+          help: 'They fail when the time runs out, which can happen while waiting for cooldowns.',
+        },
+        { path: 'quests.skipFoodReward', type: 'toggle', label: 'Skip quests that reward food' },
+        {
+          path: 'quests.rankBy',
+          type: 'select',
+          label: 'Of the rest, take the one with the most',
+          options: [
+            { value: 'gold', label: 'Gold' },
+            { value: 'honour', label: 'Honour' },
+            { value: 'xp', label: 'Experience' },
+          ],
+        },
       ],
     },
     {
@@ -474,11 +770,46 @@
       id: 'notifications',
       title: 'Notifications',
       icon: 'notifications',
-      description: 'Desktop notifications for things that need your attention.',
+      description: 'Desktop notifications for things that need your attention, and on your phone if you like.',
       fields: [
         { path: 'notifications.loggedOut', type: 'toggle', label: 'Logged out / game tab left the game' },
         { path: 'notifications.activityPaused', type: 'toggle', label: 'An activity was paused after repeated failures' },
         { path: 'notifications.noFood', type: 'toggle', label: 'HP is low and there is no food left' },
+        { path: 'notifications.underworld', type: 'toggle', label: 'The Underworld was not entered: Dīs Pater\'s Armor from that level is still unused' },
+        { path: 'notifications.levelUp', type: 'toggle', label: 'You reached a new level' },
+        { path: 'notifications.messages', type: 'toggle', label: 'Unread messages in the game', help: 'From players, your guild and the game (auction wins and the like). Lanista does not open them.' },
+        { path: 'notifications.costume', type: 'toggle', label: "A costume was put on, or Dīs Pater's Armour ran out", help: 'Needs Costumes switched on.' },
+        { path: 'notifications.dailySummary', type: 'toggle', label: "Yesterday's statistics, once a day", help: 'Fights, gold, experience, honour and fame, sent after midnight.' },
+        { path: 'notifications.newLocation', type: 'toggle', label: 'A new place in the location menu', help: "Events add their own place to the menu, and new areas open as you level up. The Underworld's menu does not count." },
+        { path: 'notifications.desktop', type: 'toggle', label: 'Show them on this computer' },
+        {
+          path: 'notifications.pushUrl',
+          type: 'push',
+          label: 'Also send them to your phone',
+          placeholder: 'One address per line',
+          help: 'Any of these, one per line:\n• ntfy: install the free ntfy app, subscribe to a long, hard-to-guess topic name, paste https://ntfy.sh/that-name\n• Discord: channel settings > Integrations > Webhooks > Copy Webhook URL\n• Slack: an incoming webhook (https://hooks.slack.com/services/...)\n• Telegram: make a bot with @BotFather, send it a message, then paste https://api.telegram.org/bot<token>/sendMessage?chat_id=<your chat id>\n• Pushover: https://api.pushover.net/1/messages.json?token=<app token>&user=<user key>\n• Gotify: https://<your server>/message?token=<app token>\nAnyone with an address can post to it (and read an ntfy topic), so keep them to yourself; exported settings include them.',
+        },
+        { path: 'notifications.quiet', type: 'toggle', label: 'Quiet hours for the phone', help: 'Phone alerts wait until the quiet hours end, then come together in one message. Desktop alerts still show.' },
+        { path: 'notifications.quietStart', type: 'time', label: 'Quiet from', dependsOn: 'notifications.quiet' },
+        { path: 'notifications.quietEnd', type: 'time', label: 'Quiet until', dependsOn: 'notifications.quiet' },
+      ],
+    },
+    {
+      id: 'remote',
+      title: 'Remote control',
+      icon: 'remote',
+      enable: 'remote.enabled',
+      description:
+        'Send commands from your phone and get the answer back: status, stop, start, check (look at the game now), stats (today\'s numbers), log (the last 10 lines) and help. Add a server number to pick one server, like "stop 303"; without one, every server listening there does it. Lanista reads commands once a minute while the browser is open.\n\nTelegram: the bot you added under Notifications as a phone address. Only messages from that chat count. Don\'t use the bot with another program at the same time, or the two will take each other\'s messages.',
+      fields: [
+        {
+          path: 'remote.ntfyTopic',
+          type: 'text',
+          wide: true,
+          label: 'Commands from the ntfy topic',
+          placeholder: 'https://ntfy.sh/your-command-topic',
+          help: 'Publish a command to this topic in the ntfy app; the answer appears in the same topic. Anyone who knows the name can send commands, so make it long and hard to guess. Leave it empty to use only Telegram.',
+        },
       ],
     },
     {
@@ -500,12 +831,197 @@
         },
       ],
     },
-    { id: 'stats', title: 'Statistics', icon: 'stats', custom: 'stats', description: 'What the bot has done on this server.' },
-    { id: 'log', title: 'Log', icon: 'log', custom: 'log', description: 'Recent bot activity on this server.' },
+    { id: 'stats', title: 'Statistics', icon: 'stats', custom: 'stats', description: 'What Lanista has done on this server.' },
+    { id: 'log', title: 'Log', icon: 'log', custom: 'log', description: 'What Lanista has been up to on this server. Something off? Report it with the button below; a few log lines help a lot.' },
     { id: 'profile', title: 'Backup', icon: 'profile', custom: 'profile', description: 'Every server keeps its own settings. Copy them from another server, export them to a file, import them on another browser, or reset them.' },
   ];
 
   // Labels/icons for the priority list and the control bar tiles.
+  // ---------------------------------------------------------------- overview
+
+  const fmt = (n) => Number(n).toLocaleString();
+  const QUALITY_NAMES = ['Standard', 'Ceres', 'Neptun', 'Mars', 'Jupiter', 'Olymp'];
+  const quality = (q) => QUALITY_NAMES[q + 1] || String(q);
+  const line = (parts) => parts.filter(Boolean).join(' · ');
+  const times = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const ENEMIES = ['1st enemy', '2nd enemy', '3rd enemy', 'the boss'];
+  const TARGET_WORDS = { lowest: 'weakest first', highest: 'strongest first', random: 'random opponents' };
+  const ENTER_LEVELS = { normal: 'Normal', medium: 'Middle', hard: 'Hard' };
+  const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
+
+  // A location id as its name, when the game menu has been seen.
+  function placeName(id, info, fallback) {
+    if (id === 'auto') return fallback;
+    const known = ((info && info.locations) || []).find((l) => String(l.id) === String(id));
+    return known ? known.name : `location #${id}`;
+  }
+
+  function opponentSummary(c) {
+    const ignored = String(c.ignorePlayers || '')
+      .split(/[\n,;]+/)
+      .filter((n) => n.trim()).length;
+    return line([
+      c.where === 'local' ? 'on this server' : 'Provinciarum',
+      TARGET_WORDS[c.target],
+      c.where !== 'local' && c.limitLevels && `levels −${c.maxBelow} to +${c.maxAbove}`,
+      c.preferBeaten && 'beaten ones first',
+      ignored && `${times(ignored, 'name', 'names')} never attacked`,
+      c.perDay && `at most ${c.perDay} a day`,
+    ]);
+  }
+
+  // One line per feature for the Overview tab.
+  const SUMMARIES = {
+    expedition: (s, info) => {
+      const e = s.expedition;
+      return line([
+        placeName(e.location, info, 'the last visited location'),
+        ENEMIES[e.enemy - 1] + (e.enemy === 4 && e.bonusesFirst ? ' (bonuses first)' : ''),
+        e.keepPoints && `keeps ${times(e.keepPoints, 'point', 'points')}`,
+        e.easierAfterLosses && `easier enemy after ${times(e.easierAfterLosses, 'loss', 'losses')}`,
+        e.mobilisationsPerDay && `${times(e.mobilisationsPerDay, 'Mobilisation', 'Mobilisations')} a day`,
+      ]);
+    },
+    dungeon: (s, info) => {
+      const d = s.dungeon;
+      return line([
+        placeName(d.location, info, 'the last visited dungeon'),
+        d.difficulty === 'advanced' ? 'Advanced' : 'Normal',
+        d.skipBoss && 'skips the boss',
+        d.restartAfterLosses && `starts over after ${times(d.restartAfterLosses, 'loss', 'losses')}`,
+        d.keepPoints && `keeps ${times(d.keepPoints, 'point', 'points')}`,
+        d.gateKeysPerDay && `${times(d.gateKeysPerDay, 'Gate Key', 'Gate Keys')} a day`,
+      ]);
+    },
+    underworld: (s) => {
+      const u = s.underworld;
+      return line([
+        `fights above ${u.minHpPercent}% HP`,
+        u.enter === 'off' ? 'you go in yourself' : `goes in on ${ENTER_LEVELS[u.enter]}`,
+        u.mobilisations && `${times(u.mobilisations, 'Mobilisation', 'Mobilisations')} a visit`,
+        u.potions && `${times(u.potions, 'healing potion', 'healing potions')} a visit`,
+      ]);
+    },
+    arena: (s) => opponentSummary(s.arena),
+    circus: (s) => opponentSummary(s.circus),
+    heal: (s) => {
+      const h = s.heal;
+      const bags = ROMAN.filter((_, i) => h.bags[`b${i + 1}`]);
+      return line([
+        `eats below ${h.eatBelowPercent}%`,
+        `stops fighting below ${h.minHpPercent}%`,
+        bags.length && bags.length < 8 ? `${bags.length === 1 ? 'bag' : 'bags'} ${bags.join(', ')}` : 'all bags',
+        h.plainOnly && 'plain food only',
+        h.medic !== 'off' && (h.medic === 'always' ? 'sees the guild doctors first' : 'sees the guild doctors in the Underworld'),
+        h.market && 'buys food on the market',
+        h.buy && `buys food (up to ${fmt(h.buyMaxGoldPerDay)} gold a day)`,
+      ]);
+    },
+    quests: (s) => {
+      const on = ['combat', 'arena', 'circus', 'expedition', 'dungeon', 'items', 'work'].filter((k) => s.quests.types[k]);
+      const q = s.quests;
+      return line([
+        on.length ? on.join(', ') : 'no quest types ticked',
+        q.matchLocation && 'only where it fights',
+        q.skipTimed && 'no time limits',
+        q.skipFoodReward && 'no food rewards',
+        q.rankBy !== 'gold' && `most ${q.rankBy === 'xp' ? 'experience' : 'honour'} first`,
+      ]);
+    },
+    work: (s) => line([`job ${s.work.job + 1}`, times(s.work.hours, 'hour', 'hours'), 'once the points run out']),
+    training: (s) => {
+      const stats = Object.keys(s.training.stats).filter((k) => s.training.stats[k]);
+      return line([`keeps ${fmt(s.training.keepGold)} gold`, stats.length ? stats.join(', ') : 'no stats ticked']);
+    },
+    repair: (s) => {
+      const r = s.repair;
+      const whose = ['you', 'tab X', 'mercenary I', 'mercenary II', 'mercenary III', 'mercenary IV'].filter((_, i) => r.dolls[`d${i + 1}`]);
+      return line([`below ${r.belowPercent}%`, `materials up to ${quality(r.maxQuality)}`, whose.length ? whose.join(', ') : 'you']);
+    },
+    smelting: (s) => {
+      const m = s.smelting;
+      const bins = ROMAN.filter((_, i) => m.bins && m.bins[`b${i + 1}`]);
+      return line([
+        `resources to the ${m.storeIn === 'horreum' ? 'Horreum' : 'packages'}`,
+        m.auto ? `picks items up to ${quality(m.autoUpTo)}` : 'only what you tick',
+        bins.length && `everything in ${bins.length === 1 ? 'bag' : 'bags'} ${bins.join(', ')}`,
+      ]);
+    },
+    packages: (s) => {
+      const p = s.packages;
+      return (
+        line([
+          p.collectGold && 'opens gold',
+          p.storeResources && 'stores resources',
+          p.sell && `sells up to ${quality(p.sellUpTo)}`,
+          p.expiring === 'bag' ? 'rescues expiring ones' : p.expiring === 'sell' ? 'sells expiring ones' : null,
+          Object.values(p.pick || {}).some(Boolean) && 'takes chosen items out',
+          p.learnScrolls && 'learns scrolls',
+        ]) || 'no rules switched on'
+      );
+    },
+    gold: (s) => line([`keeps ${fmt(s.gold.keep)} on hand`, 'the rest in guild market packs']),
+    auction: (s) => {
+      const a = s.auction;
+      return line([
+        a.food && `food at ${a.minHpPerGold}+ HP per gold`,
+        a.gear && `${QUALITY_NAMES[a.gearMinQuality + 1]}+ gear up to ${fmt(a.gearMaxPrice)}`,
+        `up to ${fmt(a.maxPerRound)} gold a round`,
+        `keeps ${fmt(a.keepGold)} gold`,
+      ]);
+    },
+  };
+
+  // Not features with a switch, but worth seeing on the Overview.
+  SUMMARIES.schedule = (s) => {
+    const c = s.schedule;
+    return line([c.activeHours ? `plays ${c.start}–${c.end}` : 'plays around the clock', c.breaks && `a break of about ${c.breakLength} min every ${c.breakEvery} min`]);
+  };
+  SUMMARIES.notifications = (s) => {
+    const n = s.notifications;
+    const kinds = ['loggedOut', 'activityPaused', 'noFood', 'underworld', 'levelUp', 'messages', 'costume', 'dailySummary', 'newLocation'].filter((k) => n[k]).length;
+    const phones = GBot.settings.pushUrls(n).length;
+    const where = [n.desktop && 'desktop', phones && (phones === 1 ? 'phone' : `${phones} phone addresses`)].filter(Boolean).join(' and ') || 'shown nowhere';
+    return kinds ? line([`${times(kinds, 'kind of alert', 'kinds of alert')} on`, where, phones && n.quiet && `phone quiet ${n.quietStart}–${n.quietEnd}`]) : 'all alerts off';
+  };
+  SUMMARIES.remote = (s) => {
+    const r = s.remote;
+    const telegram = GBot.settings.pushUrls(s.notifications).some((u) => /^https:\/\/api\.telegram\.org\/bot/i.test(u));
+    const from = [telegram && 'Telegram', r.ntfyTopic && 'ntfy'].filter(Boolean);
+    return from.length ? `commands from ${from.join(' and ')}` : 'no Telegram bot or ntfy topic set up';
+  };
+  SUMMARIES.gods = (s) => {
+    const g = s.gods;
+    const count = (key) => Object.values(g[key]).filter(Boolean).length;
+    return line([
+      count('blessings') && times(count('blessings'), 'blessing', 'blessings'),
+      count('oils') && times(count('oils'), 'holy oil', 'holy oils'),
+      count('rank3') && times(count('rank3'), 'great blessing', 'great blessings'),
+      g.minPercent && `once favour is ${g.minPercent}% full`,
+    ]) || 'nothing ticked';
+  };
+  SUMMARIES.boosts = (s) => {
+    const on = BOOST_NAMES.filter(([id]) => s.boosts.stats[id]).map(([, label]) => label.replace(/ \(.*\)$/, '').toLowerCase());
+    return on.length ? `keeps ${on.join(', ')} boosted` : 'nothing ticked';
+  };
+  SUMMARIES.costumes = (s) => {
+    const c = s.costumes;
+    const levels = ['normal', 'medium', 'hard'].filter((l) => c.armour[l]);
+    return line([levels.length && `Dīs Pater's Armour (${levels.join(', ')})`, c.everyday ? `otherwise ${c.everyday}` : 'otherwise leaves it']);
+  };
+
+  // Sidebar order, under group headings.
+  const LAYOUT = [
+    [null, ['overview', 'general']],
+    ['Fights', ['expedition', 'dungeon', 'underworld', 'arena', 'circus']],
+    ['Character', ['heal', 'quests', 'work', 'training', 'gods', 'boosts', 'costumes']],
+    ['Items', ['gold', 'repair', 'smelting', 'packages', 'auction']],
+    ['Lanista', ['schedule', 'safety', 'notifications', 'remote', 'interface', 'stats', 'log', 'profile']],
+  ];
+  const byId = Object.fromEntries(ALL_TABS.map((t) => [t.id, t]));
+  const TABS = LAYOUT.flatMap(([group, ids]) => ids.map((id) => ({ ...byId[id], group, summary: SUMMARIES[id] || null })));
+  if (TABS.length !== ALL_TABS.length || TABS.some((t) => !t.id)) throw new Error('schema.js: LAYOUT and the tabs do not match');
+
   const ACTIVITIES = {
     expedition: { label: 'Expedition', icon: 'expedition', tab: 'expedition', path: 'expedition.enabled' },
     dungeon: { label: 'Dungeon', icon: 'dungeon', tab: 'dungeon', path: 'dungeon.enabled' },
