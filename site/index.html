@@ -322,7 +322,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
         <div>{{ICON:interface}}<p><b>Chrome and Firefox</b><span>Also Edge, Brave and Opera</span></p></div>
         <div>{{ICON:safety}}<p><b>Never spends rubies</b><span>Only gold, and only where you allow it</span></p></div>
         <div>{{ICON:schedule}}<p><b>Plays like a person</b><span>Random pauses, set hours, breaks</span></p></div>
-        <div>{{ICON:notifications}}<p><b>Nothing leaves your browser</b><span>No account, no tracking</span></p></div>
+        <div>{{ICON:notifications}}<p><b>Private by default</b><span>No account, no tracking</span></p></div>
       </div>
     </div>
   </div>
@@ -507,7 +507,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
         <div class="spot-text">
           <span class="eyebrow">Statistics</span>
           <h2>See what happened while you were away</h2>
-          <p>Every fight, repair and sale goes into the log, and the statistics add it all up: wins and losses, gold, experience, honour and fame.</p>
+          <p>Every fight, repair and sale goes into the log, and the statistics add it all up, day by day and place by place: wins and losses, gold in and out, experience, honour and fame.</p>
 <pre class="log" aria-label="Example log lines"><span class="t">14:02</span> Expedition: <span class="win">won</span>, +1,513 gold, +7 XP, +15 honour
 <span class="t">14:06</span> Arena vs Virgl: <span class="win">won</span>, +780 gold, +3 XP, +53 honour
 <span class="t">14:21</span> Arena vs Maximus: <span class="loss">lost</span>
@@ -515,8 +515,8 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
 <span class="t">14:30</span> Repaired Leather Sandals: 41% -&gt; 100%</pre>
         </div>
         <div class="spot-media">
-          <img class="shot" src="img/statistics.png" alt="The Statistics tab: fights per activity with win rates, gold looted, experience, honour and fame" width="1002" height="651">
-          <p class="caption">Example statistics after a day on one server.</p>
+          <img class="shot" src="img/statistics.png" alt="The Statistics tab: a table per day and one per place, with fights, win rate, gold, experience, honour and fame" width="1002" height="651">
+          <p class="caption">Example statistics after a week on one server.</p>
         </div>
       </div>
     </div>
@@ -535,7 +535,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
         <div><b>{{ICON:schedule}}Your hours</b><span>Play only between set times, with random breaks if you like.</span></div>
         <div><b>{{ICON:log}}Stops when something's off</b><span>If an action keeps failing, Lanista pauses it and explains why in the log.</span></div>
         <div><b>{{ICON:interface}}One tab per server</b><span>Only one game tab runs the bot, and a frozen tab gets reloaded.</span></div>
-        <div><b>{{ICON:notifications}}Private</b><span>Settings, statistics and logs stay in your browser. Nothing is sent anywhere else.</span></div>
+        <div><b>{{ICON:notifications}}Private</b><span>Settings, statistics and logs stay in your browser. Phone alerts and remote control stay off until you set them up, and then only talk to the service you picked.</span></div>
       </div>
       <div class="warning">
         {{ICON:safety}}
@@ -591,7 +591,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
           <dl>
             <dt>Version</dt><dd>{{VERSION}} ({{DATE}})</dd>
             <dt>Tested on</dt><dd>English servers 60 and 303, September 2026</dd>
-            <dt>Not yet</dt><dd>Events, the market and guild activities</dd>
+            <dt>Not yet</dt><dd>Fighting in events on its own (it tells you when a new place appears)</dd>
           </dl>
         </div>
       </div>
@@ -602,7 +602,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
         </details>
         <details>
           <summary>Does it need my password?</summary>
-          <p>No. Lanista works in the game tab you're already logged into and never logs in for you. If your session runs out, log in again and it carries on.</p>
+          <p>No, it never types a password. It plays in the game tab you're already logged into, and if your session runs out, you log in again and it carries on. Or switch on <b>Log back in through the lobby</b>: as long as you're still logged in to the Gladiatus lobby, Lanista presses <b>Play</b> for you. Gameforge can tell that login was automatic, so it adds to the risk.</p>
         </details>
         <details>
           <summary>Will it spend my rubies?</summary>
@@ -610,7 +610,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
         </details>
         <details>
           <summary>Does it send my data anywhere?</summary>
-          <p>No. It only talks to the Gladiatus game servers. Your settings, statistics and log stay in your browser, and there's no account or tracking.</p>
+          <p>Not unless you set it up to. Out of the box it only talks to the Gladiatus game servers, and your settings, statistics and log stay in your browser. Phone alerts and remote control are off until you add an address. Then the alerts, and the answers to your commands, go to the service you picked: an ntfy topic, a Telegram bot, Discord, Slack, Pushover or Gotify. There's no account and no tracking.</p>
         </details>
         <details>
           <summary>Can I use it on more than one server?</summary>
