@@ -597,11 +597,12 @@
           type: 'select',
           label: 'Packages about to expire',
           options: [
+            { value: 'renew', label: 'Renew them in the guild market' },
             { value: 'bag', label: 'Move them into my bags' },
             { value: 'sell', label: 'Sell them' },
             { value: 'off', label: 'Leave them' },
           ],
-          help: 'Any package, not only gear. Moving needs free room in your bags.',
+          help: "Any package, not only gear. Renewing lists the item in your guild's market for 1 gold and cancels the listing at once, so it comes back as a new package with a fresh expiry (soul-bound items can't be listed and are moved into your bags instead). It needs a guild and, for a moment, room in your bags. Moving needs free room in your bags outside the food bags.",
         },
         { path: 'packages.expiringHours', type: 'number', label: 'About to expire means less than', unit: 'h left' },
         {
@@ -954,7 +955,7 @@
           p.collectGold && 'opens gold',
           p.storeResources && 'stores resources',
           p.sell && `sells up to ${quality(p.sellUpTo)}`,
-          p.expiring === 'bag' ? 'rescues expiring ones' : p.expiring === 'sell' ? 'sells expiring ones' : null,
+          p.expiring === 'renew' ? 'renews expiring ones' : p.expiring === 'bag' ? 'rescues expiring ones' : p.expiring === 'sell' ? 'sells expiring ones' : null,
           Object.values(p.pick || {}).some(Boolean) && 'takes chosen items out',
           p.learnScrolls && 'learns scrolls',
         ]) || 'no rules switched on'

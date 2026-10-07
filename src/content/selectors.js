@@ -213,6 +213,8 @@
       sellerCell: 1,
       priceCell: 2,
       buy: 'input[name="buy"]',
+      // On your own listings the row's button cancels it instead.
+      rowButton: 'input[type="submit"], button[type="submit"]',
       sellForm: '#sellForm',
       sellButton: 'input[type="submit"], button[type="submit"]',
     },

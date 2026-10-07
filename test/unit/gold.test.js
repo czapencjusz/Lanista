@@ -19,7 +19,7 @@ const ME = 'DaddyCzapo';
 const row = ({ id, seller, price, amount = 3, value = 525, type = 32768, buy = true }) =>
   `<tr><td><div data-content-type="${type}" data-item-id="${id}" data-price-gold="${value}" data-amount="${amount}" data-basis="18-27"></div></td>
      <td><div><span><a href="index.php?mod=player&p=1">${seller}</a></span></div></td><td>${price}</td><td>03:34 h</td><td>2</td>
-     <td align="center">${buy ? '<input type="submit" value="Buy" name="buy" class="awesome-button">' : ''}</td></tr>`;
+     <td align="center">${buy ? '<input type="submit" value="Buy" name="buy" class="awesome-button">' : '<input type="submit" value="Cancel" name="cancel" class="awesome-button">'}</td></tr>`;
 const marketPage = (rows) =>
   `<div id="header_game"></div><div id="content">
      <form method="post" id="sellForm"><input type="hidden" name="sellid" value=""><input type="text" name="preis"><select name="dauer"></select><input type="submit" name="anbieten" value="Offer"></form>
@@ -35,9 +35,10 @@ const OFFERS = [
 test('the guild market is read row by row; the listing id is the item id', () => {
   const offers = gold.readMarket(new window.DOMParser().parseFromString(marketPage(OFFERS), 'text/html'));
   const { el, ...first } = offers[0];
-  assert.deepEqual(first, { buyid: '1', seller: 'WHINTERS', price: 300000, value: 525, amount: 3, basis: '18-27', type: 32768, level: 0, canBuy: true, buyLabel: 'Buy' });
+  assert.deepEqual(first, { buyid: '1', seller: 'WHINTERS', price: 300000, value: 525, amount: 3, basis: '18-27', type: 32768, level: 0, canBuy: true, buyLabel: 'Buy', cancel: null });
   assert.equal(el.getAttribute('data-item-id'), '1', 'the item itself comes along');
   assert.equal(offers[4].canBuy, false, 'no Buy on your own listing');
+  assert.deepEqual(offers[4].cancel, { name: 'cancel', value: 'Cancel' }, 'but its Cancel button');
 });
 
 test('the pack to buy: the dearest the spare gold pays for, never a real item or your own', () => {

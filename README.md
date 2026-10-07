@@ -174,8 +174,10 @@ kind (weapons, armour, rings and amulets). Every 30 minutes Lanista goes through
 2. moves resources into the Horreum, if you want,
 3. queues gear that matches a smelting rule, as if you'd ticked it,
 4. sells gear that matches a selling rule to a merchant,
-5. rescues packages that are about to expire (less than 24 hours left by default) by moving them into
-   your bags, or sells them.
+5. rescues packages that are about to expire (less than 24 hours left by default): it renews them
+   (lists the item in your guild's market for 1 gold and cancels the listing straight away, so it comes
+   back as a new package with a fresh week), moves them into your bags, or sells them. Soul-bound items
+   can't go on the market, so those are moved into your bags.
 
 Items you ticked for smelting are never sold, smelting rules come before selling rules, and anything
 that matches nothing stays put. Names you put on the *Never sell or smelt* list are left alone too.
@@ -231,7 +233,7 @@ apply as you go.
 | Gold | Keeping gold above a limit in guild market gold packs |
 | Repair | When to repair, the *Repair all* cutoff, best materials to use, whose gear to look after |
 | Smelting | On/off, where the resources go, automatic smelting rules, smelt bins |
-| Packages | Gold packages, resources, selling rules, packages about to expire, names to keep, item types to take out, learning scrolls |
+| Packages | Gold packages, resources, selling rules, packages about to expire (renew in the guild market, move to bags or sell), names to keep, item types to take out, learning scrolls |
 | Auction house | Bidding on/off, food and gear, price per HP, gear kinds, quality and price, how late to bid, budget, gold to keep, how much food is enough |
 | **Lanista** | |
 | Schedule | Active hours, random breaks |

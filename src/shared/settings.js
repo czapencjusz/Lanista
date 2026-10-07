@@ -432,7 +432,7 @@
     'smelting.storeIn': { enum: ['horreum', 'packages'] },
     'smelting.autoUpTo': { int: true, min: -1, max: 4 },
     'packages.sellUpTo': { int: true, min: -1, max: 4 },
-    'packages.expiring': { enum: ['off', 'bag', 'sell'] },
+    'packages.expiring': { enum: ['off', 'bag', 'sell', 'renew'] },
     'packages.expiringHours': { int: true, min: 1, max: 168 },
     'notifications.pushUrl': { pattern: /^(https:\/\/\S+(\s+https:\/\/\S+)*)?$/i, keepCase: true, maxLength: 2000 },
     'notifications.quietStart': { pattern: TIME },

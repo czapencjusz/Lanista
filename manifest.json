@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Lanista",
   "short_name": "Lanista",
-  "version": "2.7.1",
+  "version": "2.8.0",
   "description": "Automates Gladiatus: expeditions, dungeons, Underworld, arena, circus, healing, quests, work, repair, smelting, packages, auctions.",
   "minimum_chrome_version": "121",
   "icons": {

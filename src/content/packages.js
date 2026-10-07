@@ -62,6 +62,8 @@
         quality: qualityOf(el),
         level: Number(el.dataset.level) || 0,
         basis: el.dataset.basis || null,
+        // "Soul bound to: <name>": cannot be traded.
+        bound: GBot.forge.tooltipLines(el).some((l) => /^soul ?bound/i.test(String(l).trim())),
         amount,
         value: (Number(el.dataset.priceGold) || 0) * amount,
         w: Number(el.dataset.measurementX) || 1,
@@ -132,6 +134,29 @@
     await ctx.humanDelay();
     await GBot.forge.moveItem(sh, { from: item.cn, fromX: 1, fromY: 1, to: spot.bag, toX: spot.x, toY: spot.y, amount: item.amount });
     return spot;
+  }
+
+  // A package about to expire, renewed: out into a bag, listed in the guild
+  // market for 1 gold for 2 hours and the listing cancelled at once, which
+  // sends the item back as a new package with a new expiry. A guildmate
+  // could buy it for 1 gold in between, so a listing that cannot be
+  // cancelled stops renewing for a day and tells the player.
+  const RENEW_PRICE = 1;
+  const RENEW_DURATION = '1'; // 2 hours
+  const RENEW_BLOCK_MS = 24 * 3600 * 1000;
+
+  async function renew(ctx, item) {
+    const spot = await intoBag(ctx, item, true);
+    const listing = await GBot.gold.listItem(ctx, spot.itemId, RENEW_PRICE, RENEW_DURATION);
+    if (!listing) {
+      ctx.memory.renewBlockedUntil = ctx.now() + RENEW_BLOCK_MS;
+      throw new ActionError(`Could not list ${item.name} in the guild market to renew it; it is in your bag. Renewing is paused for a day`);
+    }
+    if (await GBot.gold.cancelListing(ctx, listing, RENEW_PRICE)) return;
+    ctx.memory.renewBlockedUntil = ctx.now() + RENEW_BLOCK_MS;
+    const message = `${item.name} is listed in the guild market for ${RENEW_PRICE} gold and Lanista could not cancel it. Cancel it yourself before a guildmate buys it; renewing is paused for a day.`;
+    if (ctx.notify) ctx.notify('activityPaused', `Lanista: ${message}`);
+    throw new ActionError(message);
   }
 
   async function sell(ctx, item) {
@@ -277,8 +302,10 @@
       let moves = 0;
       let more = false;
       for (const item of items) {
-        const action = brain.packageAction({ ...item, queued: queued.has(item.cn) }, settings);
+        let action = brain.packageAction({ ...item, queued: queued.has(item.cn) }, settings);
         if (!action) continue;
+        // Renewing failed lately: rescue into a bag meanwhile.
+        if (action === 'renew' && (memory.renewBlockedUntil || 0) > ctx.now()) action = 'bag';
         if (action === 'smelt') {
           memory.smeltQueue.push(GBot.smelter.queueEntry(item.el, ctx.now()));
           queued.add(item.cn);
@@ -298,6 +325,10 @@
             memory.stats.sold = (memory.stats.sold || 0) + 1;
             memory.stats.soldGold = (memory.stats.soldGold || 0) + item.value;
             ctx.log('info', `Sold ${item.name}${item.amount > 1 ? ` x${item.amount}` : ''} for ${fmt(item.value)} gold${expiring ? ' (its package was about to expire)' : ''}`);
+          } else if (action === 'renew') {
+            await renew(ctx, item);
+            memory.stats.renewed = (memory.stats.renewed || 0) + 1;
+            ctx.log('info', `Renewed ${item.name}: listed for 1 gold in the guild market and cancelled, so it is a new package again`);
           } else {
             // Never into a food bag (when some bags are not food bags):
             // food and healing need the room there.

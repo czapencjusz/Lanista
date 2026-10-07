@@ -32,6 +32,7 @@
         const item = row.querySelector('[data-content-type]');
         if (!item) return null;
         const buy = row.querySelector(SEL.market.buy);
+        const button = row.querySelector(SEL.market.rowButton);
         return {
           buyid: item.getAttribute('data-item-id'),
           seller: (row.cells[SEL.market.sellerCell] || {}).textContent.trim(),
@@ -43,6 +44,8 @@
           level: Number(item.getAttribute('data-level')) || 0,
           canBuy: !!buy,
           buyLabel: buy ? buy.value : null,
+          // Your own listing: its Cancel button ({ name, value }).
+          cancel: !buy && button && button.name ? { name: button.name, value: button.value || '' } : null,
           el: item,
         };
       })
@@ -88,6 +91,40 @@
     if (after === null) after = await goldNow(ctx.state.sh);
     if (after === null) return 'unknown';
     return goldBefore - after >= pack.price ? 'bought' : 'refused';
+  }
+
+  // Puts a bag item up in the guild market (duration '1' = 2 h) and finds
+  // the listing again: the market sorted by price, cheapest first, by its
+  // item id or as yours at that price. Returns the listing, or null.
+  async function listItem(ctx, itemId, price, duration) {
+    const sh = ctx.state.sh;
+    const { doc } = await GBot.forge.getDoc(sh, { mod: 'guildMarket' });
+    const form = doc.querySelector(SEL.market.sellForm);
+    if (!form) throw new ActionError('The guild market has no Sell form (are you in a guild?)');
+    const submit = form.querySelector(SEL.market.sellButton);
+    const body = new URLSearchParams({ sellid: String(itemId), preis: String(price), dauer: String(duration) });
+    if (submit && submit.name) body.set(submit.name, submit.value || '');
+    await ctx.humanDelay();
+    await GBot.forge.post(marketUrl(sh), body.toString());
+    return findListing(ctx, itemId, price);
+  }
+
+  async function findListing(ctx, itemId, price) {
+    const me = String((await playerName(ctx)) || '').toLowerCase();
+    const { doc } = await GBot.forge.getDoc(ctx.state.sh, { mod: 'guildMarket', s: 'p', p: 1 });
+    const offers = readMarket(doc) || [];
+    return offers.find((o) => String(o.buyid) === String(itemId)) || offers.find((o) => o.price === price && me && o.seller.toLowerCase() === me && o.cancel) || null;
+  }
+
+  // Cancels your own listing (its row's Cancel button, sent like the row's
+  // form). Returns true once it is gone from the market.
+  async function cancelListing(ctx, listing, price) {
+    if (!listing.cancel) return false;
+    const body = new URLSearchParams({ buyid: String(listing.buyid), qry: '', seller: '', f: '0', fl: '0', fq: '-1', s: 'p', p: '1' });
+    body.set(listing.cancel.name, listing.cancel.value);
+    await ctx.humanDelay();
+    await GBot.forge.post(marketUrl(ctx.state.sh), body.toString());
+    return !(await findListing(ctx, listing.buyid, price));
   }
 
   async function goldNow(sh) {
@@ -209,7 +246,7 @@
 
   GBot.actions = GBot.actions || {};
   GBot.actions.gold = goldAction;
-  GBot.gold = { readMarket, findPack, buy, playerName };
+  GBot.gold = { readMarket, findPack, buy, playerName, listItem, cancelListing };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = GBot.gold;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
