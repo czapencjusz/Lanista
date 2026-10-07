@@ -81,7 +81,8 @@ function mockGame({ items, gold = [], bagsFull = false, firstShopFull = true }) 
         state.bag.delete(key);
         state.money += item.price * (item.amount || 1);
       }
-      return reply('{}');
+      // As the game: the moved item with its new id.
+      return reply(JSON.stringify({ to: { data: { itemId: 9000 - from } } }));
     }
     if (submod === 'storageIn') {
       calls.push(`horreum ${init.body.replace(/&a=\d+&sh=abc$/, '')}`);
@@ -194,6 +195,14 @@ test('a run takes gold out, stores resources, queues, sells and rescues packages
     'info: Moved Bread into your bags; its package was about to expire',
     'info: Queued 2 items from the packages for smelting',
   ]);
+});
+
+test('a package about to expire is rescued outside the food bags, never into one', async () => {
+  const game = mockGame({ items: [BREAD] });
+  const { ctx, logs } = context({ enabled: true, heal: { bags: { b1: true, b2: false, b3: false, b4: false, b5: false, b6: false, b7: false, b8: false } }, packages: { enabled: true, expiring: 'bag' } });
+  await withGame(game, () => GBot.actions.packages(ctx));
+  assert.ok(game.calls.includes('move -6 -> 513 at 1,1 x1'), 'bag II, not the food bag I');
+  assert.deepEqual(logs, ['info: Moved Bread into your bags; its package was about to expire']);
 });
 
 test('with full bags nothing is sold or moved, and the bot tries again later', async () => {

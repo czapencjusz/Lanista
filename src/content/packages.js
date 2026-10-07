@@ -299,12 +299,14 @@
             memory.stats.soldGold = (memory.stats.soldGold || 0) + item.value;
             ctx.log('info', `Sold ${item.name}${item.amount > 1 ? ` x${item.amount}` : ''} for ${fmt(item.value)} gold${expiring ? ' (its package was about to expire)' : ''}`);
           } else {
-            await toBag(ctx, item);
+            // Never into a food bag (when some bags are not food bags):
+            // food and healing need the room there.
+            await intoBag(ctx, item);
             ctx.log('info', `Moved ${item.name} into your bags; its package was about to expire`);
           }
         } catch (e) {
           // Full bags or merchants: try again at the next check.
-          if (!/^No (room|merchant)/.test(e.message)) throw e;
+          if (!/^(No (room|merchant)|The game did not take)/.test(e.message)) throw e;
           ctx.log('warn', `Packages: ${e.message}; trying again later`);
           break;
         }
