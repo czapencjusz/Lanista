@@ -520,6 +520,7 @@
       }
       tick();
     },
+    onReloadExtension: () => send({ type: 'reloadExtension' }),
     onResetStats: () =>
       editMemory((m) => {
         m.stats = brain.createMemory(Date.now()).stats;

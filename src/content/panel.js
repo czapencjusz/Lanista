@@ -283,6 +283,7 @@
         initialTab: tab,
         onChange: (s) => handlers.onSaveSettings(s),
         onResetStats: () => handlers.onResetStats(),
+        onReloadExtension: handlers.onReloadExtension,
         onClearLog: () => handlers.onClearLog(),
         onTestPush: handlers.onTestPush,
         host: handlers.host,

@@ -719,6 +719,29 @@
         status,
         h('h3', {}, 'Reset'),
         h('div', { class: 'gb-actions' }, reset),
+        ...(opts.onReloadExtension
+          ? [
+              h('h3', {}, 'Update'),
+              h('p', { class: 'gb-help' }, "After Lanista's files changed (a new version, or git pull), this restarts it with them and reloads the game tabs."),
+              h(
+                'div',
+                { class: 'gb-actions' },
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    class: 'gb-btn',
+                    onclick: (e) => {
+                      e.currentTarget.disabled = true;
+                      status.textContent = 'Reloading Lanista…';
+                      Promise.resolve(opts.onReloadExtension()).catch(() => {});
+                    },
+                  },
+                  'Reload Lanista'
+                )
+              ),
+            ]
+          : []),
       ];
     }
 

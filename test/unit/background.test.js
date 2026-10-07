@@ -15,6 +15,7 @@ const session = {};
 const tabUrls = {};
 const tabMoves = [];
 const tabsClosed = [];
+const reloads = [];
 const on = (name) => ({ addListener: (fn) => (listeners[name] = fn) });
 globalThis.chrome = {
   storage: {
@@ -34,15 +35,16 @@ globalThis.chrome = {
     },
   },
   alarms: { get: async () => ({}), create: () => {}, clear: () => {}, onAlarm: on('alarm') },
-  runtime: { onMessage: on('message'), onInstalled: on('installed'), onStartup: on('startup'), getURL: (p) => p },
+  runtime: { onMessage: on('message'), onInstalled: on('installed'), onStartup: on('startup'), getURL: (p) => p, reload: () => reloads.push('extension') },
   notifications: { create: async (o) => notifications.push(o.message) },
   action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
   tabs: {
     onRemoved: on('tabRemoved'),
     get: async (id) => ({ id, url: tabUrls[id] || '' }),
-    reload: async () => {},
+    reload: async (id) => reloads.push(id),
     update: async (id, props) => tabMoves.push([id, props.url]),
     remove: async (id) => tabsClosed.push(id),
+    query: async (q) => (q.url === 'https://*.gladiatus.gameforge.com/game/*' ? [{ id: 5 }, { id: 6 }] : []),
   },
 };
 globalThis.fetch = async (url, init) => {
@@ -244,4 +246,19 @@ test('the quiet window may run past midnight', () => {
   assert.equal(S.inTimeWindow('23:00', '07:00', at(7, 0)), false);
   assert.equal(S.inTimeWindow('13:00', '15:00', at(14, 0)), true);
   assert.equal(S.inTimeWindow('13:00', '13:00', at(13, 0)), false, 'an empty window');
+});
+
+test('"Reload Lanista" restarts the extension; after a reload or update the game tabs load again', async () => {
+  reloads.length = 0;
+  assert.deepEqual(await message({ type: 'reloadExtension' }), { ok: true });
+  await new Promise((r) => setTimeout(r, 300));
+  assert.deepEqual(reloads, ['extension']);
+  reloads.length = 0;
+  listeners.installed({ reason: 'update' });
+  await new Promise((r) => setTimeout(r, 30));
+  assert.deepEqual(reloads, [5, 6]);
+  reloads.length = 0;
+  listeners.installed({ reason: 'install' });
+  await new Promise((r) => setTimeout(r, 30));
+  assert.deepEqual(reloads, [], 'not on a first install');
 });

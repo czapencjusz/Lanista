@@ -62,26 +62,21 @@
     return GBot.forge.readSlots((await GBot.forge.getDoc(sh, { mod: 'forge', submod: 'smeltery' })).html);
   }
 
-  // Finds a queued package by its container number: first among the
-  // packages found by its name (every page of them), then, should the
-  // name search miss it, among all the packages. Returns the item element
-  // or null.
-  async function findPackage(sh, entry) {
-    const match = (doc) =>
-      Array.from(doc.querySelectorAll('.packageItem [data-content-type]')).find(
+  // Is a queued package still there? Its container number is looked for on
+  // every page (a name in qry does not filter when sent like this). Only
+  // asked when moving it out did not work, so a normal smelt pages through
+  // nothing.
+  async function packageThere(sh, entry) {
+    let last = 1;
+    for (let page = 1; page <= last; page++) {
+      const { doc } = await GBot.forge.getDoc(sh, { mod: 'packages', f: 0, fq: -1, qry: '', page });
+      const found = Array.from(doc.querySelectorAll('.packageItem [data-content-type]')).some(
         (el) => parseNumber(el.parentElement.getAttribute('data-container-number')) === entry.cn
-      ) || null;
-    const search = async (qry) => {
-      let last = 1;
-      for (let page = 1; page <= last; page++) {
-        const { doc } = await GBot.forge.getDoc(sh, { mod: 'packages', qry, f: 0, fq: -1, page });
-        const found = match(doc);
-        if (found) return found;
-        if (page === 1) last = GBot.packages ? GBot.packages.lastPage(doc) : 1;
-      }
-      return null;
-    };
-    return (await search(entry.name)) || (entry.name ? search('') : null);
+      );
+      if (found) return true;
+      if (page === 1) last = GBot.packages ? GBot.packages.lastPage(doc) : 1;
+    }
+    return false;
   }
 
   // Takes this entry (not just the first one: the queue may have changed
@@ -115,16 +110,27 @@
 
     let iid = entry.iid;
     if (!iid) {
-      const pkg = await findPackage(sh, entry);
-      if (!pkg) {
-        dropEntry(memory, entry);
-        ctx.log('warn', `Smelting: ${entry.name} is no longer in the packages, removed from the queue`);
-        return 0;
-      }
+      // Straight out of its package into a bag. Only when that does not
+      // work is it worth looking whether the package is still there.
       const spot = await GBot.forge.freeBagSpot(sh, entry.w, entry.h);
       await ctx.humanDelay();
-      const moved = await GBot.forge.moveItem(sh, { from: entry.cn, fromX: 1, fromY: 1, to: spot.bag, toX: spot.x, toY: spot.y, amount: 1 });
-      iid = moved.to && moved.to.data && moved.to.data.itemId;
+      let moved = null;
+      let refused = null;
+      try {
+        moved = await GBot.forge.moveItem(sh, { from: entry.cn, fromX: 1, fromY: 1, to: spot.bag, toX: spot.x, toY: spot.y, amount: 1 });
+      } catch (e) {
+        if (!(e instanceof ActionError)) throw e;
+        refused = e;
+      }
+      iid = moved && moved.to && moved.to.data && moved.to.data.itemId;
+      if (!iid) {
+        if (await packageThere(sh, entry)) throw refused || new ActionError(`Smelting: the game did not move ${entry.name} out of its package`);
+        if (refused) {
+          dropEntry(memory, entry);
+          ctx.log('warn', `Smelting: ${entry.name} is no longer in the packages, removed from the queue`);
+          return 0;
+        }
+      }
     }
     // From here on the item is in a bag: leave the queue either way.
     dropEntry(memory, entry);

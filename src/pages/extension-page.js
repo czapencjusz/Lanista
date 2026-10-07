@@ -128,6 +128,7 @@
       host: () => host,
       listServers: S.listServers,
       loadServerSettings: S.loadSettings,
+      onReloadExtension: () => ext.runtime.sendMessage({ type: 'reloadExtension' }),
       onResetStats: () =>
         editMemory((m) => {
           m.stats = GBot.brain.createMemory(Date.now()).stats;

@@ -474,6 +474,11 @@ ext.runtime.onMessage.addListener((message, sender, sendResponse) => {
   else if (message.type === 'rejoinJob' && tabId !== undefined) work = getRejoin().then((r) => r.jobs[tabId] || null);
   else if (message.type === 'rejoinResult' && tabId !== undefined) work = rejoinResult(tabId, message).then(() => ({ ok: true }));
   else if (message.type === 'userLogout') work = userLogout(message.host).then(() => ({ ok: true }));
+  else if (message.type === 'reloadExtension') {
+    // Answer first: the reload ends this script.
+    setTimeout(() => ext.runtime.reload(), 200);
+    work = Promise.resolve({ ok: true });
+  }
   else return false;
   work.then(sendResponse, (e) => sendResponse({ ok: true, error: String(e) }));
   return true; // async response
@@ -517,6 +522,19 @@ async function init() {
   await updateBadge();
 }
 
-ext.runtime.onInstalled.addListener(init);
+// After Lanista is reloaded or updated, open game tabs still run the old
+// scripts, cut off from the extension: load them again.
+async function reloadGameTabs() {
+  try {
+    for (const tab of await ext.tabs.query({ url: 'https://*.gladiatus.gameforge.com/game/*' })) ext.tabs.reload(tab.id).catch(() => {});
+  } catch (e) {
+    console.warn('[Lanista] could not reload the game tabs', e);
+  }
+}
+
+ext.runtime.onInstalled.addListener((details) => {
+  init();
+  if (details && details.reason === 'update') reloadGameTabs();
+});
 ext.runtime.onStartup.addListener(init);
 init();

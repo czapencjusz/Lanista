@@ -7,6 +7,7 @@ const { brain, settings: settingsModule } = require('./load');
 const window = new JSDOM('<meta name="csrf-token" content="tok">', { url: 'https://s1-en.gladiatus.gameforge.com/game/index.php' }).window;
 globalThis.DOMParser = window.DOMParser;
 require('../../src/content/workbench.js');
+require('../../src/content/packages.js');
 const smelter = require('../../src/content/smelter.js');
 
 const NOW = 1_700_000_000_000;
@@ -29,7 +30,11 @@ const RELOAD = 'document.location.href=document.location.href;';
 // live server, renting a smelter slot starts smelting at once and a separate
 // "start" is refused with HTTP 400 (rentStarts: false mimics the workbench,
 // where the slot waits for "start").
-function mockGame({ slots, present = true, rentStarts = true, extra = [] }) {
+// Packages may run to many pages; `page` puts the ticked one on that page
+// (the others are filled with other packages), and the page links repeat
+// the current page before the one they go to, as the game's do.
+// `ignoreMove`: the game answers the move without doing it.
+function mockGame({ slots, present = true, rentStarts = true, extra = [], page = 1, pages = 1, ignoreMove = false }) {
   const calls = [];
   let smelterSlots = slots;
   const setSlot = (body, value) => {
@@ -45,12 +50,22 @@ function mockGame({ slots, present = true, rentStarts = true, extra = [] }) {
     calls.push(`${q.get('mod')}/${q.get('submod') || ''} ${detail}`.trim());
     const reply = (text) => ({ ok: true, text: async () => text });
     if (u.pathname.endsWith('index.php')) {
-      if (u.searchParams.get('mod') === 'packages') return reply(packagesPage(present, extra));
+      if (u.searchParams.get('mod') === 'packages') {
+        const n = Number(u.searchParams.get('page') || 1);
+        const links = Array.from({ length: pages }, (_, i) => `<a href="index.php?mod=packages&amp;f=0&amp;fq=-1&amp;qry=&amp;page=${n}&amp;sh=abc&amp;page=${i + 1}">${i + 1}</a>`).join('');
+        const items = n === page ? packagesPage(present, extra) : packageHtml(-1000 - n, 'Someone else');
+        return reply(`<div class="pagination">${links}</div>${items}`);
+      }
       if (u.searchParams.get('mod') === 'overview') return reply(overviewPage);
       return reply(smelteryPage(smelterSlots));
     }
     const submod = u.searchParams.get('submod');
-    if (submod === 'move') return reply(JSON.stringify({ to: { data: { itemId: ITEM_ID } } }));
+    if (submod === 'move') {
+      const from = Number(q.get('from'));
+      const there = (present && from === CN) || extra.some((e) => e.cn === from);
+      if (!there) return reply(JSON.stringify({ error: 'This item does not exist.' }));
+      return reply(JSON.stringify(ignoreMove ? {} : { to: { data: { itemId: ITEM_ID } } }));
+    }
     if (submod === 'getSmeltingPreview') {
       // All six slots, with the preview in the one asked about.
       const n = Number(/slot=(\d+)/.exec(body)[1]);
@@ -105,7 +120,6 @@ test('a ticked package goes to the bag, then into a smelter slot rented for gold
   await withGame(game, () => GBot.actions.smelt(ctx));
   assert.deepEqual(game.calls, [
     'forge/smeltery',
-    'packages/',
     'overview/',
     `inventory/move from=${CN} to=512 at=1,1`,
     `forge/getSmeltingPreview mod=forge&submod=getSmeltingPreview&mode=smelting&slot=0&iid=${ITEM_ID}&amount=1`,
@@ -172,6 +186,7 @@ test('a package that is gone leaves the queue; without enough gold the item stay
   assert.deepEqual(first.ctx.memory.smeltQueue, []);
   assert.match(first.logs[0], /no longer in the packages/);
   assert.ok(!gone.calls.some((c) => c.startsWith('forge/rent')));
+  assert.ok(gone.calls.indexOf('packages/') > gone.calls.findIndex((c) => c.startsWith('inventory/move')), 'looked for only after the move was refused');
 
   const poor = mockGame({ slots: closed() });
   const second = context(500);
@@ -179,6 +194,32 @@ test('a package that is gone leaves the queue; without enough gold the item stay
   assert.ok(!poor.calls.some((c) => c.startsWith('forge/rent')), 'never rented');
   assert.deepEqual(second.ctx.memory.smeltQueue, [], 'moved to the bag, so out of the queue');
   assert.equal(second.ctx.memory.smeltNext, NOW + 10 * 60 * 1000);
+});
+
+test('a ticked item far back in the packages stays queued (s303 had 51 pages)', async () => {
+  // The move goes straight to the package: no paging at all.
+  const far = mockGame({ slots: closed(), page: 37, pages: 51 });
+  const first = context();
+  await withGame(far, () => GBot.actions.smelt(first.ctx));
+  assert.ok(!far.calls.includes('packages/'));
+  assert.match(first.logs[0], /^info: Smelting Táliths Sandals/);
+
+  // The game ignores the move: the package is still there (on page 37),
+  // so it stays queued and the failure counts against it.
+  const stuck = mockGame({ slots: closed(), page: 37, pages: 51, ignoreMove: true });
+  const second = context();
+  await assert.rejects(withGame(stuck, () => GBot.actions.smelt(second.ctx)), /did not move Táliths Sandals out of its package/);
+  assert.equal(stuck.calls.filter((c) => c === 'packages/').length, 37, 'every page up to the one with it');
+  assert.deepEqual(second.ctx.memory.smeltQueue, [entry], 'still ticked');
+  assert.equal(second.ctx.memory.smeltFailures, 1);
+});
+
+test('the last page is read from page links that repeat the current page first', () => {
+  const doc = new window.DOMParser().parseFromString(
+    '<div class="pagination"><a href="index.php?mod=packages&amp;f=0&amp;qry=&amp;page=1&amp;sh=x&amp;page=2">2</a><a href="index.php?mod=packages&amp;page=1&amp;sh=x&amp;page=51">51</a></div>',
+    'text/html'
+  );
+  assert.equal(GBot.packages.lastPage(doc), 51);
 });
 
 test('the bot looks at the smelter when something is due, and only with smelting on', () => {

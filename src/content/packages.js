@@ -25,7 +25,9 @@
   const RETRY_MS = 15 * 60 * 1000;
   // Items sold or moved per run; the rest follow a minute later.
   const MAX_MOVES = 10;
-  const MAX_PAGES = 20;
+  // A safety limit only: s303 had 51 pages (2026-10-07), the oldest
+  // packages, about to expire, on the last ones.
+  const MAX_PAGES = 100;
   const RESOURCE_TYPE = 32768;
   // Six merchants (sub), three shop tabs each (subsub).
   const SHOPS = [1, 2, 3, 4, 5, 6].flatMap((sub) => [0, 1, 2].map((subsub) => ({ sub, subsub })));
@@ -70,11 +72,13 @@
     return items;
   }
 
+  // The number of the last page. The game's page links repeat the current
+  // page before the one they go to ("...&page=1&page=51"): every page number
+  // in them counts.
   function lastPage(doc) {
     let last = 1;
     for (const a of doc.querySelectorAll(SEL.packages.pages)) {
-      const m = (a.getAttribute('href') || '').match(/[?&]page=(\d+)/);
-      if (m) last = Math.max(last, Number(m[1]));
+      for (const m of (a.getAttribute('href') || '').matchAll(/[?&](?:amp;)?page=(\d+)/g)) last = Math.max(last, Number(m[1]));
     }
     return Math.min(last, MAX_PAGES);
   }

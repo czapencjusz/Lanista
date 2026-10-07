@@ -241,7 +241,7 @@ apply as you go.
 | Interface | Show the bar, floating or docked |
 | Statistics | Fights won and lost, loot, gold earned and spent, per-hour rates, a table per day for the last 30 days, and one per place (locations, dungeons, arenas) |
 | Log | What it's been up to, a *Copy log* button and *Report a problem* |
-| Backup | Copy settings from another server, export, import, reset |
+| Backup | Copy settings from another server, export, import, reset, and *Reload Lanista* after its files changed |
 
 Playing on more than one server? Each one gets its own settings and its own Start/Stop, so your
 accounts never step on each other's toes. A server Lanista hasn't seen before starts with a copy of
@@ -384,8 +384,9 @@ A few things worth knowing:
   port on your router.
 - **It needs some room:** Chromium wants about 1.5–2 GB of free memory.
 - **Your phone still hears about it.** Alerts sent to ntfy, Discord, Telegram and the rest work from there too.
-- **Updating:** run `git -C /path/to/appdata/lanista/gbot pull`, then press reload on Lanista's card
-  in `chrome://extensions` (or restart the container).
+- **Updating:** run `git -C /path/to/appdata/lanista/gbot pull`, then press *Reload Lanista* under
+  Settings > Backup (or reload its card in `chrome://extensions`, or restart the container). The game
+  tabs reload with it.
 
 ## Found a problem?
 
