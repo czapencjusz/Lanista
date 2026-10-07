@@ -101,18 +101,18 @@ async function withGame(game, fn) {
   }
 }
 
-test('renewing: listed for 1 gold for 2 hours, cancelled, back as a new package; soul-bound items go to a bag', async () => {
+test('renewing: listed for 1 gold for 2 hours, cancelled, back as a new package (soul-bound ones too)', async () => {
   const game = renewGame();
   const { ctx, logs } = context();
   await withGame(game, () => GBot.actions.packages(ctx));
-  assert.deepEqual(game.state.calls, ['move -10 -> 513', 'list 710 for 1 (1)', 'cancel 710', 'move -11 -> 513']);
+  assert.deepEqual(game.state.calls, ['move -10 -> 513', 'list 710 for 1 (1)', 'cancel 710', 'move -11 -> 513', 'list 711 for 1 (1)', 'cancel 711']);
   assert.deepEqual(logs, [
     'info: Renewed Old ring: listed for 1 gold in the guild market and cancelled, so it is a new package again',
-    'info: Moved Flask of Strength into your bags; its package was about to expire',
+    'info: Renewed Flask of Strength: listed for 1 gold in the guild market and cancelled, so it is a new package again',
   ]);
   assert.deepEqual(game.state.listings, [], 'nothing left for sale');
   assert.equal(game.state.packages.find((p) => p.name === 'Old ring').left, 168 * HOUR, 'a fresh package');
-  assert.equal(ctx.memory.stats.renewed, 1);
+  assert.equal(ctx.memory.stats.renewed, 2);
 });
 
 test('renewing: a listing that cannot be cancelled is reported and renewing pauses for a day', async () => {

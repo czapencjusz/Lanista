@@ -62,8 +62,6 @@
         quality: qualityOf(el),
         level: Number(el.dataset.level) || 0,
         basis: el.dataset.basis || null,
-        // "Soul bound to: <name>": cannot be traded.
-        bound: GBot.forge.tooltipLines(el).some((l) => /^soul ?bound/i.test(String(l).trim())),
         amount,
         value: (Number(el.dataset.priceGold) || 0) * amount,
         w: Number(el.dataset.measurementX) || 1,

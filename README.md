@@ -176,8 +176,7 @@ kind (weapons, armour, rings and amulets). Every 30 minutes Lanista goes through
 4. sells gear that matches a selling rule to a merchant,
 5. rescues packages that are about to expire (less than 24 hours left by default): it renews them
    (lists the item in your guild's market for 1 gold and cancels the listing straight away, so it comes
-   back as a new package with a fresh week), moves them into your bags, or sells them. Soul-bound items
-   can't go on the market, so those are moved into your bags.
+   back as a new package with a fresh week), moves them into your bags, or sells them.
 
 Items you ticked for smelting are never sold, smelting rules come before selling rules, and anything
 that matches nothing stays put. Names you put on the *Never sell or smelt* list are left alone too.

@@ -593,13 +593,11 @@
 
   function packageAction(item, settings) {
     if (item.queued) return null;
-    // Soul-bound items cannot go to the market: rescued into a bag instead.
-    const rescue = (mode) => (mode === 'renew' && item.bound ? 'bag' : mode);
     if (keptByName(item.name, settings)) {
       // Kept: only ever rescued from an expiring package, never sold.
       const p = settings.packages;
       const expiring = item.expiresInMs !== null && item.expiresInMs !== undefined && item.expiresInMs <= p.expiringHours * 3600000;
-      return p.enabled && p.expiring !== 'off' && expiring ? rescue(p.expiring === 'sell' ? 'bag' : p.expiring) : null;
+      return p.enabled && p.expiring !== 'off' && expiring ? (p.expiring === 'sell' ? 'bag' : p.expiring) : null;
     }
     const kind = gearKind(item.type);
     const s = settings.smelting;
@@ -608,7 +606,7 @@
     if (!p.enabled) return null;
     if (kind && p.sell && p.sellTypes[kind] && item.quality <= p.sellUpTo) return 'sell';
     const expiring = item.expiresInMs !== null && item.expiresInMs !== undefined && item.expiresInMs <= p.expiringHours * 3600000;
-    if (p.expiring !== 'off' && expiring) return rescue(p.expiring);
+    if (p.expiring !== 'off' && expiring) return p.expiring;
     return null;
   }
 

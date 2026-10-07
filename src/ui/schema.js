@@ -602,7 +602,7 @@
             { value: 'sell', label: 'Sell them' },
             { value: 'off', label: 'Leave them' },
           ],
-          help: "Any package, not only gear. Renewing lists the item in your guild's market for 1 gold and cancels the listing at once, so it comes back as a new package with a fresh expiry (soul-bound items can't be listed and are moved into your bags instead). It needs a guild and, for a moment, room in your bags. Moving needs free room in your bags outside the food bags.",
+          help: "Any package, not only gear. Renewing lists the item in your guild's market for 1 gold and cancels the listing at once, so it comes back as a new package with a fresh expiry. It needs a guild and, for a moment, room in your bags. Moving needs free room in your bags outside the food bags.",
         },
         { path: 'packages.expiringHours', type: 'number', label: 'About to expire means less than', unit: 'h left' },
         {
