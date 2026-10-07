@@ -26,16 +26,22 @@
   const smelt = (sh, submod, slot, params = '') =>
     GBot.forge.ajax(sh, `mod=forge&submod=${submod}`, `mod=forge&submod=${submod}&mode=smelting&slot=${slot}${params ? `&${params}` : ''}`);
 
-  // A queue entry from a package item element on the packages page.
-  function queueEntry(el) {
+  // A queue entry from a package item element on the packages page, with
+  // when its package expires (so the soonest goes first).
+  function queueEntry(el, now = Date.now()) {
     const lines = GBot.forge.tooltipLines(el);
-    return {
+    const pkg = el.closest('.packageItem');
+    const ticker = pkg && pkg.querySelector('[data-ticker-time-left]');
+    const left = ticker ? Number(ticker.getAttribute('data-ticker-time-left')) : NaN;
+    const entry = {
       cn: parseNumber(el.parentElement.getAttribute('data-container-number')),
       name: lines[0] || 'item',
       basis: el.dataset.basis || '',
       w: Number(el.dataset.measurementX) || 1,
       h: Number(el.dataset.measurementY) || 1,
     };
+    if (left > 0) entry.expires = now + left;
+    return entry;
   }
 
   const isSmeltable = (el) => (Number(el.dataset.contentType) & SMELTABLE) > 0;
@@ -101,12 +107,12 @@
     }
   }
 
-  // Puts the first queued item into `slot`. Returns the rent paid, or 0 when
-  // the entry was dropped.
+  // Puts the next queued item (the soonest to expire) into `slot`. Returns
+  // the rent paid, or 0 when the entry was dropped.
   async function start(ctx, slot, gold) {
     const { memory } = ctx;
     const sh = ctx.state.sh;
-    const entry = memory.smeltQueue[0];
+    const entry = brain.nextSmeltEntry(memory.smeltQueue);
 
     let iid = entry.iid;
     if (!iid) {
@@ -192,7 +198,7 @@
     } catch (e) {
       // Count failures against the item at the head of the queue, and give
       // up on it after a few. Full bags are not the item's fault.
-      const head = memory.smeltQueue[0];
+      const head = brain.nextSmeltEntry(memory.smeltQueue);
       if (head && e instanceof ActionError && !/^No room/.test(e.message)) {
         const key = head.cn !== undefined ? head.cn : `iid:${head.iid}`;
         memory.smeltFailures = memory.smeltFailingCn === key ? (memory.smeltFailures || 0) + 1 : 1;

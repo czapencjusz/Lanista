@@ -280,7 +280,7 @@
         const action = brain.packageAction({ ...item, queued: queued.has(item.cn) }, settings);
         if (!action) continue;
         if (action === 'smelt') {
-          memory.smeltQueue.push(GBot.smelter.queueEntry(item.el));
+          memory.smeltQueue.push(GBot.smelter.queueEntry(item.el, ctx.now()));
           queued.add(item.cn);
           toSmelt += 1;
           continue;

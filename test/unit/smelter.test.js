@@ -289,3 +289,24 @@ test('the queue is merged with changes another tab saved meanwhile', () => {
   const mine = [b, bin];
   assert.equal(brain.mergeSmeltQueue(brain.smeltKeys([a, b]), mine, [a, b]), mine);
 });
+
+test('the item whose package expires first is smelted first', async () => {
+  const soon = { cn: -21, name: 'Soon gone', basis: '8-1', w: 2, h: 2, expires: NOW + 3600 * 1000 };
+  const later = { cn: -22, name: 'Later', basis: '8-1', w: 2, h: 2, expires: NOW + 5 * 24 * 3600 * 1000 };
+  assert.equal(brain.nextSmeltEntry([entry, later, soon]).name, 'Soon gone');
+  assert.equal(brain.nextSmeltEntry([entry, { ...later, expires: undefined }]).name, 'Táliths Sandals', 'without expiry times: the oldest');
+  assert.equal(brain.nextSmeltEntry([]), null);
+
+  const slots = closed().map((s, i) => (i === 0 ? s : { 'forge_slots.state': 'crafting', 'forge_slots.finishedIn': 600 }));
+  const game = mockGame({ slots, extra: [later, soon] });
+  const { ctx } = context(1_000_000, [entry, later, soon]);
+  await withGame(game, () => GBot.actions.smelt(ctx));
+  assert.ok(game.calls.includes('inventory/move from=-21 to=512 at=1,1'), 'the one about to expire took the free slot');
+  assert.deepEqual(ctx.memory.smeltQueue.map((e) => e.name), ['Táliths Sandals', 'Later']);
+
+  const doc = new window.DOMParser().parseFromString(
+    `<div class="packageItem"><div data-container-number="-5"><div data-content-type="2" data-tooltip="${tip('Old sword')}"></div></div><span data-ticker-time-left="7200000"></span></div>`,
+    'text/html'
+  );
+  assert.equal(smelter.queueEntry(doc.querySelector('[data-content-type]'), NOW).expires, NOW + 7200000, 'the package expiry is kept with the entry');
+});

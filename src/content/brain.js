@@ -675,6 +675,14 @@
   // Smelting queue entries by what identifies them: the package's
   // container number, or the item id of an item in a smelt bin.
   const smeltKey = (e) => (e.iid ? `iid:${e.iid}` : `cn:${e.cn}`);
+
+  // The queued item to smelt next: the one whose package expires first, so
+  // nothing is lost while it waits; without expiry times, the oldest.
+  function nextSmeltEntry(queue) {
+    let best = null;
+    for (const e of queue || []) if (e.expires && (!best || e.expires < best.expires)) best = e;
+    return best || (queue && queue[0]) || null;
+  }
   const smeltKeys = (queue) => (queue || []).map(smeltKey);
 
   // Three-way merge of the smelting queue: `base` (keys) as this tab read
@@ -1506,6 +1514,7 @@
     smeltBins,
     smeltKey,
     smeltKeys,
+    nextSmeltEntry,
     mergeSmeltQueue,
     keptByName,
     PICK_FILTERS,

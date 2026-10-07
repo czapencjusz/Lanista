@@ -265,7 +265,7 @@
   const smeltQueued = (el) => !!(memory && memory.smeltQueue.some((q) => q.cn === packageCn(el)));
 
   function setSmeltQueued(items, on) {
-    const entries = items.map(GBot.smelter.queueEntry);
+    const entries = items.map((el) => GBot.smelter.queueEntry(el));
     editMemory((m) => {
       for (const entry of entries) {
         const i = m.smeltQueue.findIndex((q) => q.cn === entry.cn);
