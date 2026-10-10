@@ -115,6 +115,7 @@
         dungeon: 0,
         arena: 0,
         circus: 0,
+        event: 0,
         heal: 0,
         work: 0,
         quests: 0,
@@ -195,6 +196,7 @@
     dungeon: 'Dungeon',
     arena: 'Arena',
     circus: 'Circus Turma',
+    event: 'Event',
     quests: 'Quests',
     heal: 'Healing',
     work: 'Work',
@@ -440,6 +442,11 @@
       if (cd.ready) return { type, reason: `${state.underworld && type === 'expedition' ? 'Underworld expedition' : LABELS[type]} is ready` };
       if (cd.remainingMs !== null && cd.remainingMs !== undefined) wake.push({ label: LABELS[type], at: now + cd.remainingMs });
     }
+
+    // An event's area: its own cooldown and points, alongside the rest.
+    const event = eventDecision(state, settings, memory, now, hpOk);
+    if (event) return event;
+    if (settings.event.enabled && memory.eventNext > now && eventAreas(state).length) wake.push({ label: LABELS.event, at: memory.eventNext });
 
     if (settings.work.enabled && !isBlocked(memory, 'work', now) && shouldWork(state, settings)) {
       return { type: 'work', reason: 'Out of expedition/dungeon points' };
@@ -854,7 +861,7 @@
     const type = pending.type;
 
     const events = [];
-    if (FIGHTS.includes(type)) {
+    if (FIGHTS.includes(type) || type === 'event') {
       const cd = state[type];
       if (state.report) {
         success = true;
@@ -1010,14 +1017,26 @@
     // The Underworld has a menu of its own and does not count.
     if (!state.underworld && !state.travel && Array.isArray(state.locations) && state.locations.length) {
       const known = memory.knownLocations;
+      const places = state.locations.concat(state.eventAreas || []);
       if (Array.isArray(known)) {
-        for (const place of state.locations) {
+        for (const place of places) {
           if (!known.includes(place.id)) out.push({ kind: 'newLocation', message: `Lanista: a new place in the location menu: ${place.name}. An event, or a newly opened area?` });
         }
       }
-      memory.knownLocations = Array.from(new Set([...(known || []), ...state.locations.map((l) => l.id)]));
+      memory.knownLocations = Array.from(new Set([...(known || []), ...places.map((l) => l.id)]));
     }
     return out;
+  }
+
+  // ------------------------------------------------------------ event areas
+
+  const eventAreas = (state) => (state.underworld || state.travel ? [] : state.eventAreas || []);
+
+  function eventDecision(state, settings, memory, now, hpOk) {
+    const areas = eventAreas(state);
+    if (!settings.event.enabled || !areas.length || !hpOk) return null;
+    if ((memory.eventNext || 0) > now || isBlocked(memory, 'event', now)) return null;
+    return { type: 'event', area: areas[0], reason: `Event: ${areas[0].name}` };
   }
 
   // ------------------------------------------------- Villa Medici, gods, boosts
@@ -1474,6 +1493,7 @@
     planFoodPurchase,
     foodBudget,
     rollStatsDay,
+    eventDecision,
     daySummary,
     recordArea,
     areaStats,

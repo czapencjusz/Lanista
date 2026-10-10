@@ -23,6 +23,10 @@ it. (It used to be called GBot.)
   first beat the other enemies there until you've learned all their bonuses, so the boss gets them
   too ([more below](#expedition-bonuses-before-the-boss)). And if it keeps losing to one enemy, it
   can drop to an easier one for an hour before trying again.
+- **Event areas.** During an event the game adds an area of its own to the location menu (the
+  Desert of Nightmare, for one), with its own cooldown and free event points that refill at
+  midnight. Lanista can fight the enemy you pick there alongside your normal expeditions, using
+  only the free points.
 - **Dungeons.** Starts a Normal or Advanced dungeon when none is running (Normal if Advanced isn't
   unlocked yet) and works through the enemies. Not a fan of the boss? Tell it to skip bosses: it
   clears everyone else, then cancels the dungeon and starts a fresh one. It can also start over after
@@ -217,6 +221,7 @@ apply as you go.
 | General | The main on/off switch, which activity goes first, what to do with enemy nests, logging back in through the lobby |
 | **Fights** | |
 | Expedition | Location, which enemy, learning bonuses before the boss, an easier enemy after losses, points to keep, Mobilisations per day |
+| Event area | Fighting in an event's own area on/off, which enemy |
 | Dungeon | Location, Normal or Advanced, points to keep, skipping the boss, starting over after losses, Gate Keys per day |
 | Underworld | Fighting on/off, the HP limit, entering automatically, Mobilisations and healing potions per visit |
 | Arena / Circus Turma | Provinciarum or your own server, who to attack, level range, never-attack list, avoiding people who beat you, going back to people you beat, limits per player and per day |

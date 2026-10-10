@@ -155,6 +155,22 @@
     return out;
   }
 
+  // Event areas in the location menu: links whose loc is a word ("desert").
+  function readEventAreas(doc, loc) {
+    const out = [];
+    for (const a of doc.querySelectorAll(SEL.locationMenuLinks)) {
+      let id = null;
+      try {
+        id = new URL(a.getAttribute('href'), loc.href).searchParams.get('loc');
+      } catch (e) {
+        id = null;
+      }
+      if (!id || /^\d+$/.test(id) || out.some((x) => x.id === id)) continue;
+      out.push({ id, name: a.textContent.trim() || id });
+    }
+    return out;
+  }
+
   // Result of the combat report on this page, or null when there is none:
   // { win, gold, xp, renown }. The gold line is found by its icon; experience
   // and renown are the next two numeric lines (the text is localised). Renown
@@ -225,6 +241,7 @@
       circus: readCooldown(doc, loc, SEL.cooldowns.circus),
       dialogs: readDialogs(doc),
       locations: readLocations(doc, loc),
+      eventAreas: readEventAreas(doc, loc),
       travel: readTravel(doc),
       underworld: !!doc.querySelector(SEL.underworld.marker),
     };
@@ -238,7 +255,7 @@
     return { remainingMs: ms !== null ? ms : parseDuration(ticker.textContent) };
   }
 
-  GBot.state = { readState, readHp, readCooldown, readPoints, readSessionHash, readLocations, readCombatReport, readDungeonName, readExpeditionEnemies };
+  GBot.state = { readState, readHp, readCooldown, readPoints, readSessionHash, readLocations, readEventAreas, readCombatReport, readDungeonName, readExpeditionEnemies };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = GBot.state;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

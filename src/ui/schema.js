@@ -451,6 +451,23 @@
       ],
     },
     {
+      id: 'event',
+      title: 'Event area',
+      icon: 'event',
+      enable: 'event.enabled',
+      description:
+        "During an event the game adds an area of its own to the location menu (Desert of Nightmare, for one). It has its own cooldown and free event points that refill at midnight, server time, and doesn't use your expedition points. Lanista fights there alongside everything else while free event points last, never past them (that would cost rubies), and never skips the cooldown.",
+      fields: [
+        {
+          path: 'event.enemy',
+          type: 'select',
+          label: 'Enemy',
+          options: [1, 2, 3, 4].map((n) => ({ value: n, label: `Enemy ${n}${n === 1 ? ' (first shown)' : n === 4 ? ' (last shown)' : ''}` })),
+          help: 'In the order the event area shows them. Fights wait for HP like expeditions do.',
+        },
+      ],
+    },
+    {
       id: 'work',
       title: 'Stable work',
       icon: 'work',
@@ -985,6 +1002,7 @@
     const where = [n.desktop && 'desktop', phones && (phones === 1 ? 'phone' : `${phones} phone addresses`)].filter(Boolean).join(' and ') || 'shown nowhere';
     return kinds ? line([`${times(kinds, 'kind of alert', 'kinds of alert')} on`, where, phones && n.quiet && `phone quiet ${n.quietStart}–${n.quietEnd}`]) : 'all alerts off';
   };
+  SUMMARIES.event = (s) => `enemy ${s.event.enemy}, free event points only`;
   SUMMARIES.remote = (s) => {
     const r = s.remote;
     const telegram = GBot.settings.pushUrls(s.notifications).some((u) => /^https:\/\/api\.telegram\.org\/bot/i.test(u));
@@ -1014,7 +1032,7 @@
   // Sidebar order, under group headings.
   const LAYOUT = [
     [null, ['overview', 'general']],
-    ['Fights', ['expedition', 'dungeon', 'underworld', 'arena', 'circus']],
+    ['Fights', ['expedition', 'event', 'dungeon', 'underworld', 'arena', 'circus']],
     ['Character', ['heal', 'quests', 'work', 'training', 'gods', 'boosts', 'costumes']],
     ['Items', ['gold', 'repair', 'smelting', 'packages', 'auction']],
     ['Lanista', ['schedule', 'safety', 'notifications', 'remote', 'interface', 'stats', 'log', 'profile']],

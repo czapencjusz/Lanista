@@ -52,6 +52,15 @@
 
     // Expedition locations submenu (last entry = highest unlocked location).
     locationMenuLinks: '#submenu2 a[href*="mod=location"]',
+    // An event's area: its page is an expedition page (same enemy boxes and
+    // attack buttons) whose header says "Your free event points: 15" and
+    // shows its own cooldown (ms). Its menu link has a word, not a number,
+    // as loc ("desert").
+    event: {
+      header: '#content .section-header',
+      points: /free event points:\s*(\d+)/i,
+      ticker: '#content .section-header [data-ticker-time-left]',
+    },
 
     dialogs: {
       loginBonus: '#blackoutDialogLoginBonus',

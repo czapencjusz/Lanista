@@ -43,7 +43,7 @@ test('renders every tab under its group heading and starts on the Overview', () 
   const tabs = [...view.element.querySelectorAll('.gb-tab')].map((t) => t.dataset.tab);
   assert.deepEqual(tabs, GBot.ui.TABS.map((t) => t.id));
   const nav = [...view.element.querySelector('.gb-tabs').children].map((el) => (el.classList.contains('gb-tab-group') ? `# ${el.textContent}` : el.dataset.tab));
-  assert.deepEqual(nav.slice(0, 5), ['overview', 'general', '# Fights', 'expedition', 'dungeon']);
+  assert.deepEqual(nav.slice(0, 6), ['overview', 'general', '# Fights', 'expedition', 'event', 'dungeon']);
   assert.deepEqual(nav.filter((n) => n.startsWith('#')), ['# Fights', '# Character', '# Items', '# Lanista']);
   assert.equal($('.gb-tab.active').dataset.tab, 'overview');
   assert.equal($('[data-path="enabled"]').checked, true);

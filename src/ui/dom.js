@@ -117,6 +117,8 @@
       ['ellipse', { cx: 12, cy: 6.5, rx: 7, ry: 2.8 }],
       ['path', { d: 'M5 6.5v5c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-5M5 11.5v5c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-5' }],
     ],
+    // A star: an event.
+    event: [['path', { d: 'M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z' }]],
     // A phone: remote control.
     remote: [['rect', { x: 7, y: 2.5, width: 10, height: 19, rx: 2 }], ['path', { d: 'M11 18.5h2' }]],
     // A temple: the gods.

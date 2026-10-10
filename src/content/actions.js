@@ -32,10 +32,14 @@
     return Number.isNaN(n) ? null : n;
   };
 
+  // The last numbered place in the location menu (an event's area, named
+  // by a word, comes after it and is not an expedition location).
   function lastLocationLink() {
-    const links = $$(SEL.locationMenuLinks);
+    const links = $$(SEL.locationMenuLinks).filter((a) => numericLocation(new URL(a.href, location.href).searchParams.get('loc')) !== null);
     return links.length ? links[links.length - 1].href : null;
   }
+
+  const numberedLink = (href) => (href && numericLocation(new URL(href, location.href).searchParams.get('loc')) !== null ? href : null);
 
   // ---------------------------------------------------------------- dialogs
 
@@ -79,9 +83,11 @@
     const { state, settings } = ctx;
     if (state.underworld) return underworldExpedition(ctx);
     const wanted = numericLocation(settings.expedition.location);
-    const onPage = state.page.mod === 'location' && (wanted === null || numericLocation(state.page.loc) === wanted);
+    // Never an event's area (its loc is a word): that would spend event points.
+    const here = numericLocation(state.page.loc);
+    const onPage = state.page.mod === 'location' && here !== null && (wanted === null || here === wanted);
     if (!onPage) {
-      const target = wanted !== null ? ctx.url(PAGES.location(wanted)) : state.expedition.link || lastLocationLink();
+      const target = wanted !== null ? ctx.url(PAGES.location(wanted)) : numberedLink(state.expedition.link) || lastLocationLink();
       if (!target) throw new ActionError('Cannot find the expedition location link');
       return ctx.navigate(target, 'expedition location');
     }
@@ -160,6 +166,56 @@
     await click(ctx, button, `attack Underworld enemy ${name || `#${next}`}`);
     if (await expectNavigation(ctx)) return { navigated: true };
     throw new ActionError('Underworld attack did not open a combat report');
+  }
+
+  // ------------------------------------------------------------------ event
+
+  const EVENT_RECHECK_MS = 60 * 60 * 1000;
+
+  // The free event points in the event area's header, or null when they
+  // cannot be read: then nothing is attacked (past them it costs rubies).
+  function eventPoints() {
+    for (const el of $$(SEL.event.header)) {
+      const m = SEL.event.points.exec(el.textContent.replace(/\s+/g, ' '));
+      if (m) return Number(m[1]);
+    }
+    return null;
+  }
+
+  async function event(ctx, decision) {
+    const { state, settings, memory } = ctx;
+    const area = decision.area;
+    if (state.page.mod !== 'location' || state.page.loc !== area.id) return ctx.navigate(ctx.url(PAGES.location(area.id)), `the event area ${area.name}`);
+    const points = eventPoints();
+    if (points === null) throw new ActionError(`Event: could not read the free event points in ${area.name}, so not attacking`);
+    if (points <= 0) {
+      memory.pending = null;
+      memory.eventNext = ctx.now() + EVENT_RECHECK_MS;
+      if (memory.eventNote !== area.id) ctx.log('info', `Event: no free event points left in ${area.name}; they refill at midnight (server time). Looking again in an hour.`);
+      memory.eventNote = area.id;
+      return { retick: true };
+    }
+    memory.eventNote = null;
+    const buttons = $$(SEL.expedition.attackButtons);
+    if (!buttons.length) throw new ActionError(`Event: no enemies to attack in ${area.name}`);
+    const index = Math.min(Math.max(settings.event.enemy - 1, 0), buttons.length - 1);
+    const button = buttons[index];
+    if (button.disabled || button.classList.contains(SEL.expedition.disabledClass)) {
+      // Its own cooldown: come back when it ends.
+      const ticker = $(SEL.event.ticker);
+      const ms = ticker ? parseNumber(ticker.getAttribute('data-ticker-time-left')) : null;
+      memory.pending = null;
+      memory.eventNext = ctx.now() + (ms > 0 ? ms + 2000 : 60 * 1000);
+      ctx.log('debug', `Event: the next attack in ${area.name} is possible in ${GBot.util.formatDuration(memory.eventNext - ctx.now())}`);
+      return { retick: true };
+    }
+    const box = button.closest(SEL.expedition.box);
+    const name = ((box && box.querySelector('.expedition_name')) || {}).textContent || '';
+    if (memory.pending) memory.pending.area = { key: `event:${area.id}`, name: `Event: ${area.name}` };
+    await ctx.persist();
+    await click(ctx, button, `attack event enemy ${name.trim() || `#${index + 1}`} in ${area.name} (${points} free event point${points === 1 ? '' : 's'})`);
+    if (await expectNavigation(ctx)) return { navigated: true };
+    throw new ActionError('The event attack did not open a combat report');
   }
 
   const ITEM_LABELS = { mobilisation: 'Mobilisation', gateKey: 'Gate Key', healingPotion: '100% Healing Potion' };
@@ -909,6 +965,7 @@
     dialog,
     nest,
     expedition,
+    event,
     underworld,
     premium,
     dungeon,

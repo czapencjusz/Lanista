@@ -72,6 +72,14 @@
       mobilisationsPerDay: 0,
     },
 
+    event: {
+      // Fight in an event's own area (an extra place in the location menu,
+      // e.g. "Desert of Nightmare", with its own cooldown) while its free
+      // event points last; never past them (rubies). enemy: 1..4.
+      enabled: false,
+      enemy: 1,
+    },
+
     dungeon: {
       enabled: true,
       location: 'auto',
@@ -394,6 +402,7 @@
     'expedition.enemy': { int: true, min: 1, max: 4 },
     'expedition.keepPoints': { int: true, min: 0, max: 500 },
     'expedition.easierAfterLosses': { int: true, min: 0, max: 20 },
+    'event.enemy': { int: true, min: 1, max: 4 },
     'dungeon.location': { pattern: LOCATION },
     'dungeon.difficulty': { enum: ['normal', 'advanced'] },
     'dungeon.keepPoints': { int: true, min: 0, max: 500 },
