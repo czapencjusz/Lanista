@@ -22,6 +22,7 @@ function sortedGame({ count = 60, sort = 'del_desc' } = {}) {
   const state = {
     sort,
     calls: [],
+    gold: 0,
     // cn -1 is the newest, expiring last; -60 the oldest, expiring first.
     packages: Array.from({ length: count }, (_, i) => ({ cn: -(i + 1), name: `Junk ${i + 1}`, left: (168 - i * 3) * HOUR, born: count - i })),
   };
@@ -32,10 +33,21 @@ function sortedGame({ count = 60, sort = 'del_desc' } = {}) {
     return state.sort.endsWith('desc') ? list.reverse() : list;
   };
   const pkg = (p) =>
-    `<div class="packageItem"><div data-container-number="${p.cn}"><div data-content-type="${p.type || 64}" data-tooltip="${tip(p.name)}" data-price-gold="10"></div></div><span data-ticker-time-left="${p.left}"></span></div>`;
+    `<div class="packageItem"><div data-container-number="${p.cn}"><div data-content-type="${p.gold ? 0 : p.type || 64}" data-tooltip="${tip(p.name)}" data-price-gold="10"></div></div><span data-ticker-time-left="${p.left}"></span></div>`;
   const reply = (text) => ({ ok: true, text: async () => text });
   const fetch = async (url, init = {}) => {
     const q = Object.fromEntries(new URL(url).searchParams);
+    if (q.submod === 'move') {
+      const p = state.packages.find((x) => x.cn === Number(q.from));
+      state.packages = state.packages.filter((x) => x !== p);
+      state.calls.push(`move ${q.from}`);
+      if (p && p.gold) state.gold += p.gold;
+      return reply(JSON.stringify(p && p.gold ? {} : { to: { data: { itemId: 500 - Number(q.from) } } }));
+    }
+    if (q.mod === 'overview') {
+      state.calls.push('overview');
+      return reply(`<div id="sstat_gold_val">${state.gold}</div><script>new BagLoader(a, b, JSON.parse('[[],[],[],[],[],[],[],[]]'));</script>`);
+    }
     if (q.submod === 'sort') {
       state.sort = new URLSearchParams(init.body).get('packageSorting');
       state.calls.push(`sort ${state.sort}`);
@@ -143,4 +155,36 @@ test('packages: a settings change, 6 hours, or an unreadable order mean reading 
   run.tick(10 * 60 * 1000);
   await withGame(game, () => GBot.actions.packages(run.ctx()));
   assert.deepEqual(game.state.calls, ['settings', 'page 1', 'page 2', 'page 3', 'page 4'], 'an order it cannot put back is left alone');
+});
+
+test('packages: queued gear left over at the move limit does not make the next pass read everything again', async () => {
+  // 12 swords ticked for smelting expire soon; renewing is paused, so they
+  // go into the bags, 10 a pass.
+  const game = sortedGame({ count: 12, sort: 'in_desc' });
+  game.state.packages.forEach((p) => Object.assign(p, { type: 2, left: 5 * HOUR }));
+  const run = context({ ...rules, packages: { ...rules.packages, expiring: 'renew', expiringHours: 24 }, smelting: { enabled: true, auto: true, autoUpTo: 4, autoTypes: { weapons: true, armour: false, jewellery: false } } });
+  run.memory.smeltQueue = game.state.packages.map((p) => ({ cn: p.cn, name: p.name, basis: '', w: 1, h: 1 }));
+  run.memory.renewBlockedUntil = NOW + 24 * HOUR;
+  await withGame(game, () => GBot.actions.packages(run.ctx()));
+  assert.equal(game.state.calls.filter((c) => c.startsWith('move')).length, 10);
+  assert.ok(run.memory.packagesFullAt > 0, 'only expiring ones were left: no full read needed');
+  assert.equal(run.memory.smeltQueue.filter((e) => e.iid).length, 10, 'the ones in the bags are smelted from there');
+
+  game.state.calls = [];
+  run.tick(60 * 1000);
+  await withGame(game, () => GBot.actions.packages(run.ctx()));
+  assert.equal(game.state.calls[0], 'settings', 'the next pass sorts instead of reading everything');
+  assert.equal(game.state.calls.filter((c) => c.startsWith('move')).length, 2);
+});
+
+test('packages: gold in a package about to expire is taken out before it is lost', async () => {
+  const game = sortedGame({ count: 3 });
+  game.state.packages.push({ cn: -50, name: '300.000 Gold', left: 3 * HOUR, born: 0, gold: 300000 });
+  const run = context({ ...rules, packages: { ...rules.packages, expiring: 'renew', expiringHours: 24 } });
+  await withGame(game, () => GBot.actions.packages(run.ctx()));
+  assert.ok(game.state.calls.includes('move -50'));
+  assert.equal(game.state.gold, 300000);
+  assert.ok(run.logs.includes('info: Took 300,000 gold out of a gold package about to expire (the gold would be lost with it)'), run.logs.join(' | '));
+  assert.equal(run.memory.stats.goldCollected, 300000);
+  assert.ok(!run.logs.some((l) => /did not take/.test(l)));
 });

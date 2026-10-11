@@ -59,6 +59,8 @@
         cn: parseNumber(holder.getAttribute('data-container-number')),
         name: GBot.forge.tooltipLines(el)[0] || 'item',
         type: Number(el.dataset.contentType) || 0,
+        // A gold package ("300.000 Gold"): no item type.
+        gold: !Number(el.dataset.contentType) || /^\d[\d.,]*\s+gold$/i.test(GBot.forge.tooltipLines(el)[0] || ''),
         quality: qualityOf(el),
         level: Number(el.dataset.level) || 0,
         basis: el.dataset.basis || null,
@@ -174,7 +176,7 @@
     return { items: items.filter((i) => !seen.has(i.cn) && seen.add(i.cn)), full: false };
   }
 
-  function remember(ctx, scan, skipped) {
+  function remember(ctx, scan, skipped, queued) {
     const { memory, settings } = ctx;
     const done = scan.items.filter((i) => !skipped.has(i.cn)).map((i) => i.cn);
     if (scan.full) {
@@ -182,7 +184,7 @@
       memory.packagesRules = rulesKey(settings);
       // Left over for a reason other than expiring (a selling rule's
       // backlog, deep in the list): only reading everything finds them.
-      const backlog = scan.items.some((i) => skipped.has(i.cn) && brain.packageAction({ ...i, expiresInMs: null }, settings));
+      const backlog = scan.items.some((i) => skipped.has(i.cn) && brain.packageAction({ ...i, expiresInMs: null, queued: queued.has(i.cn) }, settings));
       memory.packagesFullAt = backlog ? 0 : ctx.now();
     } else {
       memory.packagesKnown = Array.from(new Set([...(memory.packagesKnown || []), ...done])).slice(-KNOWN_MAX);
@@ -447,6 +449,13 @@
       for (const item of items) {
         let action = brain.packageAction({ ...item, queued: queued.has(item.cn) }, settings);
         if (!action) continue;
+        // Queuing for smelting moves nothing, so it goes on regardless.
+        if (action === 'smelt') {
+          memory.smeltQueue.push(GBot.smelter.queueEntry(item.el, ctx.now()));
+          queued.add(item.cn);
+          toSmelt += 1;
+          continue;
+        }
         if (stopped) {
           skipped.add(item.cn);
           continue;
@@ -454,12 +463,6 @@
         // Renewing failed lately, or the market cannot take it: rescue
         // into a bag instead.
         if (action === 'renew' && ((memory.renewBlockedUntil || 0) > ctx.now() || !(await marketReady(ctx)))) action = 'bag';
-        if (action === 'smelt') {
-          memory.smeltQueue.push(GBot.smelter.queueEntry(item.el, ctx.now()));
-          queued.add(item.cn);
-          toSmelt += 1;
-          continue;
-        }
         if (moves >= MAX_MOVES) {
           more = true;
           skipped.add(item.cn);
@@ -474,6 +477,12 @@
             memory.stats.sold = (memory.stats.sold || 0) + 1;
             memory.stats.soldGold = (memory.stats.soldGold || 0) + item.value;
             ctx.log('info', `Sold ${item.name}${item.amount > 1 ? ` x${item.amount}` : ''} for ${fmt(item.value)} gold${expiring ? ' (its package was about to expire)' : ''}`);
+          } else if (action === 'collect') {
+            // Moving a gold package into a bag pays the gold out.
+            await toBag(ctx, item);
+            const gold = parseNumber(item.name) || 0;
+            memory.stats.goldCollected = (memory.stats.goldCollected || 0) + gold;
+            ctx.log('info', `Took ${gold ? `${fmt(gold)} gold` : item.name} out of a gold package about to expire (the gold would be lost with it)`);
           } else if (action === 'renew') {
             await renew(ctx, item);
             memory.stats.renewed = (memory.stats.renewed || 0) + 1;
@@ -495,7 +504,7 @@
         }
         await ctx.persist();
       }
-      remember(ctx, scan, skipped);
+      remember(ctx, scan, skipped, queued);
       if (toSmelt) {
         ctx.log('info', `Queued ${toSmelt} item${toSmelt === 1 ? '' : 's'} from the packages for smelting`);
         memory.smeltNext = Math.min(memory.smeltNext || Infinity, ctx.now());

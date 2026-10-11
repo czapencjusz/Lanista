@@ -603,6 +603,14 @@
   };
 
   function packageAction(item, settings) {
+    // Gold cannot be renewed, sold or kept in a bag, but it is lost with its
+    // package: taken out before then (whenever packages about to expire are
+    // looked after at all).
+    if (item.gold) {
+      const p = settings.packages;
+      const expiring = item.expiresInMs !== null && item.expiresInMs !== undefined && item.expiresInMs <= p.expiringHours * 3600000;
+      return p.enabled && p.expiring !== 'off' && expiring ? 'collect' : null;
+    }
     if (item.queued) {
       // Ticked for smelting: only renewed (and ticked again) before it
       // expires.
