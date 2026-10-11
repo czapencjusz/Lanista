@@ -103,7 +103,7 @@ function context(overrides = {}) {
       state: { sh: 'abc', gold: 100000 },
       settings: S.sanitizeSettings(overrides),
       memory,
-      log: (level, message) => logs.push(`${level}: ${message}`),
+      log: (level, message) => level !== 'debug' && logs.push(`${level}: ${message}`),
       humanDelay: async () => {},
       persist: async () => {},
       now: () => NOW,

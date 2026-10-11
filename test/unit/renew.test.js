@@ -88,7 +88,7 @@ function context() {
   return {
     logs,
     alerts,
-    ctx: { state: { sh: 'abc', gold: 100000 }, settings, memory, log: (l, m) => logs.push(`${l}: ${m}`), notify: (k, m) => alerts.push(m), humanDelay: async () => {}, persist: async () => {}, now: () => NOW },
+    ctx: { state: { sh: 'abc', gold: 100000 }, settings, memory, log: (l, m) => l !== 'debug' && logs.push(`${l}: ${m}`), notify: (k, m) => alerts.push(m), humanDelay: async () => {}, persist: async () => {}, now: () => NOW },
   };
 }
 

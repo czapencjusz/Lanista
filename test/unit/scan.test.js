@@ -188,3 +188,45 @@ test('packages: gold in a package about to expire is taken out before it is lost
   assert.equal(run.memory.stats.goldCollected, 300000);
   assert.ok(!run.logs.some((l) => /did not take/.test(l)));
 });
+
+test('packages: an order left switched by a pass cut short is put back by the next one', async () => {
+  // A pass was stopped (extension reloaded) while the packages were sorted
+  // soonest to expire first; the player's order was newest first.
+  const game = sortedGame({ sort: 'del_asc' });
+  const run = context({ ...rules, packages: { ...rules.packages, expiring: 'bag', expiringHours: 24 } });
+  run.memory.packagesKnown = game.state.packages.map((p) => p.cn);
+  run.memory.packagesFullAt = NOW;
+  run.memory.packagesRules = JSON.stringify([run.ctx().settings.packages, run.ctx().settings.smelting]);
+  run.memory.packageSortWas = 'in_desc';
+  game.state.packages = game.state.packages.filter((p) => p.left > 24 * HOUR);
+  await withGame(game, () => GBot.actions.packages(run.ctx()));
+  assert.deepEqual(game.state.calls, ['settings', 'page 1', 'sort in_desc', 'page 1'], 'del_asc is taken as the pass\'s own order, not the player\'s');
+  assert.equal(game.state.sort, 'in_desc');
+  assert.equal(run.memory.packageSortWas, null);
+
+  // Cut short again, and this time everything is due to be read: the order
+  // is still put back.
+  game.state.sort = 'del_asc';
+  run.memory.packageSortWas = 'in_desc';
+  game.state.calls = [];
+  run.tick(7 * HOUR);
+  await withGame(game, () => GBot.actions.packages(run.ctx()));
+  assert.deepEqual(game.state.calls.filter((c) => !c.startsWith('page')), ['settings', 'sort in_desc']);
+  assert.equal(game.state.sort, 'in_desc');
+  assert.equal(run.memory.packageSortWas, null);
+});
+
+test('packages: the player\'s order is saved before it is changed', async () => {
+  const game = sortedGame({ sort: 'in_desc' });
+  const run = context({ ...rules, packages: { ...rules.packages, expiring: 'bag', expiringHours: 24 } });
+  run.memory.packagesKnown = game.state.packages.map((p) => p.cn);
+  run.memory.packagesFullAt = NOW;
+  run.memory.packagesRules = JSON.stringify([run.ctx().settings.packages, run.ctx().settings.smelting]);
+  game.state.packages = game.state.packages.filter((p) => p.left > 24 * HOUR);
+  const saved = [];
+  const ctx = { ...run.ctx(), persist: async () => saved.push([run.memory.packageSortWas, game.state.sort]) };
+  await withGame(game, () => GBot.actions.packages(ctx));
+  assert.deepEqual(saved[0], ['in_desc', 'in_desc'], 'saved while the order was still the player\'s');
+  assert.equal(game.state.sort, 'in_desc');
+  assert.equal(run.memory.packageSortWas, null);
+});

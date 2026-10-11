@@ -121,13 +121,17 @@
   // page shows the choice): del_asc puts the soonest to expire first,
   // in_desc the newest first. A pass sorts them its own way to read only the
   // first pages, and puts the player's choice back at the end (restoreSort).
+  // The choice is saved (memory.packageSortWas) before the first change, so
+  // a pass cut short (page closed, extension reloaded) is put right by the
+  // next one instead of taking its own order for the player's.
   const SORT = /selected="selected"\s+value="((?:del|in)_(?:asc|desc))"|value="((?:del|in)_(?:asc|desc))"\s+selected/;
 
   async function useSort(ctx, order) {
     if (ctx.playerSort === undefined) {
       const { html } = await GBot.forge.getDoc(ctx.state.sh, { mod: 'settings', submod: 'gameSettings' });
       const m = SORT.exec(html);
-      ctx.playerSort = ctx.packageSort = m ? m[1] || m[2] : null;
+      ctx.packageSort = m ? m[1] || m[2] : null;
+      ctx.playerSort = ctx.packageSort && (ctx.memory.packageSortWas || ctx.packageSort);
     }
     // Without knowing the player's choice it could not be put back.
     if (!ctx.playerSort) return false;
@@ -136,13 +140,20 @@
   }
 
   async function setSort(ctx, order) {
+    if (order !== ctx.playerSort && !ctx.memory.packageSortWas) {
+      ctx.memory.packageSortWas = ctx.playerSort;
+      await ctx.persist();
+    }
     const url = new URL(`index.php?mod=packages&submod=sort&page=1&sh=${encodeURIComponent(ctx.state.sh)}`, location.href).href;
     await GBot.forge.post(url, new URLSearchParams({ packageSorting: order }).toString());
     ctx.packageSort = order;
   }
 
   async function restoreSort(ctx) {
-    if (ctx.playerSort && ctx.packageSort !== ctx.playerSort) await setSort(ctx, ctx.playerSort);
+    if (ctx.playerSort === undefined && ctx.memory.packageSortWas) await useSort(ctx, ctx.memory.packageSortWas);
+    if (!ctx.playerSort) return;
+    if (ctx.packageSort !== ctx.playerSort) await setSort(ctx, ctx.playerSort);
+    ctx.memory.packageSortWas = null;
   }
 
   // ------------------------------------------------- which packages to read
@@ -164,7 +175,11 @@
     const due = !known || ctx.now() - (memory.packagesFullAt || 0) > FULL_SCAN_MS || memory.packagesRules !== rulesKey(settings);
     const p = settings.packages;
     const expiring = p.enabled && p.expiring !== 'off';
-    if (due || !(await useSort(ctx, expiring ? 'del_asc' : 'in_desc'))) return { items: await listPackages(sh), full: true };
+    if (due || !(await useSort(ctx, expiring ? 'del_asc' : 'in_desc'))) {
+      const all = await listPackages(sh);
+      ctx.log('debug', `Packages: read all ${all.length}`);
+      return { items: all, full: true };
+    }
     const items = [];
     if (expiring) {
       const window = p.expiringHours * 3600000;
@@ -173,7 +188,9 @@
     }
     items.push(...(await readUntil(sh, (page) => page.every((i) => known.has(i.cn)))));
     const seen = new Set();
-    return { items: items.filter((i) => !seen.has(i.cn) && seen.add(i.cn)), full: false };
+    const unique = items.filter((i) => !seen.has(i.cn) && seen.add(i.cn));
+    ctx.log('debug', `Packages: read ${unique.length}, sorted (those about to expire, then the new ones)`);
+    return { items: unique, full: false };
   }
 
   function remember(ctx, scan, skipped, queued) {
