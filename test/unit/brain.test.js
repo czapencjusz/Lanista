@@ -367,6 +367,15 @@ test('combat reports are counted and losing opponents avoided', () => {
   assert.deepEqual(brain.filterOpponents(opponents, makeSettings().arena, 64, ['kaczuszek']).map((o) => o.name), ['Orbyte']);
 });
 
+test('the chance the fight simulation gave is in the result line', () => {
+  const m = memory();
+  m.pending = { type: 'circus', at: NOW, attempts: 1, opponent: 'OVNM', avoidHours: 24, chance: 82 };
+  const events = brain.resolvePending(makeState({ report: { win: true, gold: 1341, xp: 3, renown: 7 } }), m, NOW + 1000);
+  assert.equal(events[0].message, 'Circus Turma vs OVNM: won, +1,341 gold, +3 XP, +7 fame (simulated: 82% to win)');
+  m.pending = { type: 'arena', at: NOW, attempts: 1, opponent: 'Herod', avoidHours: 24, chance: null };
+  assert.equal(brain.resolvePending(makeState({ report: { win: true, gold: 559, xp: 6, renown: 36 } }), m, NOW + 2000)[0].message, 'Arena vs Herod: won, +559 gold, +6 XP, +36 honour');
+});
+
 test('opponents beaten before can go first, most wins first, for two weeks', () => {
   const m = memory();
   const win = (name, at) => {

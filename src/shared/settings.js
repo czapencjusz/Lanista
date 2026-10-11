@@ -22,6 +22,12 @@
     // own arena: the players ranked just above you, no levels shown).
     where: 'provinciarum',
     target: 'lowest', // 'lowest' | 'highest' | 'random'
+    // Simulate the fight against each opponent first (sim.js): those with at
+    // least minChance % to be beaten are attacked first; when none has it,
+    // ifNone says whether to attack the best one or wait 30 minutes.
+    simulate: true,
+    minChance: 60,
+    ifNone: 'best', // 'best' | 'wait'
     // Only attack opponents within [myLevel - maxBelow, myLevel + maxAbove].
     limitLevels: false,
     maxAbove: 5,
@@ -475,6 +481,8 @@
   };
   for (const type of ['arena', 'circus']) {
     CONSTRAINTS[`${type}.target`] = { enum: ['lowest', 'highest', 'random'] };
+    CONSTRAINTS[`${type}.minChance`] = { int: true, min: 0, max: 100 };
+    CONSTRAINTS[`${type}.ifNone`] = { enum: ['best', 'wait'] };
     CONSTRAINTS[`${type}.maxAbove`] = { int: true, min: 0, max: 500 };
     CONSTRAINTS[`${type}.maxBelow`] = { int: true, min: 0, max: 500 };
     CONSTRAINTS[`${type}.ignorePlayers`] = { maxLength: 4000 };

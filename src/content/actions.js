@@ -454,6 +454,9 @@
       }));
   }
 
+  // With "wait" chosen for when no opponent is likely enough to be beaten.
+  const SIM_WAIT_MS = 30 * 60 * 1000;
+
   function visibleConfirmDialog() {
     return $$(SEL.dialogs.confirm).find(isVisible) || null;
   }
@@ -488,12 +491,27 @@
     if (!allowed.length) throw new ActionError(`None of the ${opponents.length} ${name} opponents match your filters (buddies are never attacked)`);
     let order = brain.pickOpponents(allowed, settings[type].target);
     if (settings[type].preferBeaten) order = brain.preferBeaten(order, ctx.memory.beaten[type], ctx.now());
+    let chances = new Map();
+    if (settings[type].simulate) {
+      const ranked = await GBot.scout.rank(ctx, type, order);
+      chances = ranked.chances;
+      if (ranked.wait) {
+        ctx.memory.blockedUntil[type] = ctx.now() + SIM_WAIT_MS;
+        ctx.memory.pending = null;
+        const best = ranked.best !== null ? ` (the best has ${Math.round(ranked.best * 100)}%)` : '';
+        ctx.log('info', `${name}: no opponent with at least ${settings[type].minChance}% chance to win${best}; looking again in ${SIM_WAIT_MS / 60000} minutes`);
+        return { retick: true };
+      }
+      order = ranked.order;
+    }
     for (const opponent of order.slice(0, 3)) {
       // Remembered so the combat report can be tied to this opponent.
       const area = { key: `${type}:${local ? 'local' : 'provinciarum'}`, name: local ? (type === 'arena' ? 'Local arena' : 'Local Circus Turma') : type === 'arena' ? 'Arena Provinciarum' : 'Circus Provinciarum' };
-      if (ctx.memory.pending) Object.assign(ctx.memory.pending, { opponent: opponent.name, avoidHours: settings[type].avoidLostHours, area });
+      const chance = chances.has(opponent) ? Math.round(chances.get(opponent) * 100) : null;
+      if (ctx.memory.pending) Object.assign(ctx.memory.pending, { opponent: opponent.name, avoidHours: settings[type].avoidLostHours, area, chance });
       await ctx.persist();
-      const about = opponent.rank !== null && opponent.rank !== undefined ? `rank ${opponent.rank}` : `level ${opponent.level ?? '?'}`;
+      let about = opponent.rank !== null && opponent.rank !== undefined ? `rank ${opponent.rank}` : `level ${opponent.level ?? '?'}`;
+      if (chance !== null) about += `, ${chance}% to win`;
       await click(ctx, opponent.attack, `attack ${name} opponent ${opponent.name || ''} (${about})`);
       const outcome = await waitFor(() => {
         if (ctx.isUnloading()) return 'navigated';

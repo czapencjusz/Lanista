@@ -270,7 +270,7 @@ test('the Overview: a switch and a line per feature, the name opens its tab', as
   assert.equal($('.gb-overview-state').textContent, 'Paused');
   assert.equal(sum('expedition'), 'Koman Mountain · the boss (bonuses first) · 1 Mobilisation a day');
   assert.equal(sum('dungeon'), 'the last visited dungeon · Advanced · skips the boss');
-  assert.equal(sum('arena'), 'on this server · weakest first');
+  assert.equal(sum('arena'), 'on this server · weakest first · simulated fights, 60%+ to win');
   assert.equal(sum('heal'), 'eats below 30% · stops fighting below 20% · bag I · plain food only');
   assert.equal(sum('notifications'), '7 kinds of alert on · desktop and phone');
   assert.ok(card('repair').classList.contains('off'));

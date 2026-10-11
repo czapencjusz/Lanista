@@ -900,6 +900,9 @@
       if (state.report) {
         success = true;
         message = recordFight(memory, type, state.report, pending.opponent, now);
+        // The chance the fight simulation gave it (arena / circus), to see how
+        // well it guesses.
+        if (typeof pending.chance === 'number') message += ` (simulated: ${pending.chance}% to win)`;
         recordArea(memory, type, pending.area, state.report);
         if (state.report.win && pending.opponent && memory.beaten && memory.beaten[type]) {
           const key = pending.opponent.toLowerCase();

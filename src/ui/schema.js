@@ -91,6 +91,32 @@
     },
     { path: `${type}.target`, type: 'select', label: 'Opponent choice', options: TARGETS },
     {
+      path: `${type}.simulate`,
+      type: 'toggle',
+      label: 'Simulate the fight before attacking',
+      help:
+        (type === 'arena' ? "Reads each opponent's profile" : "Reads each opponent's team (gladiator and mercenaries)") +
+        " and plays the fight a few hundred times with the game's rules, to attack those you are likely to beat. Profiles on other servers are opened without your login, as anyone could open them.",
+    },
+    {
+      path: `${type}.minChance`,
+      type: 'number',
+      label: 'Aim for a chance to win of at least',
+      unit: '%',
+      dependsOn: `${type}.simulate`,
+      help: 'Opponents with this chance are attacked in the order chosen above; the others come after them, best chance first.',
+    },
+    {
+      path: `${type}.ifNone`,
+      type: 'select',
+      label: 'When nobody reaches it',
+      dependsOn: `${type}.simulate`,
+      options: [
+        { value: 'best', label: 'Attack the one with the best chance' },
+        { value: 'wait', label: 'Wait 30 minutes and look again' },
+      ],
+    },
+    {
       path: `${type}.limitLevels`,
       type: 'toggle',
       label: 'Only attack opponents near my level',
@@ -883,6 +909,7 @@
     return line([
       c.where === 'local' ? 'on this server' : 'Provinciarum',
       TARGET_WORDS[c.target],
+      c.simulate && `simulated fights, ${c.minChance}%+ to win`,
       c.where !== 'local' && c.limitLevels && `levels −${c.maxBelow} to +${c.maxAbove}`,
       c.preferBeaten && 'beaten ones first',
       ignored && `${times(ignored, 'name', 'names')} never attacked`,

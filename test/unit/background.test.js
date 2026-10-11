@@ -281,3 +281,31 @@ test('ads are blocked on game pages by default; the chat only when asked; on whe
   rules = blockUpdates.at(-1);
   assert.deepEqual(rules.addRules.map((r) => r.id), [2], 'the chat, wanted on one server; no ads rule');
 });
+
+test('profiles for the fight simulation: player pages only, without cookies', async () => {
+  const real = globalThis.fetch;
+  const asked = [];
+  globalThis.fetch = async (url, init) => {
+    asked.push({ url, ...init });
+    return { ok: true, text: async () => '<div id="charstats"></div>' };
+  };
+  try {
+    const url = 'https://s55-en.gladiatus.gameforge.com/game/index.php?mod=player&p=101438&language=us&doll=2';
+    assert.deepEqual(await message({ type: 'fetchProfile', url }), { ok: true, html: '<div id="charstats"></div>' });
+    assert.equal(asked[0].url, url);
+    assert.equal(asked[0].credentials, 'omit', 'no cookies of yours go with it');
+    for (const bad of [
+      'https://s55-en.gladiatus.gameforge.com/game/index.php?mod=player&p=101438&sh=abc',
+      'https://s55-en.gladiatus.gameforge.com/game/index.php?mod=overview&p=1',
+      'https://evil.example/game/index.php?mod=player&p=1',
+      'http://s55-en.gladiatus.gameforge.com/game/index.php?mod=player&p=1',
+      'https://s55-en.gladiatus.gameforge.com/game/ajax.php?mod=player&p=1',
+    ]) {
+      const reply = await message({ type: 'fetchProfile', url: bad });
+      assert.match(reply.error, /not a player page/, bad);
+    }
+    assert.equal(asked.length, 1, 'nothing else was fetched');
+  } finally {
+    globalThis.fetch = real;
+  }
+});

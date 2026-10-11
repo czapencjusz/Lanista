@@ -465,6 +465,25 @@ async function watchdog() {
   if (changed) await setOwners(owners);
 }
 
+// A player's profile page, for sizing up arena and Circus Turma opponents.
+// The arena lists link to other servers, which a game page cannot read, so
+// the background fetches them: without cookies, as anyone could open them.
+// Nothing but a Gladiatus player page is fetched.
+async function fetchProfile(href) {
+  const url = new URL(href);
+  const allowed =
+    url.protocol === 'https:' &&
+    /^s\d+-[a-z]+\.gladiatus\.gameforge\.com$/.test(url.hostname) &&
+    url.pathname === '/game/index.php' &&
+    url.searchParams.get('mod') === 'player' &&
+    /^\d+$/.test(url.searchParams.get('p') || '') &&
+    [...url.searchParams.keys()].every((k) => ['mod', 'p', 'doll', 'language'].includes(k));
+  if (!allowed) throw new Error('not a player page');
+  const response = await fetch(url.href, { credentials: 'omit' });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return { ok: true, html: await response.text() };
+}
+
 ext.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const tabId = sender.tab && sender.tab.id;
   let work;
@@ -477,6 +496,7 @@ ext.runtime.onMessage.addListener((message, sender, sendResponse) => {
   else if (message.type === 'rejoinJob' && tabId !== undefined) work = getRejoin().then((r) => r.jobs[tabId] || null);
   else if (message.type === 'rejoinResult' && tabId !== undefined) work = rejoinResult(tabId, message).then(() => ({ ok: true }));
   else if (message.type === 'userLogout') work = userLogout(message.host).then(() => ({ ok: true }));
+  else if (message.type === 'fetchProfile' && tabId !== undefined) work = fetchProfile(message.url);
   else if (message.type === 'reloadExtension') {
     // Answer first: the reload ends this script.
     setTimeout(() => ext.runtime.reload(), 200);

@@ -471,6 +471,10 @@
       humanDelay,
       isUnloading: () => unloading,
       now: () => Date.now(),
+      // A player's profile page on any server, fetched by the background.
+      fetchProfile: (url) => send({ type: 'fetchProfile', url }),
+      storeGet: async (key) => (await ext.storage.local.get(key))[key],
+      storeSet: (key, value) => ext.storage.local.set({ [key]: value }),
     };
 
     let result;

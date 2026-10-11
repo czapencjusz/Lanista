@@ -60,8 +60,10 @@ async function configure(overrides) {
   const settings = sanitizeSettings({
     ...FAST,
     ...overrides,
-    arena: { enabled: false, ...(overrides.arena || {}) },
-    circus: { enabled: false, ...(overrides.circus || {}) },
+    // No fight simulation: it reads profiles through the background, which
+    // the mock game does not answer for.
+    arena: { enabled: false, simulate: false, ...(overrides.arena || {}) },
+    circus: { enabled: false, simulate: false, ...(overrides.circus || {}) },
   });
   await worker.evaluate(async ([key, s]) => chrome.storage.local.set({ [key]: s }), [SETTINGS, settings]);
   return settings;
