@@ -134,15 +134,6 @@
       buddy: '.buddy',
     },
 
-    inventory: {
-      grid: '#inv',
-      loadingClass: 'unavailable',
-      bagTabs: '#inventory_nav .awesome-tabs',
-      currentBagTab: '#inventory_nav .awesome-tabs.current',
-      food: '#inv div[data-content-type="64"]',
-      avatar: '#avatar',
-    },
-
     // Auction house: one form per lot. Add-ons (e.g. Gladiatus Crazy Addon)
     // put their own price hints next to these; only the game's are read.
     auction: {

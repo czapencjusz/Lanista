@@ -136,10 +136,12 @@
           m.history = [];
           m.blockedUntil = {};
           m.noFoodUntil = 0;
+          m.statsResetAt = Date.now();
         }),
       onClearLog: () =>
         editMemory((m) => {
           m.log = [];
+          m.logClearedAt = Date.now();
         }),
       onTestPush: (url) => ext.runtime.sendMessage({ type: 'pushTest', url, host }),
     });

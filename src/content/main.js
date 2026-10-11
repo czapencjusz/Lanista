@@ -70,6 +70,7 @@
     if (queueBase) {
       const stored = (await ext.storage.local.get(MEMORY_KEY))[MEMORY_KEY];
       if (stored && Array.isArray(stored.smeltQueue)) memory.smeltQueue = brain.mergeSmeltQueue(queueBase, memory.smeltQueue, stored.smeltQueue);
+      brain.adoptResets(memory, stored);
     }
     queueBase = brain.smeltKeys(memory.smeltQueue);
     await ext.storage.local.set({ [MEMORY_KEY]: memory });
@@ -528,10 +529,12 @@
         m.history = [];
         m.blockedUntil = {};
         m.noFoodUntil = 0;
+        m.statsResetAt = Date.now();
       }),
     onClearLog: () =>
       editMemory((m) => {
         m.log = [];
+        m.logClearedAt = Date.now();
       }),
     onTestPush: (url) => send({ type: 'pushTest', url, host: HOST }),
   });

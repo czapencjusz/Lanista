@@ -65,12 +65,18 @@
 
   // Food the bot may eat: in the food bags (Settings > Health) and in the
   // packages. Eggs and other usables the user keeps do not count.
-  async function countFood(sh, settings) {
+  // Food the bot may eat in the food bags and the packages (every page of
+  // usables), counting only as far as `upTo` (the limit it is compared to).
+  async function countFood(sh, settings, upTo = Infinity) {
     const { html } = await GBot.forge.getDoc(sh, { mod: 'overview' });
-    const inBags = GBot.forge.readBagItems(html, brain.foodBags(settings)).filter((el) => edible(el, settings));
-    const { doc } = await GBot.forge.getDoc(sh, { mod: 'packages', f: USABLES, fq: -1, qry: '' });
-    const packaged = Array.from(doc.querySelectorAll('.packageItem [data-content-type]')).filter((el) => edible(el, settings));
-    return inBags.length + packaged.length;
+    let count = GBot.forge.readBagItems(html, brain.foodBags(settings)).filter((el) => edible(el, settings)).length;
+    let last = 1;
+    for (let page = 1; page <= last && count < upTo; page++) {
+      const { doc } = await GBot.forge.getDoc(sh, { mod: 'packages', f: USABLES, fq: -1, qry: '', page });
+      if (page === 1 && GBot.packages) last = GBot.packages.lastPage(doc);
+      count += Array.from(doc.querySelectorAll('.packageItem [data-content-type]')).filter((el) => edible(el, settings)).length;
+    }
+    return count;
   }
 
   async function auction(ctx) {
@@ -124,11 +130,11 @@
 
       let bid = false;
       if (cfg.food) {
-        const owned = await countFood(sh, ctx.settings);
+        const owned = await countFood(sh, ctx.settings, cfg.maxFood);
         // Food the bot would not eat (eggs and the like) is not bid on either.
         const wanted = ctx.settings.heal.plainOnly ? lots.filter((l) => l.plain) : lots;
         const plan = owned >= cfg.maxFood ? [] : brain.planAuctionBids(wanted, cfg, { gold, spent: round.spent, bids: round.bids, owned });
-        if (owned >= cfg.maxFood) note('food', `Auction: you own ${owned} healing items (limit ${cfg.maxFood}), not bidding on food`);
+        if (owned >= cfg.maxFood) note('food', `Auction: you own at least ${owned} healing items (limit ${cfg.maxFood}), not bidding on food`);
         else if (!plan.length) note('none', `Auction: no new lot heals at least ${cfg.minHpPerGold} HP per gold within your gold limits`);
         await place(plan, (l) => `+${l.heal.toLocaleString('en-US')} HP, ${(l.heal / l.minBid).toFixed(1)} HP/gold`);
         bid = bid || plan.length > 0;
@@ -148,8 +154,8 @@
   }
 
   // When the food bags hold no food: move the best-fitting food the bot may
-  // eat from the packages into a free spot in a food bag. Returns its name,
-  // or null if none.
+  // eat from the packages into a free spot in a food bag. Returns where it
+  // went ({ bag, x, y, heal, name }), or null if there is none.
   async function takeFoodFromPackages(ctx, missingHp) {
     const sh = ctx.state.sh;
     const { doc } = await GBot.forge.getDoc(sh, { mod: 'packages', f: USABLES, fq: -1, qry: '' });
@@ -160,10 +166,10 @@
     if (!food) return null;
     const el = food.el;
     const size = [Number(el.dataset.measurementX) || 1, Number(el.dataset.measurementY) || 1];
-    const spot = await GBot.forge.freeBagSpot(sh, ...size, brain.foodBags(ctx.settings));
+    const spot = await GBot.forge.takeSpot(ctx, ...size, brain.foodBags(ctx.settings));
     const from = parseNumber(el.parentElement.getAttribute('data-container-number'));
     await GBot.forge.moveItem(sh, { from, fromX: 1, fromY: 1, to: spot.bag, toX: spot.x, toY: spot.y, amount: 1 });
-    return GBot.forge.tooltipLines(el)[0] || 'food';
+    return { bag: spot.bag, x: spot.x, y: spot.y, heal: food.heal, name: GBot.forge.tooltipLines(el)[0] || 'food' };
   }
 
   // The merchants' shop tabs (sub = merchant, subsub = tab). General goods
@@ -216,7 +222,7 @@
       const bought = [];
       let gold = 0;
       for (const item of plan) {
-        const spot = await GBot.forge.freeBagSpot(sh, item.w, item.h, brain.foodBags(settings));
+        const spot = await GBot.forge.takeSpot(ctx, item.w, item.h, brain.foodBags(settings));
         await ctx.humanDelay();
         await GBot.forge.moveItem(sh, { from: item.cn, fromX: item.x, fromY: item.y, to: spot.bag, toX: spot.x, toY: spot.y, amount: 1 });
         bought.push(`${item.name} (${fmt(item.heal)} HP, ${fmt(item.price)} gold)`);

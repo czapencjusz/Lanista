@@ -48,7 +48,7 @@ it. (It used to be called GBot.)
 ### Keeping you alive
 
 - **Healing.** Eats when your HP drops below one limit and stops fighting below another. It picks the
-  food that best fills the gap.
+  food that best fills the gap, and eats it in one go, without opening your inventory.
 - **Food bags.** Tell it which inventory bags hold its food, and your other bags are safe. When
   those bags run dry it grabs food from your packages.
 - **Plain food only.** Eggs that give rubies or skip cooldowns, Cervisia that turns on Centurio and
@@ -244,7 +244,7 @@ apply as you go.
 | Timing & safety | Click delays, how long to wait between checks, what to do when something keeps failing |
 | Notifications | Which alerts you want, on the desktop and (if you like) on your phone, quiet hours for the phone |
 | Remote control | Commands from your Telegram bot or an ntfy topic |
-| Interface | Show the bar, floating or docked |
+| Interface | Show the bar, floating or docked; block Gameforge's ads and the chat on game pages |
 | Statistics | Fights won and lost, loot, gold earned and spent, per-hour rates, a table per day for the last 30 days, and one per place (locations, dungeons, arenas) |
 | Log | What it's been up to, a *Copy log* button and *Report a problem* |
 | Backup | Copy settings from another server, export, import, reset, and *Reload Lanista* after its files changed |
@@ -311,6 +311,11 @@ A few handy things to know:
 - **It paces itself.** Every click waits a random moment, and between actions it simply waits for the
   next cooldown instead of refreshing all the time. You can also give it active hours and random
   breaks.
+- **It's light on the game.** It reads your bags once per round of work, and looks through your
+  packages sorted by expiry and by age, so it only needs the first page or two instead of all of them
+  (it reads everything every 6 hours and puts your own sort order back each time). It also learns
+  how long the event cooldown is instead of checking after every fight. Gameforge's ads are blocked
+  on game pages, and so is the chat if you like.
 - **It doesn't get stuck in loops.** If something keeps failing (after a game update, say), that
   activity takes a break and the log tells you why.
 - **It can ping you** with a desktop notification when you're logged out, when something gets paused,

@@ -85,6 +85,10 @@
       nextGodsCheck: 0,
       boostNext: {},
       nextCostumeCheck: 0,
+      // When the statistics were reset and the log cleared (from any page),
+      // so a busy game tab's older copy does not bring them back.
+      statsResetAt: 0,
+      logClearedAt: 0,
       // For alerts: the level and unread messages seen last, and the places
       // ever seen in the location menu (outside the Underworld).
       lastLevel: null,
@@ -599,7 +603,13 @@
   };
 
   function packageAction(item, settings) {
-    if (item.queued) return null;
+    if (item.queued) {
+      // Ticked for smelting: only renewed (and ticked again) before it
+      // expires.
+      const p = settings.packages;
+      const expiring = item.expiresInMs !== null && item.expiresInMs !== undefined && item.expiresInMs <= p.expiringHours * 3600000;
+      return p.enabled && p.expiring === 'renew' && expiring ? 'renew' : null;
+    }
     if (keptByName(item.name, settings)) {
       // Kept: only ever rescued from an expiring package, never sold.
       const p = settings.packages;
@@ -683,12 +693,28 @@
   // container number, or the item id of an item in a smelt bin.
   const smeltKey = (e) => (e.iid ? `iid:${e.iid}` : `cn:${e.cn}`);
 
+  // Statistics reset or log cleared elsewhere (the popup, the options page)
+  // since this copy was loaded: take that over before saving this copy.
+  function adoptResets(memory, stored) {
+    if (!stored) return;
+    if ((stored.statsResetAt || 0) > (memory.statsResetAt || 0)) {
+      for (const key of ['stats', 'today', 'history', 'blockedUntil', 'noFoodUntil', 'statsResetAt']) memory[key] = stored[key];
+    }
+    if ((stored.logClearedAt || 0) > (memory.logClearedAt || 0)) {
+      memory.log = (memory.log || []).filter((l) => l.t > stored.logClearedAt);
+      memory.logClearedAt = stored.logClearedAt;
+    }
+  }
+
   // The queued item to smelt next: the one whose package expires first, so
-  // nothing is lost while it waits; without expiry times, the oldest.
-  function nextSmeltEntry(queue) {
+  // nothing is lost while it waits; without expiry times, the oldest. One
+  // being renewed right now (its package changes) waits.
+  const RENEWING_MS = 10 * 60 * 1000;
+  function nextSmeltEntry(queue, now = Date.now()) {
+    const ready = (queue || []).filter((e) => !(e.renewingAt && now - e.renewingAt < RENEWING_MS));
     let best = null;
-    for (const e of queue || []) if (e.expires && (!best || e.expires < best.expires)) best = e;
-    return best || (queue && queue[0]) || null;
+    for (const e of ready) if (e.expires && (!best || e.expires < best.expires)) best = e;
+    return best || ready[0] || null;
   }
   const smeltKeys = (queue) => (queue || []).map(smeltKey);
 
@@ -910,6 +936,12 @@
     if (!success) return [];
     memory.pending = null;
     delete memory.blockedUntil[type];
+    // The event area's cooldown, once learned, is waited out without going
+    // there to read it.
+    if (type === 'event') {
+      memory.eventLastFight = now;
+      if (memory.eventCooldownMs > 0) memory.eventNext = now + memory.eventCooldownMs;
+    }
     if (type in memory.stats) memory.stats[type] += 1;
     return message ? [{ level: 'info', message }, ...events] : events;
   }
@@ -1535,6 +1567,7 @@
     smeltKey,
     smeltKeys,
     nextSmeltEntry,
+    adoptResets,
     mergeSmeltQueue,
     keptByName,
     PICK_FILTERS,

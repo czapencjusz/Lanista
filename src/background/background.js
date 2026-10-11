@@ -391,15 +391,18 @@ const answer = (channel, text) =>
   channel.kind === 'telegram' ? push(`https://api.telegram.org/bot${channel.token}/sendMessage?chat_id=${channel.chatId}`, text) : push(channel.url, text);
 
 let polling = false;
+// Where commands come from, worked out from all of storage only when the
+// worker starts or settings change (null = not known), not every minute.
+let remoteChannels = null;
 
 async function pollRemote(now) {
   if (polling) return;
   polling = true;
   try {
-    const all = await ext.storage.local.get(null);
-    const list = R.channels(all);
+    if (!remoteChannels) remoteChannels = R.channels(await ext.storage.local.get(null));
+    const list = remoteChannels;
     if (!list.length) return;
-    const state = all[REMOTE_KEY] || {};
+    const state = (await ext.storage.local.get(REMOTE_KEY))[REMOTE_KEY] || {};
     for (const channel of list) {
       let texts = [];
       try {
@@ -502,7 +505,11 @@ ext.tabs.onRemoved.addListener(async (tabId) => {
 });
 
 ext.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && Object.keys(changes).some((k) => k === S.STORAGE_KEY || k.startsWith(S.SERVER_PREFIX))) updateBadge();
+  if (area === 'local' && Object.keys(changes).some((k) => k === S.STORAGE_KEY || k.startsWith(S.SERVER_PREFIX))) {
+    remoteChannels = null;
+    updateBadge();
+    updateBlocking();
+  }
 });
 
 ext.alarms.onAlarm.addListener((alarm) => {
@@ -510,6 +517,41 @@ ext.alarms.onAlarm.addListener((alarm) => {
 });
 
 let splitting = null;
+
+// ------------------------------------------------- lighter game pages
+//
+// Request blocking for the whole browser: Gameforge's ads, and the game
+// chat's connection (its socket.io script), on game pages only. On when any
+// server has it switched on.
+const BLOCK_RULES = {
+  blockAds: {
+    id: 1,
+    priority: 1,
+    action: { type: 'block' },
+    condition: { urlFilter: '||ads-delivery.gameforge.com', initiatorDomains: ['gladiatus.gameforge.com'], resourceTypes: ['script', 'xmlhttprequest', 'image', 'sub_frame', 'media', 'other'] },
+  },
+  blockChat: {
+    id: 2,
+    priority: 1,
+    action: { type: 'block' },
+    condition: { urlFilter: '/cdn/chat/socket.io', initiatorDomains: ['gladiatus.gameforge.com'], resourceTypes: ['script', 'xmlhttprequest', 'websocket', 'other'] },
+  },
+};
+
+async function updateBlocking() {
+  if (!ext.declarativeNetRequest) return;
+  const all = await ext.storage.local.get(null);
+  const hosts = S.serversIn(all);
+  const list = hosts.length ? hosts.map((host) => S.pickSettings(all, host)) : [S.pickSettings(all)];
+  const addRules = Object.entries(BLOCK_RULES)
+    .filter(([key]) => list.some((s) => s.ui[key]))
+    .map(([, rule]) => rule);
+  try {
+    await ext.declarativeNetRequest.updateDynamicRules({ removeRuleIds: Object.values(BLOCK_RULES).map((r) => r.id), addRules });
+  } catch (e) {
+    console.warn('[Lanista] could not update the request blocking', e);
+  }
+}
 
 async function init() {
   // Only create the alarm once: re-creating it on every wake-up would restart
@@ -520,6 +562,7 @@ async function init() {
   splitting = splitting || S.splitSettings().catch((e) => console.warn('[Lanista] could not split the settings per server', e));
   await splitting;
   await updateBadge();
+  await updateBlocking();
 }
 
 // After Lanista is reloaded or updated, open game tabs still run the old

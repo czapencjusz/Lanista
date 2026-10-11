@@ -538,3 +538,21 @@ test('arena limits: per player and per day, counted from the fights, reset at mi
   assert.equal(makeSettings().arena.perPlayerPerDay, 5);
   assert.equal(makeSettings().arena.perDay, 0);
 });
+
+test('a reset made elsewhere while this tab was busy is not undone by its save', () => {
+  const NOW2 = 1_700_000_000_000;
+  const mine = brain.createMemory(NOW2);
+  mine.stats.expedition = 50;
+  mine.log = [{ t: NOW2 - 5000, level: 'info', message: 'old' }, { t: NOW2 + 5000, level: 'info', message: 'new' }];
+  const stored = brain.createMemory(NOW2);
+  stored.statsResetAt = NOW2;
+  stored.logClearedAt = NOW2;
+  stored.log = [];
+  brain.adoptResets(mine, stored);
+  assert.equal(mine.stats.expedition, 0, 'the reset stays');
+  assert.deepEqual(mine.log.map((l) => l.message), ['new'], 'only what came after the clear');
+  const again = brain.createMemory(NOW2);
+  again.stats.expedition = 3;
+  brain.adoptResets(again, brain.createMemory(NOW2));
+  assert.equal(again.stats.expedition, 3, 'no reset: nothing taken over');
+});

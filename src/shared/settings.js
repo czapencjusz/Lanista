@@ -388,6 +388,12 @@
       // Show the control bar on game pages.
       panel: true,
       layout: 'floating', // 'floating' | 'bar'
+      // Keep Gameforge's ads (ads-delivery.gameforge.com) and, if wanted,
+      // the game chat's connection from loading on game pages, which makes
+      // every page lighter. Blocking works for the whole browser, so it is
+      // on when any server has it on.
+      blockAds: true,
+      blockChat: false,
     },
   };
 

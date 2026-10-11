@@ -19,7 +19,7 @@ const tip = (lines) => JSON.stringify([lines.map((l) => [l, 'white'])]).replace(
 // A small game: packages, bags, and the guild market with its Sell form.
 // Listing takes the item out of the bag; cancelling your listing (its row's
 // Cancel button) sends it back as a new package with 7 days to go.
-function renewGame({ cancelWorks = true } = {}) {
+function renewGame({ cancelWorks = true, marketFull = false } = {}) {
   const state = {
     packages: [
       { cn: -10, name: 'Old ring', type: 48, left: 3 * HOUR },
@@ -51,10 +51,11 @@ function renewGame({ cancelWorks = true } = {}) {
       const list = q.f === '14' ? [] : state.packages;
       return reply(`<div id="packages">${list.map(pkg).join('')}</div><div class="pagination"></div>`);
     }
+    if (q.mod === 'settings') return reply('<select name="packageSorting"><option selected="selected" value="in_desc">Newest first</option></select>');
     if (q.mod === 'overview') return reply(`<span class="playername_achievement">${ME}</span><script>new BagLoader(jQuery('#inv'), jQuery('#inventory_nav'), JSON.parse('[[],[],[],[],[],[],[],[]]'));</script>`);
     if (q.mod === 'guildMarket') {
       if (init.method === 'POST' && body.sellid) {
-        state.calls.push(`list ${body.sellid} for ${body.preis} (${body.dauer})`);
+        state.calls.push(`list ${body.sellid} for ${body.preis} (${body.dauer}${body.sell_mode !== undefined ? `, sell_mode ${body.sell_mode}` : ''})`);
         const item = state.bag.find((b) => String(b.id) === body.sellid);
         state.bag = state.bag.filter((b) => b !== item);
         state.listings.push({ ...item, buyid: item.id, seller: ME, price: Number(body.preis) });
@@ -67,7 +68,7 @@ function renewGame({ cancelWorks = true } = {}) {
         }
       }
       const table = state.listings.length ? `<table id="market_item_table"><tr><th>Item</th></tr>${state.listings.map(row).join('')}</table>` : '';
-      return reply(`<div id="content"><form id="sellForm" method="post"><input name="sellid"><input name="preis"><select name="dauer"></select><input type="submit" name="anbieten" value="Offer"></form>${table}</div>`);
+      return reply(`<div id="content"><form id="sellForm" method="post"><input name="sellid"><input name="preis"><select name="dauer"></select><input type="submit" name="anbieten" value="Offer"${marketFull ? ' disabled' : ''}></form>${table}</div>`);
     }
     throw new Error(`unexpected request ${url}`);
   };
@@ -105,7 +106,7 @@ test('renewing: listed for 1 gold for 2 hours, cancelled, back as a new package 
   const game = renewGame();
   const { ctx, logs } = context();
   await withGame(game, () => GBot.actions.packages(ctx));
-  assert.deepEqual(game.state.calls, ['move -10 -> 513', 'list 710 for 1 (1)', 'cancel 710', 'move -11 -> 513', 'list 711 for 1 (1)', 'cancel 711']);
+  assert.deepEqual(game.state.calls, ['move -10 -> 513', 'list 710 for 1 (1, sell_mode 0)', 'cancel 710', 'move -11 -> 513', 'list 711 for 1 (1, sell_mode 0)', 'cancel 711']);
   assert.deepEqual(logs, [
     'info: Renewed Old ring: listed for 1 gold in the guild market and cancelled, so it is a new package again',
     'info: Renewed Flask of Strength: listed for 1 gold in the guild market and cancelled, so it is a new package again',
@@ -128,5 +129,28 @@ test('renewing: a listing that cannot be cancelled is reported and renewing paus
   ctx.memory.nextPackagesCheck = 0;
   await withGame(game, () => GBot.actions.packages(ctx));
   assert.ok(game.state.calls.includes('move -13 -> 513'));
-  assert.ok(!game.state.calls.includes('list 713 for 1 (1)'), 'not listed');
+  assert.ok(!game.state.calls.includes('list 713 for 1 (1, sell_mode 0)'), 'not listed');
+});
+
+test('renewing: a full guild market means moving them into a bag instead, said once', async () => {
+  const game = renewGame({ marketFull: true });
+  const { ctx, logs } = context();
+  await withGame(game, () => GBot.actions.packages(ctx));
+  assert.deepEqual(game.state.calls, ['move -10 -> 513', 'move -11 -> 513'], 'nothing listed');
+  assert.deepEqual(logs, [
+    'info: Packages: the guild market is full, so packages about to expire are moved into your bags instead of renewed',
+    'info: Moved Old ring into your bags; its package was about to expire',
+    'info: Moved Flask of Strength into your bags; its package was about to expire',
+  ]);
+});
+
+test('renewing: an item ticked for smelting is renewed and stays ticked, under its new package', async () => {
+  const game = renewGame();
+  const { ctx, logs } = context();
+  ctx.memory.smeltQueue = [{ cn: -10, name: 'Old ring', basis: '', w: 1, h: 1, expires: NOW + 3 * HOUR }];
+  await withGame(game, () => GBot.actions.packages(ctx));
+  assert.ok(game.state.calls.includes('cancel 710'));
+  assert.deepEqual(ctx.memory.smeltQueue.map((e) => [e.cn, e.renewingAt]), [[-99, undefined]], 'the new package, ready to smelt');
+  assert.equal(ctx.memory.smeltQueue[0].expires, NOW + 168 * HOUR);
+  assert.ok(!logs.some((l) => /no longer ticked/.test(l)));
 });

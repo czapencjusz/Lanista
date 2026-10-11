@@ -112,13 +112,14 @@
   async function start(ctx, slot, gold) {
     const { memory } = ctx;
     const sh = ctx.state.sh;
-    const entry = brain.nextSmeltEntry(memory.smeltQueue);
+    const entry = brain.nextSmeltEntry(memory.smeltQueue, ctx.now());
+    if (!entry) return 0;
 
     let iid = entry.iid;
     if (!iid) {
       // Straight out of its package into a bag. Only when that does not
       // work is it worth looking whether the package is still there.
-      const spot = await GBot.forge.freeBagSpot(sh, entry.w, entry.h);
+      const spot = await GBot.forge.takeSpot(ctx, entry.w, entry.h);
       await ctx.humanDelay();
       let moved = null;
       let refused = null;
@@ -178,7 +179,7 @@
       const slots = await readSmelter(sh);
       await collect(ctx, slots);
       let gold = ctx.state.gold;
-      for (let slot = 0; slot < slots.length && memory.smeltQueue.length; slot++) {
+      for (let slot = 0; slot < slots.length && brain.nextSmeltEntry(memory.smeltQueue, ctx.now()); slot++) {
         if (state(slots[slot]) !== 'closed') continue;
         const rent = await start(ctx, slot, gold);
         if (rent) {
@@ -198,7 +199,7 @@
     } catch (e) {
       // Count failures against the item at the head of the queue, and give
       // up on it after a few. Full bags are not the item's fault.
-      const head = brain.nextSmeltEntry(memory.smeltQueue);
+      const head = brain.nextSmeltEntry(memory.smeltQueue, ctx.now());
       if (head && e instanceof ActionError && !/^No room/.test(e.message)) {
         const key = head.cn !== undefined ? head.cn : `iid:${head.iid}`;
         memory.smeltFailures = memory.smeltFailingCn === key ? (memory.smeltFailures || 0) + 1 : 1;

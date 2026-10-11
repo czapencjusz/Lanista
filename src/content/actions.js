@@ -9,7 +9,7 @@
   'use strict';
   const GBot = (root.GBot = root.GBot || {});
   const { SEL, PAGES } = GBot.selectors;
-  const { sleep, waitFor, isVisible, parseNumber, parseDuration, ActionError } = GBot.util;
+  const { waitFor, isVisible, parseNumber, parseDuration, ActionError } = GBot.util;
   const brain = GBot.brain;
 
   const $ = (sel, scope = document) => scope.querySelector(sel);
@@ -206,6 +206,9 @@
       const ms = ticker ? parseNumber(ticker.getAttribute('data-ticker-time-left')) : null;
       memory.pending = null;
       memory.eventNext = ctx.now() + (ms > 0 ? ms + 2000 : 60 * 1000);
+      // Right after a fight: how long the whole cooldown is (to the second).
+      const since = ctx.now() - (memory.eventLastFight || 0);
+      if (ms > 0 && since < 30 * 60 * 1000) memory.eventCooldownMs = Math.round((ms + since) / 1000) * 1000;
       ctx.log('debug', `Event: the next attack in ${area.name} is possible in ${GBot.util.formatDuration(memory.eventNext - ctx.now())}`);
       return { retick: true };
     }
@@ -568,135 +571,68 @@
   const edible = (el, settings) =>
     Number(el.dataset.contentType) === 64 && foodHealAmount(el) > 0 && (!settings.heal.plainOnly || isPlainFood(el));
 
-  function center(el) {
-    const r = el.getBoundingClientRect();
-    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+  // Eats with the request the game sends when food is dropped on the
+  // character (onto container 8). Its answer carries the new HP, which goes
+  // into the page's HP bar (where the bot reads HP), so no page is loaded.
+  // Returns { value, max }.
+  async function eat(ctx, food) {
+    const data = await GBot.forge.moveItem(ctx.state.sh, { from: food.bag, fromX: food.x, fromY: food.y, to: 8, toX: 1, toY: 1, amount: 1, doll: 1 });
+    const health = data && data.header && data.header.health;
+    let hp = health && Number.isFinite(Number(health.value)) ? { value: Number(health.value), max: Number(health.maxValue) || null } : null;
+    // An answer without the HP: read it from a fresh page instead.
+    if (!hp) hp = GBot.state.readHp((await GBot.forge.getDoc(ctx.state.sh, { mod: 'overview' })).doc);
+    showHp(hp);
+    return hp;
   }
 
-  function fireMouse(target, type, point, pressed) {
-    target.dispatchEvent(
-      new MouseEvent(type, {
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-        clientX: point.x,
-        clientY: point.y,
-        screenX: point.x,
-        screenY: point.y,
-        button: 0,
-        buttons: pressed ? 1 : 0,
-      })
-    );
+  function showHp(hp) {
+    const bar = $(SEL.hpBar);
+    if (!bar || hp.value === null || hp.value === undefined) return;
+    bar.setAttribute('data-value', String(hp.value));
+    if (hp.max) bar.setAttribute('data-max-value', String(hp.max));
   }
 
-  // Drags an inventory item onto a drop target the way a user would: the game
-  // uses jQuery UI drag & drop, which listens to plain mouse events.
-  async function dragAndDrop(item, target) {
-    const from = center(item);
-    const to = center(target);
-    const at = (p) => document.elementFromPoint(p.x, p.y) || document;
-    fireMouse(item, 'mouseover', from, false);
-    fireMouse(item, 'mousedown', from, true);
-    const steps = 10;
-    for (let i = 1; i <= steps; i++) {
-      const p = { x: Math.round(from.x + ((to.x - from.x) * i) / steps), y: Math.round(from.y + ((to.y - from.y) * i) / steps) };
-      fireMouse(at(p), 'mousemove', p, true);
-      await sleep(20 + Math.random() * 30);
+  // Food the bot may eat in the food bags, from the bags every inventory
+  // page carries: [{ bag, x, y, heal, name }].
+  function foodInBags(html, settings) {
+    const out = [];
+    for (const bag of brain.foodBags(settings)) {
+      for (const el of GBot.forge.readBagItems(html, [bag])) {
+        if (!edible(el, settings)) continue;
+        out.push({ bag, x: Number(el.dataset.positionX), y: Number(el.dataset.positionY), heal: foodHealAmount(el), name: tooltipOf(el)[0] || 'food' });
+      }
     }
-    fireMouse(at(to), 'mouseup', to, false);
+    return out;
   }
-
-  // Fallback used when the drag had no visible effect: the request the game
-  // itself sends when an item is dropped on the character (target 8).
-  async function consumeViaRequest(ctx, item) {
-    const bagTab = $(SEL.inventory.currentBagTab);
-    const bag = bagTab && parseNumber(bagTab.getAttribute('data-bag-number'));
-    const x = item.getAttribute('data-position-x');
-    const y = item.getAttribute('data-position-y');
-    if (!bag || !x || !y || !ctx.state.sh) return false;
-    const url = new URL('ajax.php', location.href);
-    const params = { mod: 'inventory', submod: 'move', from: bag, fromX: x, fromY: y, to: 8, toX: 1, toY: 1, amount: 1 };
-    for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
-    // Firefox: content.fetch sends the request as the page would.
-    const pageFetch = typeof content !== 'undefined' && content && content.fetch ? content.fetch.bind(content) : fetch;
-    // The game sends its CSRF token with every AJAX request.
-    const csrf = document.querySelector('meta[name="csrf-token"]');
-    const response = await pageFetch(url.href, {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'X-Requested-With': 'XMLHttpRequest',
-        ...(csrf ? { 'X-CSRF-Token': csrf.getAttribute('content') } : {}),
-      },
-      body: `a=${Date.now()}&sh=${encodeURIComponent(ctx.state.sh)}`,
-    });
-    return response.ok;
-  }
-
-  const inventoryReady = () => {
-    const grid = $(SEL.inventory.grid);
-    return grid && !grid.classList.contains(SEL.inventory.loadingClass) ? grid : null;
-  };
 
   async function heal(ctx) {
     const { state, settings } = ctx;
-    if (state.page.mod !== 'overview' || (state.page.doll && state.page.doll !== '1')) {
-      return ctx.navigate(ctx.url(PAGES.overview()), 'character overview');
-    }
-    if (!(await waitFor(inventoryReady, 10000))) throw new ActionError('The inventory did not load');
-    const avatar = $(SEL.inventory.avatar);
-    if (!avatar) throw new ActionError('Character avatar (food drop target) not found');
+    const page = await GBot.forge.getDoc(state.sh, { mod: 'overview' });
+    const hp = GBot.state.readHp(page.doc);
+    const missing = hp.max && hp.value !== null ? hp.max - hp.value : null;
 
-    // Only the food bags chosen under Settings > Health are looked at, and
-    // only food the bot may eat.
-    const bags = brain.foodBags(settings);
-    const isFoodBag = (tab) => bags.includes(parseNumber(tab.getAttribute('data-bag-number')));
-    const tried = new Set();
-    for (;;) {
-      const current = $(SEL.inventory.currentBagTab);
-      if (current) tried.add(current.getAttribute('data-bag-number'));
-
-      const foods = !current || isFoodBag(current) ? $$(SEL.inventory.food).filter((el) => edible(el, settings)).map((el) => ({ el, heal: foodHealAmount(el) })) : [];
-      if (foods.length) {
-        const hp = GBot.state.readHp(document);
-        const missing = hp.max && hp.value !== null ? hp.max - hp.value : null;
-        const food = brain.pickFood(foods, missing);
-        ctx.log('info', `Eating food${food.heal ? ` (+${food.heal} HP)` : ''} at ${hp.percent}% HP`);
-        await ctx.humanDelay();
-        await dragAndDrop(food.el, avatar);
-        const changed = await waitFor(() => {
-          const now = GBot.state.readHp(document).value;
-          return now !== null && now !== hp.value;
-        }, 5000);
-        if (!changed) {
-          ctx.log('debug', 'Drag had no effect, using the inventory request instead');
-          await consumeViaRequest(ctx, food.el);
-          await sleep(1500);
-        }
-        return { refresh: true };
-      }
-
-      const next = $$(SEL.inventory.bagTabs).find((tab) => isFoodBag(tab) && !tried.has(tab.getAttribute('data-bag-number')));
-      if (!next) break;
-      tried.add(next.getAttribute('data-bag-number'));
-      await click(ctx, next, `open inventory bag ${next.textContent.trim()}`);
-      await waitFor(() => next.classList.contains('current') && inventoryReady(), 8000);
-      await sleep(400);
-    }
-
-    // Auction wins and other food arrive as packages: take one out.
-    if (GBot.auction) {
+    // Only the food bags chosen under Settings > Health, and only food the
+    // bot may eat; when they have none, food from the packages (auction wins
+    // and the like) is taken into a food bag and eaten from there.
+    let foods = foodInBags(page.html, settings);
+    let from = '';
+    if (!foods.length && GBot.auction) {
       try {
-        const hp = GBot.state.readHp(document);
-        const taken = await GBot.auction.takeFoodFromPackages(ctx, hp.max && hp.value !== null ? hp.max - hp.value : null);
+        const taken = await GBot.auction.takeFoodFromPackages(ctx, missing);
         if (taken) {
-          ctx.log('info', `Took ${taken} from the packages to eat`);
-          return { refresh: true };
+          foods = [taken];
+          from = ' from the packages';
         }
       } catch (e) {
         ctx.log('warn', `Could not take food from the packages: ${e.message}`);
       }
+    }
+    if (foods.length) {
+      const food = brain.pickFood(foods, missing);
+      ctx.log('info', `Eating ${food.name}${from}${food.heal ? ` (+${food.heal} HP)` : ''} at ${hp.percent}% HP`);
+      await ctx.humanDelay();
+      await eat(ctx, food);
+      return { retick: true };
     }
 
     // Still nothing: buy some from other players on the market, if allowed;
@@ -714,13 +650,13 @@
       }
     }
 
-    // ... or from a merchant.
+    // ... or from a merchant, into a food bag.
     if (settings.heal.buy && GBot.auction) {
       try {
         const result = await GBot.auction.buyFood(ctx);
         if (result.bought.length) {
           ctx.log('info', `Bought food from the merchant for ${result.gold.toLocaleString('en-US')} gold: ${result.bought.join(', ')}`);
-          return { refresh: true };
+          return { retick: true };
         }
         ctx.log('info', `Did not buy food: ${result.reason}`);
       } catch (e) {
@@ -976,6 +912,6 @@
     work,
     quests,
     // Exposed for tests.
-    _internal: { foodHealAmount, isPlainFood, edible, dragAndDrop, readOpponents, questRewards },
+    _internal: { foodHealAmount, isPlainFood, edible, eat, readOpponents, questRewards },
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

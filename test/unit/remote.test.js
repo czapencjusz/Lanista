@@ -14,6 +14,7 @@ const NTFY = 'https://ntfy.sh/lanista-cmd-Xy7';
 const store = {};
 const session = {};
 const listeners = {};
+let fullReads = 0;
 const sentToTabs = [];
 const posted = [];
 let updates = [];
@@ -23,11 +24,17 @@ globalThis.chrome = {
   storage: {
     local: {
       get: async (keys) => {
-        if (keys === null) return JSON.parse(JSON.stringify(store));
+        if (keys === null) {
+          fullReads += 1;
+          return JSON.parse(JSON.stringify(store));
+        }
         const list = Array.isArray(keys) ? keys : [keys];
         return JSON.parse(JSON.stringify(Object.fromEntries(list.filter((k) => k in store).map((k) => [k, store[k]]))));
       },
-      set: async (items) => Object.assign(store, JSON.parse(JSON.stringify(items))),
+      set: async (items) => {
+        Object.assign(store, JSON.parse(JSON.stringify(items)));
+        if (listeners.storage) listeners.storage(Object.fromEntries(Object.keys(items).map((k) => [k, { newValue: items[k] }])), 'local');
+      },
     },
     onChanged: on('storage'),
     session: {
@@ -149,4 +156,17 @@ test('remote control is off by default; the topic must be https', () => {
   assert.equal(S.sanitizeSettings({ remote: { ntfyTopic: 'http://ntfy.sh/x' } }).remote.ntfyTopic, '');
   assert.equal(S.sanitizeSettings({ remote: { ntfyTopic: ' https://ntfy.sh/Lanista-Cmd ' } }).remote.ntfyTopic, 'https://ntfy.sh/Lanista-Cmd');
   assert.deepEqual(R.channels({ [`settings:${HOST}`]: s }), []);
+});
+
+test('without remote control the minute check does not read all of storage', async () => {
+  await S.saveSettings(S.sanitizeSettings({ enabled: true, remote: { enabled: false } }), HOST);
+  await tick();
+  fullReads = 0;
+  await tick();
+  await tick();
+  assert.equal(fullReads, 0, 'worked out once after the settings changed, then remembered');
+  await S.saveSettings(S.sanitizeSettings({ enabled: true, remote: { enabled: true, ntfyTopic: NTFY } }), HOST);
+  ntfyLines = [];
+  await tick();
+  assert.ok(fullReads >= 1, 'a settings change makes it look again');
 });

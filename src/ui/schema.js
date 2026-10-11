@@ -834,7 +834,7 @@
       id: 'interface',
       title: 'Interface',
       icon: 'interface',
-      description: 'The control bar shown on game pages.',
+      description: 'The control bar shown on game pages, and what game pages load.',
       fields: [
         { path: 'ui.panel', type: 'toggle', label: 'Show the control bar on game pages' },
         {
@@ -847,6 +847,8 @@
             { value: 'bar', label: 'Bar docked to the top of the page' },
           ],
         },
+        { path: 'ui.blockAds', type: 'toggle', label: "Block Gameforge's ads on game pages", help: 'Game pages load faster. This applies to every server in this browser.' },
+        { path: 'ui.blockChat', type: 'toggle', label: 'Turn off the game chat', help: "The chat's connection is not loaded, which makes pages lighter, but you won't see or send chat messages. This applies to every server in this browser." },
       ],
     },
     { id: 'stats', title: 'Statistics', icon: 'stats', custom: 'stats', description: 'What Lanista has done on this server.' },

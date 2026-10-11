@@ -93,27 +93,41 @@
     return goldBefore - after >= pack.price ? 'bought' : 'refused';
   }
 
-  // Puts a bag item up in the guild market (duration '1' = 2 h) and finds
-  // the listing again: the market sorted by price, cheapest first, by its
-  // item id or as yours at that price. Returns the listing, or null.
-  async function listItem(ctx, itemId, price, duration) {
-    const sh = ctx.state.sh;
-    const { doc } = await GBot.forge.getDoc(sh, { mod: 'guildMarket' });
+  // The guild market's Sell form, read once per run: { name, value } of its
+  // Offer button and whether that is enabled (it is not while the market
+  // is full); null without a guild.
+  async function sellForm(ctx) {
+    if (ctx.sellForm !== undefined) return ctx.sellForm;
+    const { doc } = await GBot.forge.getDoc(ctx.state.sh, { mod: 'guildMarket' });
     const form = doc.querySelector(SEL.market.sellForm);
+    const submit = form && form.querySelector(SEL.market.sellButton);
+    ctx.sellForm = form ? { name: submit ? submit.name : '', value: submit ? submit.value || '' : '', open: !(submit && submit.disabled) } : null;
+    return ctx.sellForm;
+  }
+
+  // Puts a bag item up in the guild market (duration '1' = 2 h), for gold
+  // (sell_mode 0, as the game's form sends it), and finds the listing: in
+  // the market page the game answers with, else in the market sorted by
+  // price; by its item id or as yours at that price. Returns it, or null.
+  async function listItem(ctx, itemId, price, duration) {
+    const form = await sellForm(ctx);
     if (!form) throw new ActionError('The guild market has no Sell form (are you in a guild?)');
-    const submit = form.querySelector(SEL.market.sellButton);
-    const body = new URLSearchParams({ sellid: String(itemId), preis: String(price), dauer: String(duration) });
-    if (submit && submit.name) body.set(submit.name, submit.value || '');
+    const body = new URLSearchParams({ sellid: String(itemId), preis: String(price), dauer: String(duration), sell_mode: '0' });
+    if (form.name) body.set(form.name, form.value);
     await ctx.humanDelay();
-    await GBot.forge.post(marketUrl(sh), body.toString());
-    return findListing(ctx, itemId, price);
+    const answer = await GBot.forge.post(marketUrl(ctx.state.sh), body.toString());
+    return (await listingIn(ctx, new DOMParser().parseFromString(answer, 'text/html'), itemId, price)) || findListing(ctx, itemId, price);
+  }
+
+  async function listingIn(ctx, doc, itemId, price) {
+    const me = String((await playerName(ctx)) || '').toLowerCase();
+    const offers = readMarket(doc) || [];
+    return offers.find((o) => String(o.buyid) === String(itemId)) || offers.find((o) => o.price === price && me && o.seller.toLowerCase() === me && o.cancel) || null;
   }
 
   async function findListing(ctx, itemId, price) {
-    const me = String((await playerName(ctx)) || '').toLowerCase();
     const { doc } = await GBot.forge.getDoc(ctx.state.sh, { mod: 'guildMarket', s: 'p', p: 1 });
-    const offers = readMarket(doc) || [];
-    return offers.find((o) => String(o.buyid) === String(itemId)) || offers.find((o) => o.price === price && me && o.seller.toLowerCase() === me && o.cancel) || null;
+    return listingIn(ctx, doc, itemId, price);
   }
 
   // Cancels your own listing (its row's Cancel button, sent like the row's
@@ -154,7 +168,7 @@
     let itemId;
     if (where.packaged) {
       const item = where.packaged;
-      const spot = await GBot.forge.freeBagSpot(sh, item.w, item.h);
+      const spot = await GBot.forge.takeSpot(ctx, item.w, item.h);
       await ctx.humanDelay();
       const moved = await GBot.forge.moveItem(sh, { from: item.cn, fromX: 1, fromY: 1, to: spot.bag, toX: spot.x, toY: spot.y, amount: item.amount });
       itemId = moved && moved.to && moved.to.data && moved.to.data.itemId;
@@ -246,7 +260,7 @@
 
   GBot.actions = GBot.actions || {};
   GBot.actions.gold = goldAction;
-  GBot.gold = { readMarket, findPack, buy, playerName, listItem, cancelListing };
+  GBot.gold = { readMarket, findPack, buy, playerName, sellForm, listItem, cancelListing };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = GBot.gold;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

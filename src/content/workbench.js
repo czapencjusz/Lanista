@@ -186,6 +186,33 @@
     return spot;
   }
 
+  // Free spots for several moves in one run: the bags are read once
+  // (ctx.bagSpace) and each spot handed out is marked as taken. Only when
+  // that copy has no room are the bags read again (items may have left
+  // them), before giving up. forgetBags() after a move the game did not
+  // make.
+  async function readBagSpace(sh) {
+    const { html } = await getDoc(sh, { mod: 'overview' });
+    const locked = lockedBags(html);
+    return readBags(html).filter((b) => !locked.has(b.bag));
+  }
+
+  async function takeSpot(ctx, w, h, bags = null) {
+    const pick = (space) => brain.freeSpot(space.filter((b) => !bags || bags.includes(b.bag)), w, h);
+    let spot = ctx.bagSpace ? pick(ctx.bagSpace) : null;
+    if (!spot) {
+      ctx.bagSpace = await readBagSpace(ctx.state.sh);
+      spot = pick(ctx.bagSpace);
+    }
+    if (!spot) throw new ActionError(`No room in the ${bags ? 'food ' : ''}bags for a ${w}x${h} item`);
+    ctx.bagSpace.find((b) => b.bag === spot.bag).cells.push({ x: spot.x, y: spot.y, w, h });
+    return spot;
+  }
+
+  const forgetBags = (ctx) => {
+    ctx.bagSpace = null;
+  };
+
   async function putBack(ctx, r) {
     const sh = ctx.state.sh;
     await moveItem(sh, { from: r.bag, fromX: r.x, fromY: r.y, to: r.slot, toX: 1, toY: 1, amount: 1, doll: r.doll || 1 });
@@ -436,7 +463,7 @@
   GBot.actions.repair = repair;
   GBot.workbench = { readDoll, readBags, readSlots, readStock, stockTotal, storePackagedResources };
   // Request helpers shared with the smelter (smelter.js).
-  GBot.forge = { getDoc, ajax, post, moveItem, tooltipLines, readBags, readBagItems, readSlots, freeBagSpot, lockedBags, RENT_GOLD };
+  GBot.forge = { getDoc, ajax, post, moveItem, tooltipLines, readBags, readBagItems, readSlots, freeBagSpot, takeSpot, forgetBags, lockedBags, RENT_GOLD };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = GBot.workbench;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

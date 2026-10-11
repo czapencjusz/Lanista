@@ -140,3 +140,21 @@ test('an event fight counts, and for the event area by place; a new event area i
   brain.pageAlerts({ ...st, eventAreas: [] }, seen);
   assert.deepEqual(brain.pageAlerts(st, seen).map((a) => a.message), ['Lanista: a new place in the location menu: Desert of Nightmare. An event, or a newly opened area?']);
 });
+
+test('the event cooldown is learned once, then waited out without a visit', async () => {
+  const memory = brain.createMemory(NOW);
+  memory.pending = { type: 'event', at: NOW, attempts: 2, firstAt: NOW };
+  brain.resolvePending({ report: { win: true, gold: 1, xp: 1, renown: 1 }, hp: {} }, memory, NOW);
+  assert.equal(memory.eventNext || 0, 0, 'not known yet: go and look');
+  assert.equal(memory.eventLastFight, NOW);
+
+  // The visit right after: 4:32 of the cooldown left, 15 s after the fight.
+  memory.eventLastFight = NOW - 15000;
+  const cooling = await run('event', eventPage({ cooldownMs: 272000 }), 'mod=location&loc=desert', on(), memory);
+  assert.deepEqual(cooling.clicked, []);
+  assert.equal(memory.eventCooldownMs, 287000);
+
+  memory.pending = { type: 'event', at: NOW, attempts: 2, firstAt: NOW };
+  brain.resolvePending({ report: { win: true, gold: 1, xp: 1, renown: 1 }, hp: {} }, memory, NOW);
+  assert.equal(memory.eventNext, NOW + 287000, 'the next fight is due when the cooldown ends');
+});

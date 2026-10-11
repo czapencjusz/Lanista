@@ -143,12 +143,17 @@ test.describe('Lanista against a mock Gladiatus server', { skip: !executablePath
     assert.ok(memory.log.some((l) => /only the boss is left, cancelling it/.test(l.message)));
   });
 
-  test('eats food (searching other bags) by dragging it onto the avatar', { timeout: 60000 }, async () => {
+  test('eats food from any food bag with one request, without opening a page', { timeout: 60000 }, async () => {
     await scenario({ hp: 100, expPoints: 0, dunPoints: 0 }, { expedition: { enabled: true }, heal: { enabled: true, minHpPercent: 25 } });
     const [heal] = await waitUntil(() => game.events('heal').length && game.events('heal'), 45000, 'heal');
-    assert.equal(heal.source, 'drag', 'healed through jQuery UI drag & drop, not the fallback request');
+    assert.equal(heal.source, 'request', 'the request the game sends on a drop, not a simulated drag');
     assert.equal(heal.heal, 300);
     assert.equal(game.state.hp, 400);
+    const memory = await waitUntil(async () => {
+      const m = await storageGet(`memory:${HOST}`);
+      return m && m.log.some((l) => /^Healed 100 -> 400 HP/.test(l.message)) ? m : null;
+    }, 20000, 'the heal to be recognised from the HP bar');
+    assert.ok(memory.log.some((l) => /^Eating .* at \d+% HP/.test(l.message)));
   });
 
   test('out of food: food put in a bag later ends the 30-minute wait', { timeout: 90000 }, async () => {

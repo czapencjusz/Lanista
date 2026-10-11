@@ -1,0 +1,146 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { JSDOM } = require('jsdom');
+const { brain, settings: S } = require('./load');
+
+const window = new JSDOM('<meta name="csrf-token" content="tok">', { url: 'https://s303-en.gladiatus.gameforge.com/game/index.php' }).window;
+globalThis.DOMParser = window.DOMParser;
+require('../../src/content/workbench.js');
+require('../../src/content/smelter.js');
+require('../../src/content/packages.js');
+require('../../src/content/gold.js');
+
+const NOW = 1_700_000_000_000;
+const HOUR = 3600 * 1000;
+const tip = (name) => JSON.stringify([[[name, 'white']]]).replace(/"/g, '&quot;');
+
+// The packages as the game lists them: 15 a page, in the account's order
+// (del_asc = soonest to expire first, in_desc = newest first), which the
+// game settings page shows and a POST to packages/sort changes.
+function sortedGame({ count = 60, sort = 'del_desc' } = {}) {
+  const state = {
+    sort,
+    calls: [],
+    // cn -1 is the newest, expiring last; -60 the oldest, expiring first.
+    packages: Array.from({ length: count }, (_, i) => ({ cn: -(i + 1), name: `Junk ${i + 1}`, left: (168 - i * 3) * HOUR, born: count - i })),
+  };
+  const order = () => {
+    const list = state.packages.slice();
+    if (state.sort.startsWith('del')) list.sort((a, b) => a.left - b.left);
+    else list.sort((a, b) => a.born - b.born);
+    return state.sort.endsWith('desc') ? list.reverse() : list;
+  };
+  const pkg = (p) =>
+    `<div class="packageItem"><div data-container-number="${p.cn}"><div data-content-type="${p.type || 64}" data-tooltip="${tip(p.name)}" data-price-gold="10"></div></div><span data-ticker-time-left="${p.left}"></span></div>`;
+  const reply = (text) => ({ ok: true, text: async () => text });
+  const fetch = async (url, init = {}) => {
+    const q = Object.fromEntries(new URL(url).searchParams);
+    if (q.submod === 'sort') {
+      state.sort = new URLSearchParams(init.body).get('packageSorting');
+      state.calls.push(`sort ${state.sort}`);
+      return reply('');
+    }
+    if (q.mod === 'settings') {
+      state.calls.push('settings');
+      const options = ['del_asc', 'del_desc', 'in_asc', 'in_desc'].map((v) => `<option ${v === state.sort ? 'selected="selected" ' : ''}value="${v}">${v}</option>`).join('');
+      return reply(`<select name="packageSorting">${options}</select>`);
+    }
+    if (q.mod === 'packages') {
+      const page = Number(q.page || 1);
+      const list = order();
+      const pages = Math.max(1, Math.ceil(list.length / 15));
+      state.calls.push(`page ${page}`);
+      const links = Array.from({ length: pages }, (_, i) => `<a href="index.php?mod=packages&amp;page=${page}&amp;sh=abc&amp;page=${i + 1}">${i + 1}</a>`).join('');
+      return reply(`<div id="packages">${list.slice((page - 1) * 15, page * 15).map(pkg).join('')}</div><div class="pagination">${links}</div>`);
+    }
+    throw new Error(`unexpected ${url}`);
+  };
+  return { state, fetch };
+}
+
+function context(settings) {
+  const logs = [];
+  const memory = brain.createMemory(NOW);
+  let now = NOW;
+  return {
+    logs,
+    memory,
+    tick: (ms) => (now += ms),
+    ctx: () => ({ state: { sh: 'abc', gold: 100000 }, settings: S.sanitizeSettings(settings), memory, log: (l, m) => logs.push(`${l}: ${m}`), humanDelay: async () => {}, persist: async () => {}, now: () => now }),
+  };
+}
+
+async function withGame(game, fn) {
+  const saved = { document: globalThis.document, location: globalThis.location, fetch: globalThis.fetch };
+  Object.assign(globalThis, { document: window.document, location: window.location, fetch: game.fetch });
+  try {
+    return await fn();
+  } finally {
+    Object.assign(globalThis, saved);
+  }
+}
+
+const rules = { enabled: true, packages: { enabled: true, storeResources: false, collectGold: false, expiring: 'off' }, smelting: { auto: false } };
+
+test('packages: everything is read once; then only the new ones, sorted newest first, and the order is put back', async () => {
+  const game = sortedGame();
+  const run = context(rules);
+  await withGame(game, () => GBot.actions.packages(run.ctx()));
+  assert.deepEqual(game.state.calls, ['page 1', 'page 2', 'page 3', 'page 4'], 'the first pass reads all four pages, in your order');
+  assert.equal(run.memory.packagesKnown.length, 60);
+
+  game.state.calls = [];
+  run.tick(30 * 60 * 1000);
+  await withGame(game, () => GBot.actions.packages(run.ctx()));
+  assert.deepEqual(game.state.calls, ['settings', 'sort in_desc', 'page 1', 'sort del_desc'], 'one page: all of it seen before');
+  assert.equal(game.state.sort, 'del_desc', 'your order is back');
+
+  // Two new packages: the first page has something new, the second not.
+  game.state.packages.push({ cn: -100, name: 'New ring', left: 168 * HOUR, born: 100, type: 48 }, { cn: -101, name: 'New sword', left: 168 * HOUR, born: 101, type: 2 });
+  game.state.calls = [];
+  run.tick(30 * 60 * 1000);
+  const smelty = context({ ...rules, smelting: { enabled: true, auto: true, autoUpTo: 4, autoTypes: { weapons: true, armour: false, jewellery: false } } });
+  smelty.memory.packagesKnown = run.memory.packagesKnown;
+  smelty.memory.packagesFullAt = run.memory.packagesFullAt;
+  smelty.memory.packagesRules = JSON.stringify([smelty.ctx().settings.packages, smelty.ctx().settings.smelting]);
+  smelty.tick(30 * 60 * 1000);
+  await withGame(game, () => GBot.actions.packages(smelty.ctx()));
+  assert.deepEqual(game.state.calls, ['settings', 'sort in_desc', 'page 1', 'page 2', 'sort del_desc']);
+  assert.deepEqual(smelty.memory.smeltQueue.map((e) => e.name), ['New sword'], 'the new sword matched the smelting rule');
+});
+
+test('packages: those about to expire are read sorted soonest first, up to the first one outside the window', async () => {
+  const game = sortedGame({ sort: 'in_desc' });
+  const run = context({ ...rules, packages: { ...rules.packages, expiring: 'bag', expiringHours: 24 } });
+  run.memory.packagesKnown = game.state.packages.map((p) => p.cn);
+  run.memory.packagesFullAt = NOW;
+  run.memory.packagesRules = JSON.stringify([run.ctx().settings.packages, run.ctx().settings.smelting]);
+  game.state.packages = game.state.packages.filter((p) => p.left > 24 * HOUR);
+  await withGame(game, () => GBot.actions.packages(run.ctx()));
+  assert.deepEqual(game.state.calls, ['settings', 'sort del_asc', 'page 1', 'sort in_desc', 'page 1'], 'nothing expires: one page each, and in_desc was yours already');
+  assert.equal(game.state.sort, 'in_desc');
+});
+
+test('packages: a settings change, 6 hours, or an unreadable order mean reading everything', async () => {
+  const game = sortedGame();
+  const run = context(rules);
+  await withGame(game, () => GBot.actions.packages(run.ctx()));
+  game.state.calls = [];
+  run.tick(7 * HOUR);
+  await withGame(game, () => GBot.actions.packages(run.ctx()));
+  assert.deepEqual(game.state.calls, ['page 1', 'page 2', 'page 3', 'page 4'], 'after 6 hours');
+
+  game.state.calls = [];
+  run.tick(10 * 60 * 1000);
+  const changed = context({ ...rules, packages: { ...rules.packages, keepNames: 'Junk 7' } });
+  Object.assign(changed.memory, { packagesKnown: run.memory.packagesKnown, packagesFullAt: run.memory.packagesFullAt, packagesRules: run.memory.packagesRules });
+  await withGame(game, () => GBot.actions.packages(changed.ctx()));
+  assert.equal(game.state.calls.length, 4, 'after the rules changed');
+
+  game.state.calls = [];
+  game.state.sort = 'mystery';
+  run.tick(10 * 60 * 1000);
+  await withGame(game, () => GBot.actions.packages(run.ctx()));
+  assert.deepEqual(game.state.calls, ['settings', 'page 1', 'page 2', 'page 3', 'page 4'], 'an order it cannot put back is left alone');
+});

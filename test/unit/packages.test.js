@@ -174,12 +174,10 @@ test('a run takes gold out, stores resources, queues, sells and rescues packages
     'horreum inventory=0&packages=1&sell=1',
     'merchant 1/0',
     'merchant 1/1',
-    'overview',
-    'move -5 -> 512 at 1,1 x1',
+    'move -5 -> 512 at 2,1 x1',
     'move 512 -> 273 at 1,1 x1',
-    'overview',
-    'move -6 -> 512 at 1,1 x1',
-  ]);
+    'move -6 -> 512 at 3,1 x1',
+  ], 'the bags are read once per run');
   assert.deepEqual(ctx.memory.smeltQueue.map((q) => q.name), ['Sugos Viking Shield', 'Stoybaers Hunting boots'], 'armour up to blue queued');
   assert.equal(ctx.memory.smeltNext, NOW);
   assert.equal(ctx.memory.stats.sold, 1);

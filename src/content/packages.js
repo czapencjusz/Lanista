@@ -97,6 +97,98 @@
     return items;
   }
 
+  // Pages of packages in their current order, until stop(page's items)
+  // says enough.
+  async function readUntil(sh, stop) {
+    const items = [];
+    let last = 1;
+    for (let page = 1; page <= last; page++) {
+      const { doc } = await GBot.forge.getDoc(sh, { mod: 'packages', f: 0, fq: -1, qry: '', page });
+      if (!doc.querySelector(SEL.packages.list)) throw new ActionError('Could not read the packages');
+      if (page === 1) last = lastPage(doc);
+      const found = readPackageItems(doc);
+      items.push(...found);
+      if (!found.length || stop(found)) break;
+    }
+    return items;
+  }
+
+  // ---------------------------------------------------- the packages' order
+  //
+  // The game sorts the packages for the whole account (the game settings
+  // page shows the choice): del_asc puts the soonest to expire first,
+  // in_desc the newest first. A pass sorts them its own way to read only the
+  // first pages, and puts the player's choice back at the end (restoreSort).
+  const SORT = /selected="selected"\s+value="((?:del|in)_(?:asc|desc))"|value="((?:del|in)_(?:asc|desc))"\s+selected/;
+
+  async function useSort(ctx, order) {
+    if (ctx.playerSort === undefined) {
+      const { html } = await GBot.forge.getDoc(ctx.state.sh, { mod: 'settings', submod: 'gameSettings' });
+      const m = SORT.exec(html);
+      ctx.playerSort = ctx.packageSort = m ? m[1] || m[2] : null;
+    }
+    // Without knowing the player's choice it could not be put back.
+    if (!ctx.playerSort) return false;
+    if (ctx.packageSort !== order) await setSort(ctx, order);
+    return true;
+  }
+
+  async function setSort(ctx, order) {
+    const url = new URL(`index.php?mod=packages&submod=sort&page=1&sh=${encodeURIComponent(ctx.state.sh)}`, location.href).href;
+    await GBot.forge.post(url, new URLSearchParams({ packageSorting: order }).toString());
+    ctx.packageSort = order;
+  }
+
+  async function restoreSort(ctx) {
+    if (ctx.playerSort && ctx.packageSort !== ctx.playerSort) await setSort(ctx, ctx.playerSort);
+  }
+
+  // ------------------------------------------------- which packages to read
+  //
+  // Every package every 6 hours and after the rules change; in between
+  // only the ones about to expire (sorted soonest first, up to the first
+  // one outside the window) and the new ones (sorted newest first, up to a
+  // page of packages seen before). memory.packagesKnown holds the packages
+  // seen and dealt with; one left for later stays unknown, so it is read
+  // again.
+  const FULL_SCAN_MS = 6 * 3600 * 1000;
+  const KNOWN_MAX = 3000;
+  const rulesKey = (settings) => JSON.stringify([settings.packages, settings.smelting]);
+
+  async function scanPackages(ctx) {
+    const { memory, settings } = ctx;
+    const sh = ctx.state.sh;
+    const known = Array.isArray(memory.packagesKnown) ? new Set(memory.packagesKnown) : null;
+    const due = !known || ctx.now() - (memory.packagesFullAt || 0) > FULL_SCAN_MS || memory.packagesRules !== rulesKey(settings);
+    const p = settings.packages;
+    const expiring = p.enabled && p.expiring !== 'off';
+    if (due || !(await useSort(ctx, expiring ? 'del_asc' : 'in_desc'))) return { items: await listPackages(sh), full: true };
+    const items = [];
+    if (expiring) {
+      const window = p.expiringHours * 3600000;
+      items.push(...(await readUntil(sh, (page) => page.some((i) => i.expiresInMs !== null && i.expiresInMs > window))));
+      await useSort(ctx, 'in_desc');
+    }
+    items.push(...(await readUntil(sh, (page) => page.every((i) => known.has(i.cn)))));
+    const seen = new Set();
+    return { items: items.filter((i) => !seen.has(i.cn) && seen.add(i.cn)), full: false };
+  }
+
+  function remember(ctx, scan, skipped) {
+    const { memory, settings } = ctx;
+    const done = scan.items.filter((i) => !skipped.has(i.cn)).map((i) => i.cn);
+    if (scan.full) {
+      memory.packagesKnown = done.slice(-KNOWN_MAX);
+      memory.packagesRules = rulesKey(settings);
+      // Left over for a reason other than expiring (a selling rule's
+      // backlog, deep in the list): only reading everything finds them.
+      const backlog = scan.items.some((i) => skipped.has(i.cn) && brain.packageAction({ ...i, expiresInMs: null }, settings));
+      memory.packagesFullAt = backlog ? 0 : ctx.now();
+    } else {
+      memory.packagesKnown = Array.from(new Set([...(memory.packagesKnown || []), ...done])).slice(-KNOWN_MAX);
+    }
+  }
+
   // A free spot in a merchant's shop grid ({ bag: container, x, y }).
   // Starts at the merchant used last.
   async function shopSpot(ctx, w, h) {
@@ -128,7 +220,7 @@
 
   async function toBag(ctx, item) {
     const sh = ctx.state.sh;
-    const spot = await GBot.forge.freeBagSpot(sh, item.w, item.h);
+    const spot = await GBot.forge.takeSpot(ctx, item.w, item.h);
     await ctx.humanDelay();
     await GBot.forge.moveItem(sh, { from: item.cn, fromX: 1, fromY: 1, to: spot.bag, toX: spot.x, toY: spot.y, amount: item.amount });
     return spot;
@@ -143,18 +235,65 @@
   const RENEW_DURATION = '1'; // 2 hours
   const RENEW_BLOCK_MS = 24 * 3600 * 1000;
 
+  // Can expiring packages be renewed in this run? A guild market with a
+  // Sell form whose Offer button works (it does not while the market is
+  // full), and a little gold for its fee (a share of the price, at least
+  // 1). Otherwise they are moved into the bags. Said once.
+  async function marketReady(ctx) {
+    if (ctx.marketReady !== undefined) return ctx.marketReady;
+    const form = await GBot.gold.sellForm(ctx);
+    const gold = ctx.state.gold;
+    const why = !form ? 'there is no guild market (are you in a guild?)' : !form.open ? 'the guild market is full' : typeof gold === 'number' && gold < 2 ? 'there is no gold for the market fee' : null;
+    if (why && ctx.memory.renewNote !== why) ctx.log('info', `Packages: ${why}, so packages about to expire are moved into your bags instead of renewed`);
+    ctx.memory.renewNote = why;
+    ctx.marketReady = !why;
+    return ctx.marketReady;
+  }
+
   async function renew(ctx, item) {
+    const entry = ctx.memory.smeltQueue.find((e) => e.cn === item.cn);
+    if (entry) entry.renewingAt = ctx.now();
     const spot = await intoBag(ctx, item, true);
     const listing = await GBot.gold.listItem(ctx, spot.itemId, RENEW_PRICE, RENEW_DURATION);
     if (!listing) {
       ctx.memory.renewBlockedUntil = ctx.now() + RENEW_BLOCK_MS;
+      if (entry) bagged(entry, spot.itemId);
       throw new ActionError(`Could not list ${item.name} in the guild market to renew it; it is in your bag. Renewing is paused for a day`);
     }
-    if (await GBot.gold.cancelListing(ctx, listing, RENEW_PRICE)) return;
+    if (await GBot.gold.cancelListing(ctx, listing, RENEW_PRICE)) {
+      if (entry) await requeue(ctx, entry, item);
+      return;
+    }
     ctx.memory.renewBlockedUntil = ctx.now() + RENEW_BLOCK_MS;
     const message = `${item.name} is listed in the guild market for ${RENEW_PRICE} gold and Lanista could not cancel it. Cancel it yourself before a guildmate buys it; renewing is paused for a day.`;
     if (ctx.notify) ctx.notify('activityPaused', `Lanista: ${message}`);
     throw new ActionError(message);
+  }
+
+  // A renewed item ticked for smelting: its new package (the newest with
+  // its name and kind, packages sorted newest first) takes its place in the
+  // queue; not found, it is unticked.
+  async function requeue(ctx, entry, item) {
+    const { memory } = ctx;
+    const sorted = await useSort(ctx, 'in_desc');
+    const { doc } = await GBot.forge.getDoc(ctx.state.sh, { mod: 'packages', f: 0, fq: -1, qry: '', page: 1 });
+    const taken = new Set(memory.smeltQueue.map((q) => q.cn));
+    const fresh = sorted ? readPackageItems(doc).find((i) => i.name === item.name && i.basis === item.basis && !taken.has(i.cn)) : null;
+    delete entry.renewingAt;
+    if (fresh) {
+      entry.cn = fresh.cn;
+      if (fresh.expiresInMs > 0) entry.expires = ctx.now() + fresh.expiresInMs;
+      return;
+    }
+    memory.smeltQueue = memory.smeltQueue.filter((q) => q !== entry);
+    ctx.log('warn', `Smelting: ${item.name} was renewed, but its new package was not found; it is no longer ticked`);
+  }
+
+  // A ticked item now in a bag: the smelter takes it from there.
+  function bagged(entry, itemId) {
+    delete entry.renewingAt;
+    delete entry.cn;
+    entry.iid = String(itemId);
   }
 
   async function sell(ctx, item) {
@@ -173,14 +312,14 @@
   async function spotOutsideFood(ctx, w, h, borrowFood) {
     const food = brain.foodBags(ctx.settings);
     const others = [512, 513, 514, 515, 516, 517, 518, 519].filter((b) => !food.includes(b));
-    if (!others.length) return GBot.forge.freeBagSpot(ctx.state.sh, w, h);
+    if (!others.length) return GBot.forge.takeSpot(ctx, w, h);
     try {
-      return await GBot.forge.freeBagSpot(ctx.state.sh, w, h, others);
+      return await GBot.forge.takeSpot(ctx, w, h, others);
     } catch (e) {
       if (!/^No room/.test(e.message)) throw e;
       if (!borrowFood) throw new ActionError(`No room in the bags outside your food bags for a ${w}x${h} item`);
     }
-    return GBot.forge.freeBagSpot(ctx.state.sh, w, h);
+    return GBot.forge.takeSpot(ctx, w, h);
   }
 
   async function intoBag(ctx, item, borrowFood = false) {
@@ -190,7 +329,10 @@
     const itemId = moved && moved.to && moved.to.data && moved.to.data.itemId;
     // The game answers a move it did not make without an error, but also
     // without the item's new id.
-    if (!itemId) throw new ActionError(`The game did not take ${item.name} into bag ${spot.bag - 511}`);
+    if (!itemId) {
+      GBot.forge.forgetBags(ctx);
+      throw new ActionError(`The game did not take ${item.name} into bag ${spot.bag - 511}`);
+    }
     return { ...spot, itemId };
   }
 
@@ -282,7 +424,8 @@
     const p = settings.packages;
     try {
       if (p.enabled && p.collectGold) await collectGold(ctx);
-      let items = await listPackages(sh);
+      const scan = await scanPackages(ctx);
+      let items = scan.items;
 
       // Gold packs are resources too: never store one before it is listed
       // (again).
@@ -296,14 +439,21 @@
       }
 
       const queued = new Set(memory.smeltQueue.map((q) => q.cn));
+      const skipped = new Set();
       let toSmelt = 0;
       let moves = 0;
       let more = false;
+      let stopped = false;
       for (const item of items) {
         let action = brain.packageAction({ ...item, queued: queued.has(item.cn) }, settings);
         if (!action) continue;
-        // Renewing failed lately: rescue into a bag meanwhile.
-        if (action === 'renew' && (memory.renewBlockedUntil || 0) > ctx.now()) action = 'bag';
+        if (stopped) {
+          skipped.add(item.cn);
+          continue;
+        }
+        // Renewing failed lately, or the market cannot take it: rescue
+        // into a bag instead.
+        if (action === 'renew' && ((memory.renewBlockedUntil || 0) > ctx.now() || !(await marketReady(ctx)))) action = 'bag';
         if (action === 'smelt') {
           memory.smeltQueue.push(GBot.smelter.queueEntry(item.el, ctx.now()));
           queued.add(item.cn);
@@ -312,6 +462,7 @@
         }
         if (moves >= MAX_MOVES) {
           more = true;
+          skipped.add(item.cn);
           continue;
         }
         moves += 1;
@@ -330,17 +481,21 @@
           } else {
             // Never into a food bag (when some bags are not food bags):
             // food and healing need the room there.
-            await intoBag(ctx, item);
+            const spot = await intoBag(ctx, item);
+            const entry = memory.smeltQueue.find((e) => e.cn === item.cn);
+            if (entry) bagged(entry, spot.itemId);
             ctx.log('info', `Moved ${item.name} into your bags; its package was about to expire`);
           }
         } catch (e) {
           // Full bags or merchants: try again at the next check.
           if (!/^(No (room|merchant)|The game did not take)/.test(e.message)) throw e;
           ctx.log('warn', `Packages: ${e.message}; trying again later`);
-          break;
+          skipped.add(item.cn);
+          stopped = true;
         }
         await ctx.persist();
       }
+      remember(ctx, scan, skipped);
       if (toSmelt) {
         ctx.log('info', `Queued ${toSmelt} item${toSmelt === 1 ? '' : 's'} from the packages for smelting`);
         memory.smeltNext = Math.min(memory.smeltNext || Infinity, ctx.now());
@@ -365,6 +520,8 @@
     } catch (e) {
       memory.nextPackagesCheck = ctx.now() + RETRY_MS;
       throw e;
+    } finally {
+      await restoreSort(ctx).catch((e) => ctx.log('warn', `Packages: could not put your package order back (${e.message})`));
     }
     return { retick: true };
   }

@@ -8,6 +8,7 @@ const window = new JSDOM('<meta name="csrf-token" content="tok">', { url: 'https
 globalThis.DOMParser = window.DOMParser;
 require('../../src/content/actions.js');
 require('../../src/content/workbench.js');
+require('../../src/content/packages.js');
 const auction = require('../../src/content/auction.js');
 const { foodHealAmount, isPlainFood, edible } = GBot.actions._internal;
 
@@ -86,7 +87,8 @@ test('food from the packages goes into a food bag, and eggs stay in the packages
   const settings = S.sanitizeSettings({ heal: { bags: { b1: true, b2: false, b3: true, b4: false, b5: false, b6: false, b7: false, b8: false } } });
   const ctx = { state: { sh: 'abc' }, settings };
   const taken = await withGame(game, () => auction.takeFoodFromPackages(ctx, 5000));
-  assert.equal(taken, 'Ciallans Cheese of the Dragon', 'not the ruby egg');
+  assert.equal(taken.name, 'Ciallans Cheese of the Dragon', 'not the ruby egg');
+  assert.deepEqual([taken.bag, taken.x, taken.y], [514, 1, 1], 'where it went, to be eaten from there');
   assert.deepEqual(game.moves, ['-2 -> 514 at 1,1'], 'bag I is full and bag II is not a food bag: bag III');
 
   // For the auction's food limit: the bread in bag I and the cheese count,
@@ -140,7 +142,7 @@ test('buying food: best HP per gold, within the day\'s budget and the reserve, i
   const ctx = { settings, memory, state: { sh: 'abc', gold: 200000, level: 110 }, now: () => NOW, humanDelay: async () => {}, persist: async () => {} };
 
   const result = await withGame({ fetch }, () => auction.buyFood(ctx));
-  assert.deepEqual(moves, ['305 1,1 -> 513 at 1,1', '305 2,1 -> 513 at 1,1'], 'apple first (2.7 HP/gold), then the meat; bag II is the food bag');
+  assert.deepEqual(moves, ['305 1,1 -> 513 at 1,1', '305 2,1 -> 513 at 2,1'], 'apple first (2.7 HP/gold), then the meat; bag II is the food bag, read once');
   assert.equal(result.gold, 1424 + 5130);
   assert.deepEqual(memory.foodShop, { sub: 3, subsub: 1 }, 'remembered for next time');
   assert.deepEqual(memory.foodBought, { day: new Date(NOW).toDateString(), gold: 6554, items: 2 });
@@ -159,4 +161,77 @@ test('buying food: best HP per gold, within the day\'s budget and the reserve, i
   const broke = { ...ctx, memory: brain.createMemory(NOW), state: { ...ctx.state, gold: 90000 } };
   assert.equal((await withGame({ fetch }, () => auction.buyFood(broke))).reason, 'gold is at the reserve you set');
   assert.deepEqual(moves, []);
+});
+
+// Eating: one request, the new HP from its answer; no page is loaded.
+function eatingGame({ bags, packages = '', health = true }) {
+  const calls = [];
+  const state = { hp: 3000 };
+  const literal = JSON.stringify(bags).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const fetch = async (url) => {
+    const q = Object.fromEntries(new URL(url).searchParams);
+    const reply = (text) => ({ ok: true, text: async () => text });
+    if (q.submod === 'move') {
+      calls.push(`move ${q.from} ${q.fromX},${q.fromY} -> ${q.to}${q.doll ? ` doll ${q.doll}` : ''}`);
+      if (q.to === '8') {
+        state.hp += 4635;
+        return reply(JSON.stringify(health ? { header: { health: { value: state.hp, maxValue: 10000 } } } : {}));
+      }
+      return reply(JSON.stringify({ to: { data: { itemId: 77 } } }));
+    }
+    calls.push(q.mod);
+    if (q.mod === 'overview') return reply(`<div id="header_values_hp_bar" data-value="${state.hp}" data-max-value="10000"></div><script>new BagLoader(a, b, JSON.parse('${literal}'));</script>`);
+    if (q.mod === 'packages') return reply(`<div id="packages">${packages}</div>`);
+    throw new Error(`unexpected ${url}`);
+  };
+  return { calls, fetch, state };
+}
+
+async function healWith(game, settings = S.sanitizeSettings({ heal: { bags: { b1: true, b2: false, b3: false, b4: false, b5: false, b6: false, b7: false, b8: false } } })) {
+  window.document.body.innerHTML = '<div id="header_values_hp_bar" data-value="3000" data-max-value="10000"></div>';
+  const logs = [];
+  const ctx = { state: { sh: 'abc', gold: 1000, hp: { percent: 30 } }, settings, memory: brain.createMemory(Date.now()), log: (l, m) => logs.push(`${l}: ${m}`), humanDelay: async () => {}, persist: async () => {}, now: () => Date.now() };
+  const result = await withGame(game, () => GBot.actions.heal(ctx));
+  return { result, logs, bar: window.document.querySelector('#header_values_hp_bar').getAttribute('data-value') };
+}
+
+test('eating: one request from the food bag; the new HP comes from its answer', async () => {
+  const bread = item(TIPS.bread, ' data-position-x="3" data-position-y="2"');
+  const game = eatingGame({ bags: [[bread], [], [], [], [], [], [], []] });
+  const { result, logs, bar } = await healWith(game);
+  assert.deepEqual(game.calls, ['overview', 'move 512 3,2 -> 8 doll 1'], 'no page opened, no drag');
+  assert.deepEqual(result, { retick: true });
+  assert.equal(bar, '7635', 'the HP bar shows the new HP');
+  assert.deepEqual(logs, ['info: Eating Quintus Bread rolls of Martial Arts (+4635 HP) at 30% HP']);
+
+  const quiet = eatingGame({ bags: [[bread], [], [], [], [], [], [], []], health: false });
+  const second = await healWith(quiet);
+  assert.deepEqual(quiet.calls, ['overview', 'move 512 3,2 -> 8 doll 1', 'overview'], 'an answer without HP: read once more');
+  assert.equal(second.bar, '7635');
+});
+
+test('eating: with the food bags empty, food from the packages is eaten straight away', async () => {
+  const cheese = ['Ciallans Cheese of the Dragon', 'Using: Heals 3801 of life', 'From intelligence: +2325 vitality point(s)'];
+  const game = eatingGame({ bags: [[], [], [], [], [], [], [], []], packages: `<div class="packageItem"><div data-container-number="-2">${item(cheese)}</div></div>` });
+  const { logs } = await healWith(game);
+  assert.deepEqual(game.calls, ['overview', 'packages', 'overview', 'move -2 1,1 -> 512', 'move 512 1,1 -> 8 doll 1']);
+  assert.deepEqual(logs, ['info: Eating Ciallans Cheese of the Dragon from the packages (+3801 HP) at 30% HP']);
+});
+
+test('food owned for the auction limit counts every page of packaged food, up to the limit', async () => {
+  const cheese = ['Ciallans Cheese of the Dragon', 'Using: Heals 3801 of life', 'From intelligence: +2325 vitality point(s)'];
+  const pages = [];
+  const fetch = async (url) => {
+    const q = Object.fromEntries(new URL(url).searchParams);
+    const reply = (text) => ({ ok: true, text: async () => text });
+    if (q.mod === 'overview') return reply(`<script>new BagLoader(a, b, JSON.parse('[[],[],[],[],[],[],[],[]]'));</script>`);
+    pages.push(Number(q.page));
+    const links = [1, 2, 3].map((n) => `<a href="index.php?mod=packages&amp;page=${q.page}&amp;page=${n}">${n}</a>`).join('');
+    return reply(`<div id="packages">${Array.from({ length: 15 }, (_, i) => `<div class="packageItem"><div data-container-number="-${i}">${item(cheese)}</div></div>`).join('')}</div><div class="pagination">${links}</div>`);
+  };
+  const settings = S.sanitizeSettings({});
+  assert.equal(await withGame({ fetch }, () => auction.countFood('abc', settings)), 45, 'all three pages');
+  pages.length = 0;
+  assert.equal(await withGame({ fetch }, () => auction.countFood('abc', settings, 20)), 30);
+  assert.deepEqual(pages, [1, 2], 'no further than the limit');
 });

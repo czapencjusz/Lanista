@@ -16,6 +16,7 @@ const tabUrls = {};
 const tabMoves = [];
 const tabsClosed = [];
 const reloads = [];
+const blockUpdates = [];
 const on = (name) => ({ addListener: (fn) => (listeners[name] = fn) });
 globalThis.chrome = {
   storage: {
@@ -25,7 +26,10 @@ globalThis.chrome = {
         const list = Array.isArray(keys) ? keys : [keys];
         return Object.fromEntries(list.filter((k) => k in store).map((k) => [k, store[k]]));
       },
-      set: async (items) => Object.assign(store, items),
+      set: async (items) => {
+        Object.assign(store, items);
+        if (listeners.storage) listeners.storage(Object.fromEntries(Object.keys(items).map((k) => [k, { newValue: items[k] }])), 'local');
+      },
       remove: async (keys) => [].concat(keys).forEach((k) => delete store[k]),
     },
     onChanged: on('storage'),
@@ -37,6 +41,7 @@ globalThis.chrome = {
   alarms: { get: async () => ({}), create: () => {}, clear: () => {}, onAlarm: on('alarm') },
   runtime: { onMessage: on('message'), onInstalled: on('installed'), onStartup: on('startup'), getURL: (p) => p, reload: () => reloads.push('extension') },
   notifications: { create: async (o) => notifications.push(o.message) },
+  declarativeNetRequest: { updateDynamicRules: async (o) => blockUpdates.push(o) },
   action: { setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
   tabs: {
     onRemoved: on('tabRemoved'),
@@ -261,4 +266,18 @@ test('"Reload Lanista" restarts the extension; after a reload or update the game
   listeners.installed({ reason: 'install' });
   await new Promise((r) => setTimeout(r, 30));
   assert.deepEqual(reloads, [], 'not on a first install');
+});
+
+test('ads are blocked on game pages by default; the chat only when asked; on when any server wants it', async () => {
+  await S.saveSettings(S.sanitizeSettings({}), HOST);
+  await new Promise((r) => setTimeout(r, 20));
+  let rules = blockUpdates.at(-1);
+  assert.deepEqual(rules.removeRuleIds, [1, 2]);
+  assert.deepEqual(rules.addRules.map((r) => [r.id, r.condition.urlFilter, r.condition.initiatorDomains[0]]), [[1, '||ads-delivery.gameforge.com', 'gladiatus.gameforge.com']]);
+
+  await S.saveSettings(S.sanitizeSettings({ ui: { blockAds: false, blockChat: true } }), HOST);
+  await S.saveSettings(S.sanitizeSettings({ ui: { blockAds: false, blockChat: false } }), 's60-en.gladiatus.gameforge.com');
+  await new Promise((r) => setTimeout(r, 20));
+  rules = blockUpdates.at(-1);
+  assert.deepEqual(rules.addRules.map((r) => r.id), [2], 'the chat, wanted on one server; no ads rule');
 });
